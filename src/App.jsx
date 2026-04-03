@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText } from 'gsap/SplitText';
@@ -54,14 +54,120 @@ const FAQ_ITEMS = [
   { q: "How does pricing work? Are there hidden fees?", a: "Clear pricing: Starter ($149/mo), Growth ($299/mo), Portfolio ($499/mo). Setup is one-time ($499–$1,999). No per-listing fees, no overage charges. What you see is what you pay." },
 ];
 
-/* ═══════════════════════════════════════════
-   CHAT MESSAGES (animated)
-   ═══════════════════════════════════════════ */
 const HERO_CHAT = [
   { type: 'guest', text: "Hi there! Can you tell me about parking at the property? We'll have 2 cars.", time: '11:47 PM' },
   { type: 'alfred', text: "Absolutely—we've got dedicated spaces for each guest on the property grounds. They're just around the back by the garden. You'll get access codes in your check-in email. Any other questions?", time: '11:47 PM' },
   { type: 'guest', text: "Perfect, thanks so much!", time: '11:48 PM' },
 ];
+
+const MARQUEE_ITEMS = ['Airbnb', 'Vrbo', 'iCal', 'Stripe', 'Twilio', 'SMS', 'Email', 'Guesty', 'Hostaway'];
+
+const STATS = [
+  { value: '10x', label: 'Faster Replies' },
+  { value: '24/7', label: 'Availability' },
+  { value: '60%', label: 'Cost Savings' },
+];
+
+/* ═══════════════════════════════════════════
+   TEXT SCRAMBLE ENGINE
+   ═══════════════════════════════════════════ */
+const SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*';
+
+function scrambleElement(el, finalText, duration = 1200) {
+  const len = finalText.length;
+  let startTime = null;
+
+  function frame(ts) {
+    if (!startTime) startTime = ts;
+    const elapsed = ts - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+
+    let html = '';
+    for (let i = 0; i < len; i++) {
+      if (finalText[i] === ' ' || finalText[i] === '/') {
+        html += finalText[i];
+        continue;
+      }
+      const charThreshold = (i / len) * 0.7 + 0.15;
+      if (progress >= charThreshold) {
+        html += `<span class="char resolved">${finalText[i]}</span>`;
+      } else {
+        html += `<span class="char scrambling">${SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)]}</span>`;
+      }
+    }
+    el.innerHTML = html;
+    if (progress < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ═══════════════════════════════════════════
+   KINETIC MARQUEE COMPONENT
+   ═══════════════════════════════════════════ */
+function KineticMarquee() {
+  const row1Ref = useRef(null);
+  const row2Ref = useRef(null);
+
+  useEffect(() => {
+    const rows = [
+      { ref: row1Ref.current, direction: -1, speed: 1 },
+      { ref: row2Ref.current, direction: 1, speed: 0.7 },
+    ];
+
+    let scrollVelocity = 0;
+    const baseSpeed = 60;
+
+    const st = ScrollTrigger.create({
+      onUpdate: (self) => {
+        scrollVelocity = Math.abs(self.getVelocity());
+      },
+    });
+
+    const positions = rows.map((r) => (r.direction === -1 ? 0 : -(r.ref.querySelector('.marquee-content').offsetWidth)));
+    let animId;
+
+    function animate() {
+      rows.forEach((r, idx) => {
+        const content = r.ref.querySelector('.marquee-content');
+        const contentWidth = content.offsetWidth;
+        const speed = (baseSpeed + scrollVelocity * 0.12) * r.speed;
+        positions[idx] += r.direction * -1 * speed / 60;
+
+        if (r.direction === -1 && positions[idx] <= -contentWidth) positions[idx] += contentWidth;
+        if (r.direction === 1 && positions[idx] >= 0) positions[idx] -= contentWidth;
+
+        r.ref.style.transform = `translateX(${positions[idx]}px)`;
+      });
+      animId = requestAnimationFrame(animate);
+    }
+    animate();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      st.kill();
+    };
+  }, []);
+
+  const items = MARQUEE_ITEMS.map((item, i) => (
+    <span key={i}>
+      <span className="marquee-item">{item}</span>
+      <span className="marquee-dot" />
+    </span>
+  ));
+
+  return (
+    <section className="marquee-band">
+      <div className="marquee-row marquee-giant" ref={row1Ref}>
+        <div className="marquee-content">{items}</div>
+        <div className="marquee-content">{items}</div>
+      </div>
+      <div className="marquee-row marquee-outline" ref={row2Ref}>
+        <div className="marquee-content">{items}</div>
+        <div className="marquee-content">{items}</div>
+      </div>
+    </section>
+  );
+}
 
 /* ═══════════════════════════════════════════
    APP COMPONENT
@@ -69,6 +175,7 @@ const HERO_CHAT = [
 export default function App() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
+  const [activeFeature, setActiveFeature] = useState(1);
   const containerRef = useRef(null);
 
   /* ─── Lenis Smooth Scroll ─── */
@@ -85,7 +192,6 @@ export default function App() {
     gsap.ticker.add(rafCallback);
     gsap.ticker.lagSmoothing(0);
 
-    // Anchor link smooth scroll
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
       anchor.addEventListener('click', (e) => {
         e.preventDefault();
@@ -109,7 +215,6 @@ export default function App() {
 
   /* ─── GSAP Animations ─── */
   useGSAP(() => {
-    // Track SplitText instances for cleanup (GSAP skill: always revert SplitText)
     const splits = [];
 
     /* Hero headline split text */
@@ -144,9 +249,71 @@ export default function App() {
       { y: 0, opacity: 1, stagger: 0.3, duration: 0.6, ease: 'power2.out', delay: 1.8, clearProps: 'all' }
     );
 
-    /* ─── Scroll-triggered section reveals ─── */
+    /* ─── Text Scramble Stats ─── */
+    document.querySelectorAll('.stat-number-scramble').forEach((el) => {
+      const finalText = el.dataset.value;
+      // Show scrambled placeholder initially
+      el.innerHTML = finalText.split('').map(c =>
+        c === '/' ? '/' : `<span class="char scrambling">${SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)]}</span>`
+      ).join('');
 
-    // Section headings — SplitText reveal
+      ScrollTrigger.create({
+        trigger: el,
+        start: 'top 85%',
+        once: true,
+        onEnter: () => scrambleElement(el, finalText, 1500),
+      });
+    });
+
+    /* ─── Text Mask Reveal ─── */
+    const maskSection = document.querySelector('.mask-section');
+    if (maskSection) {
+      gsap.to('.mask-reveal', {
+        clipPath: 'inset(0% 0 0 0)',
+        ease: 'none',
+        scrollTrigger: {
+          trigger: maskSection,
+          start: 'top top',
+          end: '60% bottom',
+          scrub: 0.3,
+          pin: false,
+        },
+      });
+
+      gsap.to('.mask-subtext', {
+        opacity: 1,
+        y: 0,
+        scrollTrigger: {
+          trigger: maskSection,
+          start: '55% top',
+          end: '70% top',
+          scrub: true,
+        },
+      });
+    }
+
+    /* ─── Sticky Stack Feature Activation ─── */
+    document.querySelectorAll('.stack-feature-card').forEach((card) => {
+      ScrollTrigger.create({
+        trigger: card,
+        start: 'top 60%',
+        end: 'bottom 40%',
+        onEnter: () => activateStackFeature(card.dataset.feature),
+        onEnterBack: () => activateStackFeature(card.dataset.feature),
+      });
+    });
+
+    function activateStackFeature(num) {
+      document.querySelectorAll('.stack-feature-card').forEach(c => {
+        c.classList.toggle('active', c.dataset.feature === num);
+      });
+      document.querySelectorAll('.mockup-state').forEach(s => {
+        s.classList.toggle('active', s.dataset.state === num);
+      });
+      setActiveFeature(Number(num));
+    }
+
+    /* ─── Scroll-triggered section reveals ─── */
     gsap.utils.toArray('.section-heading').forEach(heading => {
       const split = new SplitText(heading, { type: 'words', autoSplit: true });
       splits.push(split);
@@ -158,7 +325,6 @@ export default function App() {
       );
     });
 
-    // Generic scroll reveals
     gsap.utils.toArray('.reveal').forEach(el => {
       gsap.fromTo(el,
         { y: 50, opacity: 0 },
@@ -168,15 +334,7 @@ export default function App() {
       );
     });
 
-    // Feature cards staggered
-    gsap.fromTo('.feature-card',
-      { y: 60, opacity: 0, scale: 0.96 },
-      { y: 0, opacity: 1, scale: 1, stagger: { each: 0.12, from: 'start' }, duration: 0.8, ease: 'power2.out', clearProps: 'all',
-        scrollTrigger: { trigger: '.features-grid', start: 'top 85%', toggleActions: 'play none none none' },
-      }
-    );
-
-    // Steps staggered
+    /* Steps staggered */
     gsap.fromTo('.step',
       { y: 40, opacity: 0 },
       { y: 0, opacity: 1, stagger: 0.2, duration: 0.8, ease: 'power2.out', clearProps: 'all',
@@ -184,7 +342,7 @@ export default function App() {
       }
     );
 
-    // Pricing cards staggered
+    /* Pricing cards staggered */
     gsap.fromTo('.pricing-card',
       { y: 40, opacity: 0, scale: 0.96 },
       { y: 0, opacity: 1, scale: 1, stagger: 0.15, duration: 0.8, ease: 'power2.out', clearProps: 'all',
@@ -192,7 +350,7 @@ export default function App() {
       }
     );
 
-    // FAQ items staggered
+    /* FAQ items staggered */
     gsap.fromTo('.faq-item',
       { y: 30, opacity: 0 },
       { y: 0, opacity: 1, stagger: 0.08, duration: 0.6, ease: 'power2.out', clearProps: 'all',
@@ -200,7 +358,7 @@ export default function App() {
       }
     );
 
-    // Pain points staggered
+    /* Pain points staggered */
     gsap.fromTo('.pain-point',
       { x: -40, opacity: 0 },
       { x: 0, opacity: 1, stagger: 0.15, duration: 0.8, ease: 'power3.out', clearProps: 'all',
@@ -208,7 +366,7 @@ export default function App() {
       }
     );
 
-    // Comparison cards
+    /* Comparison cards */
     gsap.fromTo('.comparison-card',
       { y: 40, opacity: 0 },
       { y: 0, opacity: 1, stagger: 0.2, duration: 0.8, ease: 'power2.out', clearProps: 'all',
@@ -216,7 +374,7 @@ export default function App() {
       }
     );
 
-    // Final CTA text reveal
+    /* Final CTA text reveal */
     const ctaSplit = new SplitText('.cta-headline', { type: 'words', autoSplit: true });
     splits.push(ctaSplit);
     gsap.fromTo(ctaSplit.words,
@@ -226,7 +384,31 @@ export default function App() {
       }
     );
 
-    // CRITICAL: Revert SplitText on cleanup (restores original DOM)
+    /* ─── Color Shift ─── */
+    const colorSections = [
+      { trigger: '.social-proof', bg: '#FDFCF8' },
+      { trigger: '.marquee-band', bg: '#FAF7F0' },
+      { trigger: '.mask-section', bg: '#0C1220' },
+      { trigger: '.solution-section', bg: '#FDFCF8' },
+      { trigger: '.features-section', bg: '#F8F6F1' },
+      { trigger: '.how-it-works', bg: '#FDFCF8' },
+      { trigger: '.pricing-section', bg: '#FAF7F0' },
+      { trigger: '.faq-section', bg: '#FDFCF8' },
+    ];
+
+    colorSections.forEach(({ trigger, bg }) => {
+      const el = document.querySelector(trigger);
+      if (el) {
+        ScrollTrigger.create({
+          trigger: el,
+          start: 'top 80%',
+          end: 'bottom 20%',
+          onEnter: () => gsap.to('body', { backgroundColor: bg, duration: 0.6, ease: 'power2.out' }),
+          onEnterBack: () => gsap.to('body', { backgroundColor: bg, duration: 0.6, ease: 'power2.out' }),
+        });
+      }
+    });
+
     return () => splits.forEach(s => s.revert());
   }, { scope: containerRef });
 
@@ -307,26 +489,39 @@ export default function App() {
         </div>
       </section>
 
-      {/* ════════ SOCIAL PROOF ════════ */}
+      {/* ════════ SOCIAL PROOF + TEXT SCRAMBLE STATS ════════ */}
       <section className="social-proof">
         <p className="social-proof-label">Trusted by property managers across British Columbia</p>
         <div className="stats-grid">
-          <div className="stat-item reveal">
-            <div className="stat-number">10x</div>
-            <div className="stat-label">Faster Replies</div>
+          {STATS.map((stat, i) => (
+            <div key={i} className="stat-item reveal">
+              <div className="stat-number-scramble" data-value={stat.value} />
+              <div className="stat-label">{stat.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ════════ KINETIC MARQUEE ════════ */}
+      <KineticMarquee />
+
+      {/* ════════ TEXT MASK REVEAL → PROBLEM SECTION ════════ */}
+      <section className="mask-section">
+        <div className="mask-sticky">
+          <div className="mask-bg" />
+          <div className="mask-overlay">
+            <div className="mask-text">NEVER<br />SLEEPS</div>
           </div>
-          <div className="stat-item reveal">
-            <div className="stat-number">24/7</div>
-            <div className="stat-label">Availability</div>
+          <div className="mask-reveal">
+            <div className="mask-text-filled">NEVER<br />SLEEPS</div>
           </div>
-          <div className="stat-item reveal">
-            <div className="stat-number">60%</div>
-            <div className="stat-label">Cost Savings</div>
+          <div className="mask-subtext">
+            <p>Alfred handles your guests at 2 AM, during holidays, and across time zones — so you don't have to.</p>
           </div>
         </div>
       </section>
 
-      {/* ════════ PROBLEM SECTION ════════ */}
+      {/* ════════ PROBLEM SECTION (after mask) ════════ */}
       <section className="section problem-section">
         <div className="section-container">
           <span className="section-label reveal">The Problem</span>
@@ -400,24 +595,103 @@ export default function App() {
         </div>
       </section>
 
-      {/* ════════ FEATURES ════════ */}
+      {/* ════════ FEATURES — STICKY STACK NARRATIVE ════════ */}
       <section className="section features-section" id="features">
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Capabilities</span>
           <h2 className="section-heading">What Alfred Handles</h2>
-          <div className="features-grid">
-            {FEATURES.map((f, i) => (
-              <motion.div
-                key={i}
-                className="feature-card"
-                whileHover={{ y: -6, boxShadow: '0 20px 60px rgba(0,0,0,0.08)' }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-              >
-                <div className="feature-icon"><f.icon size={24} strokeWidth={2} color="white" /></div>
-                <h3>{f.title}</h3>
-                <p>{f.desc}</p>
-              </motion.div>
-            ))}
+
+          <div className="stack-section">
+            <div className="stack-container">
+              {/* Left: Sticky mockup */}
+              <div className="stack-visual">
+                <div className="mockup">
+                  <div className="mockup-bar">
+                    <div className="mockup-dot" />
+                    <div className="mockup-dot" />
+                    <div className="mockup-dot" />
+                  </div>
+                  <div className="mockup-body">
+                    {/* State 1: Voice learning metric */}
+                    <div className={`mockup-state ${activeFeature === 1 ? 'active' : ''}`} data-state="1">
+                      <div className="mock-metric">97.3%</div>
+                      <div className="mock-label">Voice match accuracy</div>
+                      <div className="mock-bar-row">
+                        <div className="mock-bar filled" style={{ flex: 4.8 }} />
+                        <div className="mock-bar" style={{ flex: 0.2 }} />
+                      </div>
+                    </div>
+                    {/* State 2: Cross-platform grid */}
+                    <div className={`mockup-state ${activeFeature === 2 ? 'active' : ''}`} data-state="2">
+                      <div className="mock-grid">
+                        <div className="mock-card">
+                          <div className="mock-card-num">Airbnb</div>
+                          <div className="mock-card-label">14 messages today</div>
+                        </div>
+                        <div className="mock-card">
+                          <div className="mock-card-num">Vrbo</div>
+                          <div className="mock-card-label">8 messages today</div>
+                        </div>
+                        <div className="mock-card">
+                          <div className="mock-card-num">SMS</div>
+                          <div className="mock-card-label">3 messages today</div>
+                        </div>
+                        <div className="mock-card">
+                          <div className="mock-card-num">Email</div>
+                          <div className="mock-card-label">6 messages today</div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* State 3: Escalation checklist */}
+                    <div className={`mockup-state ${activeFeature === 3 ? 'active' : ''}`} data-state="3">
+                      <ul className="mock-list">
+                        <li><div className="mock-check">✓</div> Billing dispute flagged</li>
+                        <li><div className="mock-check">✓</div> Draft response created</li>
+                        <li><div className="mock-check">✓</div> Owner notified via SMS</li>
+                        <li><div className="mock-check">✓</div> Guest sees "escalated" status</li>
+                        <li><div className="mock-check">✓</div> Resolution logged</li>
+                      </ul>
+                    </div>
+                    {/* State 4: Dashboard analytics */}
+                    <div className={`mockup-state ${activeFeature === 4 ? 'active' : ''}`} data-state="4" style={{ alignItems: 'center', textAlign: 'center' }}>
+                      <div className="mock-grid">
+                        <div className="mock-card">
+                          <div className="mock-card-num">47s</div>
+                          <div className="mock-card-label">Avg reply time</div>
+                        </div>
+                        <div className="mock-card">
+                          <div className="mock-card-num">4.9★</div>
+                          <div className="mock-card-label">Guest sentiment</div>
+                        </div>
+                        <div className="mock-card">
+                          <div className="mock-card-num">0</div>
+                          <div className="mock-card-label">Calendar conflicts</div>
+                        </div>
+                        <div className="mock-card">
+                          <div className="mock-card-num">312</div>
+                          <div className="mock-card-label">Messages this month</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Scrolling feature cards */}
+              <div className="stack-features">
+                {FEATURES.map((f, i) => (
+                  <div
+                    key={i}
+                    className={`stack-feature-card ${activeFeature === i + 1 ? 'active' : ''}`}
+                    data-feature={String(i + 1)}
+                  >
+                    <div className="stack-feature-num">0{i + 1}</div>
+                    <h3>{f.title}</h3>
+                    <p>{f.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
