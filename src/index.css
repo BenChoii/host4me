@@ -27,6 +27,19 @@
 }
 
 /* ═══════════════════════════════════════════
+   3D SCENE CANVAS
+   ═══════════════════════════════════════════ */
+.scene-canvas {
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════
    RESET & BASE
    ═══════════════════════════════════════════ */
 *, *::before, *::after {
@@ -228,6 +241,7 @@ p {
   background: linear-gradient(160deg, var(--navy) 0%, #0f1a30 40%, #162240 100%);
   position: relative;
   overflow: hidden;
+  z-index: 1;
 }
 
 .hero::before {
@@ -510,7 +524,8 @@ p {
    SOCIAL PROOF STRIP
    ═══════════════════════════════════════════ */
 .social-proof {
-  background: var(--cream);
+  background: rgba(253, 252, 248, 0.95);
+  backdrop-filter: blur(4px);
   padding: 80px clamp(20px, 4vw, 60px);
   text-align: center;
   position: relative;
@@ -559,6 +574,8 @@ p {
 .section {
   padding: clamp(80px, 12vw, 160px) clamp(20px, 4vw, 60px);
   position: relative;
+  z-index: 2;
+  background: var(--cream);
 }
 
 .section-container {
@@ -1004,12 +1021,13 @@ p {
    FINAL CTA
    ═══════════════════════════════════════════ */
 .final-cta {
-  background: linear-gradient(160deg, var(--navy), #162240);
+  background: linear-gradient(160deg, rgba(12, 18, 32, 0.85), rgba(22, 34, 64, 0.85));
   color: white;
   padding: clamp(80px, 10vw, 140px) clamp(20px, 4vw, 60px);
   text-align: center;
   position: relative;
   overflow: hidden;
+  z-index: 1;
 }
 
 .final-cta::before {
@@ -1042,6 +1060,8 @@ p {
   padding: 40px clamp(20px, 4vw, 60px);
   text-align: center;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+  z-index: 2;
   font-size: 14px;
 }
 
