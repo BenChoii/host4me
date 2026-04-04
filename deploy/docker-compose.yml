@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # Ollama — Local LLM server (Gemma 4)
+  # ==========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: host4me-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          memory: 24G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # PostgreSQL — Session store, credentials, analytics
+  # ==========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: host4me-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-host4me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-host4me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U host4me"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================================================
+  # Redis — Task queues, pub/sub for agent coordination
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: host4me-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ==========================================================================
+  # Host4Me Backend — Express server + Telegram bots
+  # ==========================================================================
+  backend:
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile.backend
+    container_name: host4me-backend
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+  # ==========================================================================
+  # Browser Agents — Python Browser Use service
+  # ==========================================================================
+  browser-agents:
+    build:
+      context: ../backend/browser-agents
+      dockerfile: Dockerfile
+    container_name: host4me-browser-agents
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    ports:
+      - "8100:8100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    # Browser Use needs more shared memory for Playwright
+    shm_size: '2gb'
+
+volumes:
+  ollama_data:
+  postgres_data:
+  redis_data:
