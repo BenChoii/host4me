@@ -1618,3 +1618,77 @@ p {
     scroll-behavior: auto !important;
   }
 }
+
+/* ═══════════════════════════════════════════
+   REMOTION PLAYER COMPOSITIONS
+   ═══════════════════════════════════════════ */
+.remotion-player-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.remotion-player-wrap > div {
+  border-radius: 20px;
+}
+
+/* Hero chat player — centered, constrained width */
+.chat-mockup.remotion-player-wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
+/* Comparison player */
+.comparison-grid.remotion-player-wrap {
+  display: block;
+  max-width: 940px;
+  margin: 40px auto 0;
+}
+
+/* How It Works player */
+.steps-grid.remotion-player-wrap {
+  display: block;
+  max-width: 940px;
+  margin: 40px auto 0;
+}
+
+/* Alfred At Work section */
+.alfred-work-section {
+  background: var(--navy);
+  color: #fff;
+}
+
+.alfred-work-section .section-label {
+  color: var(--copper);
+}
+
+.alfred-work-section .section-heading {
+  color: #fff;
+}
+
+.alfred-work-player {
+  max-width: 940px;
+  margin: 40px auto 0;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .chat-mockup.remotion-player-wrap {
+    max-width: 100%;
+    margin: 30px auto 0;
+  }
+
+  .comparison-grid.remotion-player-wrap,
+  .steps-grid.remotion-player-wrap,
+  .alfred-work-player {
+    max-width: 100%;
+    margin: 24px auto 0;
+    border-radius: 14px;
+  }
+}

@@ -6,6 +6,11 @@ import { useGSAP } from '@gsap/react';
 import Lenis from 'lenis';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, RefreshCw, Zap, BarChart3, Moon, CalendarX, MessageSquareOff, Check } from 'lucide-react';
+import { Player } from '@remotion/player';
+import HeroChat from './compositions/HeroChat';
+import Comparison from './compositions/Comparison';
+import HowItWorksComp from './compositions/HowItWorks';
+import AlfredAtWork from './compositions/AlfredAtWork';
 import SceneCanvas from './components/three/SceneCanvas';
 
 gsap.registerPlugin(ScrollTrigger, SplitText);
@@ -501,23 +506,18 @@ export default function App() {
             </motion.button>
           </div>
 
-          {/* Chat Mockup */}
-          <div className="chat-mockup">
-            <div className="chat-header">
-              <div className="chat-avatar">A</div>
-              <div className="chat-name">Alfred</div>
-              <div className="chat-status">Online</div>
-            </div>
-            <div className="chat-messages">
-              {HERO_CHAT.map((msg, i) => (
-                <div key={i} className={`message ${msg.type} chat-message-animated`}>
-                  <div className="message-bubble">
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
-              <div className="message-time">Response time: 47 seconds</div>
-            </div>
+          {/* Chat Mockup — Remotion Player */}
+          <div className="chat-mockup remotion-player-wrap">
+            <Player
+              component={HeroChat}
+              durationInFrames={320}
+              fps={30}
+              compositionWidth={480}
+              compositionHeight={520}
+              loop
+              autoPlay
+              style={{ width: '100%', height: 'auto' }}
+            />
           </div>
         </div>
       </section>
@@ -590,37 +590,17 @@ export default function App() {
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>The Solution</span>
           <h2 className="section-heading">Meet Alfred. He learns how you talk.</h2>
-          <div className="comparison-grid">
-            <div className="comparison-card">
-              <h4>Generic Bot Response</h4>
-              <div className="chat-messages">
-                <div className="message guest">
-                  <div className="message-bubble" style={{ background: 'rgba(0,0,0,0.05)', color: 'var(--text-dark)' }}>
-                    Hi, is there parking available?
-                  </div>
-                </div>
-                <div className="message alfred">
-                  <div className="message-bubble" style={{ background: '#ccc', color: 'var(--text-dark)' }}>
-                    Thank you for your inquiry. Parking information can be found in the Property Rules document. Best regards, Management.
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="comparison-card alfred">
-              <h4>Alfred's Personalized Response</h4>
-              <div className="chat-messages">
-                <div className="message guest">
-                  <div className="message-bubble" style={{ background: 'rgba(0,0,0,0.05)', color: 'var(--text-dark)' }}>
-                    Hi, is there parking available?
-                  </div>
-                </div>
-                <div className="message alfred">
-                  <div className="message-bubble">
-                    Hey! Yeah, we've got covered parking right out front. Just use the code from your check-in email and you're good. Hit me up if you need anything else!
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="comparison-grid remotion-player-wrap">
+            <Player
+              component={Comparison}
+              durationInFrames={360}
+              fps={30}
+              compositionWidth={900}
+              compositionHeight={420}
+              loop
+              autoPlay
+              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
+            />
           </div>
           <p className="comparison-caption reveal">
             Alfred analyzes your past 100+ messages to replicate your tone, humor, and helpfulness. No training required.
@@ -734,20 +714,17 @@ export default function App() {
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Getting Started</span>
           <h2 className="section-heading">Three Steps to Effortless Guest Management</h2>
-          <div className="steps-grid">
-            {STEPS.map((s, i) => (
-              <div key={i} className="step">
-                <motion.div
-                  className="step-number"
-                  whileHover={{ scale: 1.15, backgroundColor: '#C67D3B', color: '#fff' }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-                >
-                  {s.num}
-                </motion.div>
-                <h3>{s.title}</h3>
-                <p>{s.desc}</p>
-              </div>
-            ))}
+          <div className="steps-grid remotion-player-wrap">
+            <Player
+              component={HowItWorksComp}
+              durationInFrames={300}
+              fps={30}
+              compositionWidth={900}
+              compositionHeight={380}
+              loop
+              autoPlay
+              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
+            />
           </div>
         </div>
       </section>
@@ -816,6 +793,26 @@ export default function App() {
               </AnimatePresence>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ════════ ALFRED AT WORK — REMOTION ════════ */}
+      <section className="section alfred-work-section">
+        <div className="section-wide">
+          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>See It In Action</span>
+          <h2 className="section-heading">Alfred Works While You Sleep</h2>
+          <div className="remotion-player-wrap alfred-work-player">
+            <Player
+              component={AlfredAtWork}
+              durationInFrames={360}
+              fps={30}
+              compositionWidth={900}
+              compositionHeight={520}
+              loop
+              autoPlay
+              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
+            />
+          </div>
         </div>
       </section>
 
