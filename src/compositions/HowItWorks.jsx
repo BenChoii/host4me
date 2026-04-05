@@ -1,114 +1,104 @@
 import { useCurrentFrame, useVideoConfig, interpolate, spring, AbsoluteFill } from 'remotion';
+import { AlfredAvatar, CommsAvatar, EscalationAvatar, ReportingAvatar, AGENT_COLORS } from '../components/agents/AgentAvatars';
+
+/*
+  How It Works — 3 Steps: Try → Love → Subscribe
+
+  Visual story of the free trial flow:
+  1. Start free — 100 actions included
+  2. Alfred learns & handles guests
+  3. Love it? Upgrade for unlimited
+*/
 
 const STEPS = [
   {
     num: '01',
-    title: 'Connect',
-    desc: 'Link your Airbnb, Vrbo, or property management account',
-    icon: '🔗',
-    platforms: ['Airbnb', 'Vrbo', 'iCal', 'Guesty'],
+    title: 'Start Free',
+    desc: 'Connect your property. Get 100 free actions — no card needed.',
+    visual: 'connect',
+    color: AGENT_COLORS.comms,
   },
   {
     num: '02',
-    title: 'Learn',
-    desc: 'Alfred analyzes 100+ past messages to learn your voice',
-    icon: '🧠',
-    metrics: ['Tone: Friendly', 'Style: Casual', 'Response: Detailed', 'Match: 97.3%'],
+    title: 'Watch Alfred Work',
+    desc: 'Alfred learns your voice and handles guests in real-time.',
+    visual: 'learn',
+    color: AGENT_COLORS.alfred,
   },
   {
     num: '03',
-    title: 'Automate',
-    desc: 'Alfred replies 24/7 — your voice, your rules, zero effort',
-    icon: '⚡',
-    stats: ['47s avg reply', '24/7 coverage', '312 msgs/mo'],
+    title: 'Love It? Upgrade',
+    desc: 'Unlock unlimited actions and the full agent team.',
+    visual: 'upgrade',
+    color: AGENT_COLORS.reporting,
   },
 ];
 
-function ConnectAnimation({ frame, fps, startFrame }) {
+function ConnectVisual({ frame, fps, startFrame }) {
   const localFrame = Math.max(0, frame - startFrame);
+  const platforms = ['Airbnb', 'Vrbo', 'iCal'];
   return (
-    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', marginTop: 12 }}>
-      {STEPS[0].platforms.map((p, i) => {
-        const delay = i * 8;
-        const s = spring({ frame: Math.max(0, localFrame - delay), fps, config: { damping: 12, stiffness: 150 } });
-        const connected = localFrame > delay + 25;
-        return (
-          <div key={i} style={{
-            padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-            fontFamily: "'Inter', sans-serif",
-            background: connected ? 'rgba(74,222,128,0.15)' : 'rgba(255,255,255,0.06)',
-            border: `1px solid ${connected ? 'rgba(74,222,128,0.4)' : 'rgba(255,255,255,0.1)'}`,
-            color: connected ? '#4ADE80' : 'rgba(255,255,255,0.5)',
-            opacity: interpolate(s, [0, 1], [0, 1]),
-            transform: `scale(${Math.min(s, 1)})`,
-            transition: 'background 0.3s, border-color 0.3s, color 0.3s',
-          }}>
-            {connected ? '✓ ' : ''}{p}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function LearnAnimation({ frame, fps, startFrame }) {
-  const localFrame = Math.max(0, frame - startFrame);
-  return (
-    <div style={{ marginTop: 12 }}>
-      {STEPS[1].metrics.map((m, i) => {
-        const delay = i * 12;
-        const progress = interpolate(localFrame - delay, [0, 30], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-        return (
-          <div key={i} style={{ marginBottom: 8, opacity: localFrame > delay ? 1 : 0 }}>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', marginBottom: 4,
-              fontSize: 12, fontFamily: "'Inter', sans-serif",
-              color: 'rgba(255,255,255,0.7)',
-            }}>
-              <span>{m.split(':')[0]}</span>
-              <span style={{ color: '#C67D3B', fontWeight: 600 }}>{m.split(':')[1]}</span>
-            </div>
-            <div style={{
-              height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.06)', overflow: 'hidden',
-            }}>
-              <div style={{
-                height: '100%', borderRadius: 2, width: `${progress * 100}%`,
-                background: 'linear-gradient(90deg, #C67D3B, #D4944F)',
-              }} />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function AutomateAnimation({ frame, fps, startFrame }) {
-  const localFrame = Math.max(0, frame - startFrame);
-  return (
-    <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-      {STEPS[2].stats.map((stat, i) => {
+    <div style={{ display: 'flex', gap: 8 }}>
+      {platforms.map((p, i) => {
         const delay = i * 10;
-        const s = spring({ frame: Math.max(0, localFrame - delay), fps, config: { damping: 14, stiffness: 120 } });
+        const s = spring({ frame: Math.max(0, localFrame - delay), fps, config: { damping: 12, stiffness: 140 } });
+        const connected = localFrame > delay + 20;
         return (
           <div key={i} style={{
-            padding: '10px 16px', borderRadius: 12,
-            background: 'rgba(198,125,59,0.12)',
-            border: '1px solid rgba(198,125,59,0.25)',
+            padding: '6px 12px', borderRadius: 8, fontSize: 10, fontWeight: 600,
+            background: connected ? 'rgba(168,197,184,0.15)' : 'rgba(45,43,61,0.04)',
+            border: `1px solid ${connected ? 'rgba(168,197,184,0.3)' : 'rgba(45,43,61,0.08)'}`,
+            color: connected ? '#7FA695' : '#9994AB',
             opacity: interpolate(s, [0, 1], [0, 1]),
             transform: `scale(${Math.min(s, 1)})`,
+          }}>{connected ? '✓ ' : ''}{p}</div>
+        );
+      })}
+    </div>
+  );
+}
+
+function LearnVisual({ frame, fps, startFrame }) {
+  const localFrame = Math.max(0, frame - startFrame);
+  const metrics = [
+    { label: 'Voice Match', value: '97%', color: AGENT_COLORS.alfred.primary },
+    { label: 'Actions Used', value: '23/100', color: AGENT_COLORS.comms.primary },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      {metrics.map((m, i) => {
+        const delay = i * 12;
+        const s = spring({ frame: Math.max(0, localFrame - delay), fps, config: { damping: 12, stiffness: 120 } });
+        return (
+          <div key={i} style={{
+            padding: '8px 12px', borderRadius: 10,
+            background: `${m.color}15`, border: `1px solid ${m.color}30`,
+            opacity: interpolate(s, [0, 1], [0, 1]),
+            transform: `translateY(${interpolate(s, [0, 1], [10, 0])}px)`,
           }}>
-            <div style={{
-              fontSize: 16, fontWeight: 700, color: '#C67D3B',
-              fontFamily: "'Inter', sans-serif",
-            }}>{stat.split(' ')[0]}</div>
-            <div style={{
-              fontSize: 11, color: 'rgba(255,255,255,0.5)',
-              fontFamily: "'Inter', sans-serif",
-            }}>{stat.split(' ').slice(1).join(' ')}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#2D2B3D' }}>{m.value}</div>
+            <div style={{ fontSize: 9, color: '#9994AB' }}>{m.label}</div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function UpgradeVisual({ frame, fps, startFrame }) {
+  const localFrame = Math.max(0, frame - startFrame);
+  const s = spring({ frame: localFrame, fps, config: { damping: 14, stiffness: 100 } });
+  return (
+    <div style={{
+      display: 'flex', gap: 6, alignItems: 'center',
+      opacity: interpolate(s, [0, 1], [0, 1]),
+      transform: `scale(${Math.min(s, 1)})`,
+    }}>
+      <AlfredAvatar size={24} />
+      <CommsAvatar size={24} />
+      <EscalationAvatar size={24} />
+      <ReportingAvatar size={24} />
+      <span style={{ fontSize: 10, color: '#7FA695', fontWeight: 600, marginLeft: 4 }}>Full team unlocked</span>
     </div>
   );
 }
@@ -117,92 +107,71 @@ export default function HowItWorks() {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
 
-  // Each step gets a phase
   const stepDuration = Math.floor(durationInFrames / 3);
   const activeStep = Math.min(2, Math.floor(frame / stepDuration));
 
-  // Connector line progress
-  const lineProgress = interpolate(frame, [0, durationInFrames * 0.85], [0, 1], { extrapolateRight: 'clamp' });
-
   return (
     <AbsoluteFill style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', padding: '0 60px', gap: 0,
-      background: 'transparent',
+      background: 'linear-gradient(160deg, #FAF8F5 0%, #F0EBF5 50%, #EDF2F7 100%)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '0 40px', gap: 24,
+      fontFamily: "'Inter', -apple-system, sans-serif",
     }}>
-      {/* Steps row */}
-      <div style={{
-        display: 'flex', gap: 32, alignItems: 'flex-start', width: '100%', justifyContent: 'center',
-        position: 'relative',
-      }}>
-        {STEPS.map((step, i) => {
-          const stepStart = i * stepDuration;
-          const s = spring({ frame: Math.max(0, frame - stepStart), fps, config: { damping: 14, stiffness: 100 } });
-          const isActive = activeStep >= i;
-          const isCurrent = activeStep === i;
+      {STEPS.map((step, i) => {
+        const stepStart = i * stepDuration;
+        const s = spring({ frame: Math.max(0, frame - stepStart), fps, config: { damping: 14, stiffness: 90 } });
+        const isActive = activeStep >= i;
+        const isCurrent = activeStep === i;
 
-          return (
-            <div key={i} style={{
-              flex: 1, textAlign: 'center',
-              opacity: interpolate(s, [0, 1], [0, 1]),
-              transform: `translateY(${interpolate(s, [0, 1], [40, 0])}px)`,
-            }}>
-              {/* Step circle */}
-              <div style={{
-                width: 64, height: 64, borderRadius: '50%', margin: '0 auto 16px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: isActive ? 'linear-gradient(135deg, #C67D3B, #D4944F)' : 'rgba(255,255,255,0.06)',
-                border: `2px solid ${isActive ? '#C67D3B' : 'rgba(255,255,255,0.1)'}`,
-                fontSize: 28,
-                boxShadow: isCurrent ? '0 0 30px rgba(198,125,59,0.4)' : 'none',
-                transition: 'box-shadow 0.3s',
-              }}>
-                {step.icon}
-              </div>
+        return (
+          <div key={i} style={{
+            flex: 1, textAlign: 'center',
+            background: 'white',
+            borderRadius: 20, padding: '28px 20px',
+            border: `1.5px solid ${isCurrent ? step.color.primary + '40' : 'rgba(45,43,61,0.06)'}`,
+            boxShadow: isCurrent ? `0 8px 30px ${step.color.primary}15` : '0 4px 12px rgba(45,43,61,0.03)',
+            opacity: interpolate(s, [0, 1], [0.4, 1]),
+            transform: `translateY(${interpolate(s, [0, 1], [20, isCurrent ? -4 : 0])}px) scale(${isCurrent ? 1.02 : 1})`,
+            transition: 'border-color 0.3s, box-shadow 0.3s',
+          }}>
+            {/* Step number */}
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%', margin: '0 auto 14px',
+              background: isActive ? step.color.primary : 'rgba(45,43,61,0.04)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 13, fontWeight: 700,
+              color: isActive ? 'white' : '#9994AB',
+            }}>{step.num}</div>
 
-              {/* Step number */}
-              <div style={{
-                fontSize: 12, fontWeight: 700, letterSpacing: '0.1em',
-                color: isActive ? '#C67D3B' : 'rgba(255,255,255,0.3)',
-                fontFamily: "'Inter', sans-serif",
-                marginBottom: 6,
-              }}>STEP {step.num}</div>
+            <div style={{
+              fontSize: 16, fontWeight: 700, color: '#2D2B3D', marginBottom: 6,
+            }}>{step.title}</div>
+            <div style={{
+              fontSize: 11, color: '#9994AB', lineHeight: 1.5, marginBottom: 14,
+            }}>{step.desc}</div>
 
-              {/* Title */}
-              <div style={{
-                fontSize: 20, fontWeight: 700,
-                color: isActive ? '#fff' : 'rgba(255,255,255,0.4)',
-                fontFamily: "'Inter', sans-serif",
-                marginBottom: 8,
-              }}>{step.title}</div>
-
-              {/* Description */}
-              <div style={{
-                fontSize: 13, lineHeight: 1.5,
-                color: isActive ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.3)',
-                fontFamily: "'Inter', sans-serif",
-                marginBottom: 8,
-              }}>{step.desc}</div>
-
-              {/* Step-specific animation */}
-              {isCurrent && i === 0 && <ConnectAnimation frame={frame} fps={fps} startFrame={stepStart + 20} />}
-              {isCurrent && i === 1 && <LearnAnimation frame={frame} fps={fps} startFrame={stepStart + 20} />}
-              {isCurrent && i === 2 && <AutomateAnimation frame={frame} fps={fps} startFrame={stepStart + 20} />}
+            {/* Step-specific visual */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              {isCurrent && i === 0 && <ConnectVisual frame={frame} fps={fps} startFrame={stepStart + 15} />}
+              {isCurrent && i === 1 && <LearnVisual frame={frame} fps={fps} startFrame={stepStart + 15} />}
+              {isCurrent && i === 2 && <UpgradeVisual frame={frame} fps={fps} startFrame={stepStart + 15} />}
             </div>
-          );
-        })}
-      </div>
+          </div>
+        );
+      })}
 
-      {/* Progress bar underneath */}
+      {/* Progress dots */}
       <div style={{
-        width: '70%', height: 3, background: 'rgba(255,255,255,0.06)',
-        borderRadius: 2, marginTop: 32, overflow: 'hidden',
+        position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', gap: 8,
       }}>
-        <div style={{
-          height: '100%', borderRadius: 2,
-          width: `${lineProgress * 100}%`,
-          background: 'linear-gradient(90deg, #C67D3B, #D4944F)',
-        }} />
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{
+            width: activeStep === i ? 20 : 8, height: 8, borderRadius: 100,
+            background: activeStep >= i ? STEPS[i].color.primary : 'rgba(45,43,61,0.1)',
+            transition: 'width 0.3s, background 0.3s',
+          }} />
+        ))}
       </div>
     </AbsoluteFill>
   );

@@ -12,6 +12,8 @@ import HeroChat from './compositions/HeroChat';
 import Comparison from './compositions/Comparison';
 import HowItWorksComp from './compositions/HowItWorks';
 import AlfredAtWork from './compositions/AlfredAtWork';
+import AgentOffice from './compositions/AgentOffice';
+import NightShift from './compositions/NightShift';
 
 /* ─── Error Boundary so Remotion issues don't white-screen the site ─── */
 class PlayerErrorBoundary extends Component {
@@ -455,14 +457,14 @@ export default function App() {
 
     /* ─── Color Shift ─── */
     const colorSections = [
-      { trigger: '.social-proof', bg: '#FDFCF8' },
-      { trigger: '.marquee-band', bg: '#FAF7F0' },
-      { trigger: '.mask-section', bg: '#0C1220' },
-      { trigger: '.solution-section', bg: '#FDFCF8' },
-      { trigger: '.features-section', bg: '#F8F6F1' },
-      { trigger: '.how-it-works', bg: '#FDFCF8' },
-      { trigger: '.pricing-section', bg: '#FAF7F0' },
-      { trigger: '.faq-section', bg: '#FDFCF8' },
+      { trigger: '.social-proof', bg: '#FAF8F5' },
+      { trigger: '.marquee-band', bg: '#F5F0EB' },
+      { trigger: '.mask-section', bg: '#2D2B3D' },
+      { trigger: '.solution-section', bg: '#FAF8F5' },
+      { trigger: '.features-section', bg: '#F7F2ED' },
+      { trigger: '.how-it-works', bg: '#FAF8F5' },
+      { trigger: '.pricing-section', bg: '#F5F0EB' },
+      { trigger: '.faq-section', bg: '#FAF8F5' },
     ];
 
     colorSections.forEach(({ trigger, bg }) => {
@@ -639,6 +641,29 @@ export default function App() {
           <p className="comparison-caption reveal">
             Alfred analyzes your past 100+ messages to replicate your tone, humor, and helpfulness. No training required.
           </p>
+        </div>
+      </section>
+
+      {/* ════════ AGENT OFFICE — REMOTION ════════ */}
+      <section className="section agent-office-section">
+        <div className="section-wide">
+          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>The Team</span>
+          <h2 className="section-heading">Meet Alfred's Office</h2>
+          <p className="comparison-caption reveal">
+            Four specialized AI agents working together. Each one handles a different part of your property management.
+          </p>
+          <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0' }}>
+            <SafePlayer
+              component={AgentOffice}
+              durationInFrames={360}
+              fps={30}
+              compositionWidth={900}
+              compositionHeight={480}
+              loop
+              autoPlay
+              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
+            />
+          </div>
         </div>
       </section>
 
@@ -830,18 +855,38 @@ export default function App() {
         </div>
       </section>
 
-      {/* ════════ ALFRED AT WORK — REMOTION ════════ */}
-      <section className="section alfred-work-section">
+      {/* ════════ NIGHT SHIFT — REMOTION ════════ */}
+      <section className="section night-shift-section">
         <div className="section-wide">
-          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>See It In Action</span>
-          <h2 className="section-heading">Alfred Works While You Sleep</h2>
-          <div className="remotion-player-wrap alfred-work-player">
+          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block', color: 'rgba(255,255,255,0.4)' }}>See It In Action</span>
+          <h2 className="section-heading" style={{ color: 'white' }}>Alfred Works While You Sleep</h2>
+          <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0', borderRadius: 20, border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 30px 80px rgba(0,0,0,0.3)' }}>
             <SafePlayer
-              component={AlfredAtWork}
-              durationInFrames={360}
+              component={NightShift}
+              durationInFrames={420}
               fps={30}
               compositionWidth={900}
               compositionHeight={520}
+              loop
+              autoPlay
+              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ════════ ALFRED DASHBOARD — REMOTION ════════ */}
+      <section className="section alfred-work-section">
+        <div className="section-wide">
+          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Your Dashboard</span>
+          <h2 className="section-heading">Everything at a Glance</h2>
+          <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0', borderRadius: 20, border: '1px solid rgba(45,43,61,0.06)', boxShadow: '0 12px 40px rgba(45,43,61,0.06)' }}>
+            <SafePlayer
+              component={AlfredAtWork}
+              durationInFrames={300}
+              fps={30}
+              compositionWidth={900}
+              compositionHeight={480}
               loop
               autoPlay
               style={{ width: '100%', height: 'auto', borderRadius: 20 }}
@@ -855,7 +900,7 @@ export default function App() {
         <div className="hero-grid-bg" />
         <div style={{ position: 'relative', zIndex: 2 }}>
           <h2 className="cta-headline">Ready to let Alfred handle your guests?</h2>
-          <p className="reveal">Stop losing sleep over guest messages. Start your free demo today.</p>
+          <p className="reveal">Stop losing sleep over guest messages. Start free with 100 actions.</p>
           <motion.a
             href={CALENDLY_URL}
             target="_blank"
