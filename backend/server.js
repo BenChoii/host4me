@@ -37,28 +37,35 @@ const botManager = new BotManager();
 // Conversation history per PM (in-memory for now, move to DB later)
 const conversations = new Map();
 
-const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You manage short-term rental properties.
+const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You manage short-term rental properties autonomously.
 
 RULES:
 - NEVER re-introduce yourself after the first message
 - Be concise. 2-3 sentences max unless asked for detail
 - Sound like a sharp, competent assistant — not a chatbot
 - No filler phrases like "That's a great question" or "I'd be happy to help"
-- Use Telegram markdown: *bold*, _italic_
 
-ON FIRST MESSAGE from a new PM, immediately start onboarding:
-1. Ask what platforms they use (Airbnb, VRBO, etc) and how many properties
-2. Ask them to share their Airbnb profile URL so you can start optimizing
-3. Explain you'll need their platform login to start managing messages (collected securely)
+YOUR #1 PRIORITY is getting access to the PM's platforms so you can start working.
 
-After onboarding, you handle:
-- Guest messaging 24/7 in the PM's voice
-- Daily pricing research and recommendations
-- Listing optimization (descriptions, titles, photos)
+ONBOARDING FLOW (follow this order):
+1. Ask what platform they use (Airbnb, VRBO, etc)
+2. Ask for their platform login email
+3. Ask for their platform password (explain it's encrypted and stored securely on their private server)
+4. Once you have email + password, say "Got it. Logging into your [platform] now..." — the backend will handle the actual login
+5. If 2FA is needed, ask for the verification code
+6. Once logged in, check their inbox and report what you find
+
+AFTER ONBOARDING you handle:
+- Reading and replying to guest messages in the PM's voice
+- Daily pricing research
+- Listing optimization
 - Escalation of emergencies
-- Daily briefings and weekly reports
+- Daily briefings
 
-You lead a team of 5 specialized AI agents. Don't list them unless asked.
+When the PM sends their credentials, format your response to include:
+[LOGIN_REQUEST: platform=airbnb, email=their@email.com, password=theirpassword]
+This tag triggers the backend to start the browser login. The PM won't see this tag.
+
 Keep it natural. You're a business partner, not a robot.`;
 
 // Handle PM messages — route to ADK Alfred agent
@@ -132,9 +139,47 @@ botManager.onPmMessage = async (pmId, type, data) => {
         const result = await geminiRes.json();
         const reply = result?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (reply) {
+          // Check for LOGIN_REQUEST tag and trigger browser login
+          const loginMatch = reply.match(/\[LOGIN_REQUEST:\s*platform=(\w+),\s*email=([^,]+),\s*password=([^\]]+)\]/);
+          let cleanReply = reply.replace(/\[LOGIN_REQUEST:[^\]]+\]/g, '').trim();
+
           // Add Alfred's reply to conversation history
-          history.push({ role: 'model', parts: [{ text: reply }] });
-          await botManager.sendMessage(pmId, reply);
+          history.push({ role: 'model', parts: [{ text: cleanReply }] });
+          await botManager.sendMessage(pmId, cleanReply);
+
+          if (loginMatch) {
+            const [, platform, email, password] = loginMatch;
+            console.log(`[Browser] Login triggered for PM ${pmId} on ${platform}`);
+
+            try {
+              const browser = await getBrowser(pmId);
+              let result;
+              if (platform === 'airbnb') {
+                result = await browser.loginAirbnb(email.trim(), password.trim());
+              } else {
+                result = { status: 'error', message: `${platform} not yet supported` };
+              }
+
+              if (result.status === 'logged_in' || result.status === 'already_logged_in') {
+                await botManager.sendMessage(pmId, `✅ Successfully logged into ${platform}! Checking your inbox now...`);
+                const inbox = await browser.checkAirbnbInbox();
+                if (inbox.messages && inbox.messages.length > 0) {
+                  const summary = inbox.messages.map(m => `• *${m.guest_name}*: ${m.message_preview}`).join('\n');
+                  await botManager.sendMessage(pmId, `📨 Found ${inbox.count} conversation(s):\n\n${summary}`);
+                } else {
+                  await botManager.sendMessage(pmId, '📭 Inbox is clear — no unread messages.');
+                }
+              } else if (result.status === '2fa_required') {
+                await botManager.sendMessage(pmId, `🔐 ${platform} is asking for a verification code. Check your email or phone and send me the code.`);
+              } else {
+                await botManager.sendMessage(pmId, `⚠️ Login issue: ${result.message || result.status}. Let me know if you need to try again.`);
+              }
+            } catch (err) {
+              console.error(`[Browser] Login error for ${pmId}:`, err.message);
+              await botManager.sendMessage(pmId, `⚠️ Had trouble logging in: ${err.message}`);
+            }
+          }
+
           console.log(`[Gemini] Replied to PM ${pmId}`);
         } else {
           console.error('[Gemini] No reply in response:', JSON.stringify(result).slice(0, 200));
@@ -183,6 +228,77 @@ app.post('/api/telegram/:pmId', async (req, res) => {
 // ==========================================================================
 // Internal API (called by ADK agent tools)
 // ==========================================================================
+
+const { PlatformBrowser } = require('./browser/platform-browser');
+const activeBrowsers = new Map();
+
+async function getBrowser(pmId) {
+  if (!activeBrowsers.has(pmId)) {
+    const browser = new PlatformBrowser(pmId);
+    await browser.init();
+    activeBrowsers.set(pmId, browser);
+  }
+  return activeBrowsers.get(pmId);
+}
+
+// Platform login
+app.post('/internal/browser/login', async (req, res) => {
+  const { pmId, platform, email, password } = req.body;
+  try {
+    const browser = await getBrowser(pmId);
+    let result;
+    if (platform === 'airbnb') {
+      result = await browser.loginAirbnb(email, password);
+    } else {
+      result = { status: 'error', message: `Platform ${platform} not yet supported` };
+    }
+    console.log(`[Browser] Login ${platform} for PM ${pmId}: ${result.status}`);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Submit 2FA code
+app.post('/internal/browser/2fa', async (req, res) => {
+  const { pmId, code } = req.body;
+  try {
+    const browser = await getBrowser(pmId);
+    const result = await browser.submit2FA(code);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Check inbox
+app.post('/internal/browser/inbox', async (req, res) => {
+  const { pmId, platform } = req.body;
+  try {
+    const browser = await getBrowser(pmId);
+    let result;
+    if (platform === 'airbnb') {
+      result = await browser.checkAirbnbInbox();
+    } else {
+      result = { status: 'error', message: `Platform ${platform} not yet supported` };
+    }
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Send reply
+app.post('/internal/browser/reply', async (req, res) => {
+  const { pmId, threadUrl, message } = req.body;
+  try {
+    const browser = await getBrowser(pmId);
+    const result = await browser.sendAirbnbReply(threadUrl, message);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
 
 // ADK agents call this to send Telegram messages to PMs
 app.post('/internal/telegram/send', async (req, res) => {
