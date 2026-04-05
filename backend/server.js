@@ -39,34 +39,31 @@ const conversations = new Map();
 
 const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You manage short-term rental properties autonomously.
 
-RULES:
+CRITICAL RULES:
+- NEVER make up information. If you don't have data, say "I don't have that information yet."
+- NEVER claim you can see something you can't actually see
+- NEVER fabricate guest names, messages, listings, or any details
+- If a login or action fails, be honest about it
+- Only reference data that has been explicitly provided to you in [BROWSER_DATA] tags
 - NEVER re-introduce yourself after the first message
-- Be concise. 2-3 sentences max unless asked for detail
-- Sound like a sharp, competent assistant — not a chatbot
-- No filler phrases like "That's a great question" or "I'd be happy to help"
+- Be concise. 2-3 sentences max
 
 YOUR #1 PRIORITY is getting access to the PM's platforms so you can start working.
 
-ONBOARDING FLOW (follow this order):
+ONBOARDING FLOW:
 1. Ask what platform they use (Airbnb, VRBO, etc)
 2. Ask for their platform login email
-3. Ask for their platform password (explain it's encrypted and stored securely on their private server)
-4. Once you have email + password, say "Got it. Logging into your [platform] now..." — the backend will handle the actual login
+3. Ask for their platform password (explain it's encrypted and stored securely)
+4. Once you have email + password, say "Logging in now..." — the backend handles the actual login
 5. If 2FA is needed, ask for the verification code
-6. Once logged in, check their inbox and report what you find
+6. WAIT for [BROWSER_DATA] to tell you what happened. Do NOT make up results.
 
-AFTER ONBOARDING you handle:
-- Reading and replying to guest messages in the PM's voice
-- Daily pricing research
-- Listing optimization
-- Escalation of emergencies
-- Daily briefings
-
-When the PM sends their credentials, format your response to include:
+When the PM sends their credentials, include this tag in your response:
 [LOGIN_REQUEST: platform=airbnb, email=their@email.com, password=theirpassword]
-This tag triggers the backend to start the browser login. The PM won't see this tag.
 
-Keep it natural. You're a business partner, not a robot.`;
+When you receive [BROWSER_DATA], reference ONLY the information in it. If it says "0 messages", say there are no messages. If it lists specific names, use those exact names. NEVER add information that isn't in [BROWSER_DATA].
+
+AFTER ONBOARDING: handle guest messaging, pricing research, listing optimization, escalations, and daily briefings — but ONLY using real data.`;
 
 // Handle PM messages — route to ADK Alfred agent
 botManager.onPmMessage = async (pmId, type, data) => {
@@ -148,35 +145,51 @@ botManager.onPmMessage = async (pmId, type, data) => {
           await botManager.sendMessage(pmId, cleanReply);
 
           if (loginMatch) {
-            const [, platform, email, password] = loginMatch;
+            const [, platform, loginEmail, loginPassword] = loginMatch;
             console.log(`[Browser] Login triggered for PM ${pmId} on ${platform}`);
 
             try {
               const browser = await getBrowser(pmId);
               let result;
               if (platform === 'airbnb') {
-                result = await browser.loginAirbnb(email.trim(), password.trim());
+                result = await browser.loginAirbnb(loginEmail.trim(), loginPassword.trim());
               } else {
                 result = { status: 'error', message: `${platform} not yet supported` };
               }
 
+              console.log(`[Browser] Login result for ${pmId}:`, JSON.stringify(result));
+
               if (result.status === 'logged_in' || result.status === 'already_logged_in') {
-                await botManager.sendMessage(pmId, `✅ Successfully logged into ${platform}! Checking your inbox now...`);
+                await botManager.sendMessage(pmId, `Attempting to access your ${platform} inbox...`);
                 const inbox = await browser.checkAirbnbInbox();
-                if (inbox.messages && inbox.messages.length > 0) {
-                  const summary = inbox.messages.map(m => `• *${m.guest_name}*: ${m.message_preview}`).join('\n');
+                console.log(`[Browser] Inbox result for ${pmId}:`, JSON.stringify(inbox).slice(0, 500));
+
+                // Inject REAL browser data into conversation history
+                const browserData = `[BROWSER_DATA] Login status: ${result.status}. Inbox check: ${JSON.stringify(inbox)}`;
+                history.push({ role: 'user', parts: [{ text: browserData }] });
+
+                if (inbox.status === 'ok' && inbox.messages && inbox.messages.length > 0) {
+                  const summary = inbox.messages.map(m => `• ${m.guest_name}: ${m.message_preview || '(no preview)'} ${m.is_unread ? '🔴' : ''}`).join('\n');
                   await botManager.sendMessage(pmId, `📨 Found ${inbox.count} conversation(s):\n\n${summary}`);
+                  history.push({ role: 'model', parts: [{ text: `Found ${inbox.count} conversations. ${summary}` }] });
+                } else if (inbox.status === 'auth_required') {
+                  await botManager.sendMessage(pmId, `⚠️ Login appeared to work but the inbox page redirected to login. Your credentials may need to be re-entered, or Airbnb may require verification.`);
+                } else if (inbox.status === 'ok' && (!inbox.messages || inbox.messages.length === 0)) {
+                  await botManager.sendMessage(pmId, `📭 Connected to ${platform}. No conversations found in the inbox, or the page layout couldn't be parsed. I'll keep trying to read it.`);
                 } else {
-                  await botManager.sendMessage(pmId, '📭 Inbox is clear — no unread messages.');
+                  await botManager.sendMessage(pmId, `⚠️ Connected but couldn't read inbox: ${inbox.message || inbox.status}`);
                 }
               } else if (result.status === '2fa_required') {
-                await botManager.sendMessage(pmId, `🔐 ${platform} is asking for a verification code. Check your email or phone and send me the code.`);
+                await botManager.sendMessage(pmId, `🔐 ${platform} is asking for a verification code. Check your email/phone and send me the code.`);
+                history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login requires 2FA verification code.` }] });
               } else {
-                await botManager.sendMessage(pmId, `⚠️ Login issue: ${result.message || result.status}. Let me know if you need to try again.`);
+                await botManager.sendMessage(pmId, `⚠️ Could not log in to ${platform}: ${result.message || result.status}. This might be due to Airbnb blocking automated browsers. Let me know if you want to try again.`);
+                history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login failed: ${result.message || result.status}` }] });
               }
             } catch (err) {
               console.error(`[Browser] Login error for ${pmId}:`, err.message);
               await botManager.sendMessage(pmId, `⚠️ Had trouble logging in: ${err.message}`);
+              history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login error: ${err.message}` }] });
             }
           }
 

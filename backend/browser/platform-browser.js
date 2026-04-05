@@ -102,16 +102,39 @@ class PlatformBrowser {
         return { status: '2fa_required', message: 'Airbnb is asking for a verification code. Check your email or phone.' };
       }
 
-      // Check if login succeeded
+      // Check if login succeeded — must NOT still be on login page
       const currentUrl = this.page.url();
-      if (currentUrl.includes('/hosting') || currentUrl.includes('airbnb.com')) {
-        await this._saveSession();
-        const title = await this.page.title();
-        return { status: 'logged_in', url: currentUrl, title };
+      const title = await this.page.title();
+
+      // Always take a screenshot for debugging
+      const screenshotPath = path.join(this.sessionDir, 'login-result.png');
+      await this.page.screenshot({ path: screenshotPath, fullPage: true });
+      console.log(`[Browser] Screenshot saved: ${screenshotPath}`);
+
+      // Check for common failure indicators
+      const pageContent = await this.page.content();
+      const hasLoginForm = pageContent.includes('type="password"') || currentUrl.includes('/login');
+      const hasCaptcha = pageContent.includes('captcha') || pageContent.includes('recaptcha') || pageContent.includes('challenge');
+      const hasError = pageContent.includes('incorrect password') || pageContent.includes('try again');
+
+      if (hasLoginForm && !currentUrl.includes('/hosting')) {
+        return { status: 'login_failed', message: 'Still on login page — credentials may be wrong or Airbnb is blocking.', url: currentUrl, screenshot: screenshotPath };
       }
 
-      // Take screenshot for debugging
-      const screenshotPath = path.join(this.sessionDir, 'login-result.png');
+      if (hasCaptcha) {
+        return { status: 'captcha_required', message: 'Airbnb is showing a CAPTCHA challenge. Automated login blocked.', screenshot: screenshotPath };
+      }
+
+      if (hasError) {
+        return { status: 'login_failed', message: 'Airbnb reported an error with the credentials.', screenshot: screenshotPath };
+      }
+
+      if (currentUrl.includes('/hosting')) {
+        await this._saveSession();
+        return { status: 'logged_in', url: currentUrl, title, screenshot: screenshotPath };
+      }
+
+      return { status: 'unknown', url: currentUrl, title, screenshot: screenshotPath, message: 'Could not determine login status. Check screenshot.' };
       await this.page.screenshot({ path: screenshotPath });
 
       return { status: 'unknown', url: currentUrl, screenshot: screenshotPath };
