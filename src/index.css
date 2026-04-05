@@ -221,6 +221,12 @@ p {
   overflow: hidden;
 }
 
+.nav-auth {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .nav-cta::before {
   content: '';
   position: absolute;

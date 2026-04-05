@@ -6,6 +6,7 @@ import { useGSAP } from '@gsap/react';
 import Lenis from 'lenis';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, RefreshCw, Zap, BarChart3, Moon, CalendarX, MessageSquareOff, Check } from 'lucide-react';
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 import SceneCanvas from './components/three/SceneCanvas';
 
 import HeroChat from './compositions/HeroChat';
@@ -487,16 +488,26 @@ export default function App() {
           <li><a href="#pricing">Pricing</a></li>
           <li><a href="#faq">FAQ</a></li>
         </ul>
-        <motion.a
-          href={CALENDLY_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="nav-cta"
-          whileHover={{ scale: 1.04 }}
-          whileTap={{ scale: 0.97 }}
-        >
-          Start Free
-        </motion.a>
+        <div className="nav-auth">
+          <SignedOut>
+            <SignInButton mode="modal">
+              <motion.button
+                className="nav-cta"
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                Start Free
+              </motion.button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <UserButton
+              appearance={{
+                elements: { avatarBox: { width: 36, height: 36 } }
+              }}
+            />
+          </SignedIn>
+        </div>
       </nav>
 
       {/* ════════ HERO ════════ */}
