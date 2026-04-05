@@ -59,7 +59,7 @@ botManager.onPmMessage = async (pmId, type, data) => {
   if (type === 'command' || type === 'text') {
     const message = type === 'command' ? `/${data.command}` : data.text;
 
-    // Try ADK runner first, fall back to direct Ollama chat
+    // Try ADK runner first, fall back to Gemini Flash API
     try {
       const adkRes = await fetch(`${ADK_RUNNER_URL}/message`, {
         method: 'POST',
@@ -68,36 +68,85 @@ botManager.onPmMessage = async (pmId, type, data) => {
       });
       if (adkRes.ok) return;
     } catch {
-      // ADK runner not available — use direct Ollama fallback
+      // ADK runner not available — use Gemini fallback
     }
 
-    // Direct Ollama fallback — Alfred responds via Gemma 4
-    try {
-      console.log(`[Ollama fallback] PM ${pmId}: ${message}`);
-      const ollamaRes = await fetch(`${ollamaConfig.baseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: ollamaConfig.models.primary,
-          messages: [
-            {
-              role: 'system',
-              content: `You are Alfred, an AI property management assistant for Host4Me. You help property managers manage their short-term rental properties. You are professional, warm, and concise. You communicate via Telegram. Keep responses short and helpful — PMs read on mobile. Use emoji sparingly but naturally.`
-            },
-            { role: 'user', content: message },
-          ],
-          stream: false,
-        }),
-      });
-      const result = await ollamaRes.json();
-      const reply = result?.message?.content;
-      if (reply) {
-        await botManager.sendMessage(pmId, reply);
-        console.log(`[Ollama] Replied to PM ${pmId}`);
+    // Gemini Flash API fallback
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (GEMINI_API_KEY) {
+      try {
+        console.log(`[Gemini] PM ${pmId}: ${message}`);
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: message }] }],
+              systemInstruction: {
+                parts: [{
+                  text: `You are Alfred, an AI property management assistant for Host4Me. You help property managers manage their short-term rental properties (Airbnb, VRBO, etc).
+
+Your personality:
+- Professional yet warm — like a trusted business partner
+- Concise — PMs read on mobile via Telegram
+- Proactive about flagging issues
+- Use emoji sparingly but naturally
+
+You manage a team of 6 AI agents:
+1. Guest Communications — replies to guests 24/7 in the PM's voice
+2. Escalation — handles emergencies, angry guests, safety issues
+3. Reporting — daily briefings, weekly analytics
+4. Market Research — daily pricing research, competitor analysis
+5. Profile Optimizer — listing descriptions, SEO, photos
+6. Alfred (you) — orchestrates everything, PM's direct contact
+
+When the PM first messages you, welcome them warmly and ask about their properties. Guide them through onboarding naturally — don't force a rigid flow.
+
+Keep responses under 200 words unless the PM asks for detail.`
+                }]
+              },
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 1024,
+              },
+            }),
+          }
+        );
+        const result = await geminiRes.json();
+        const reply = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (reply) {
+          await botManager.sendMessage(pmId, reply);
+          console.log(`[Gemini] Replied to PM ${pmId}`);
+        } else {
+          console.error('[Gemini] No reply in response:', JSON.stringify(result).slice(0, 200));
+        }
+      } catch (err) {
+        console.error(`[Gemini] Failed for ${pmId}:`, err.message);
+        await botManager.sendMessage(pmId, "Sorry, I'm having trouble right now. Please try again in a moment.");
       }
-    } catch (err) {
-      console.error(`[Ollama fallback] Failed for ${pmId}:`, err.message);
-      await botManager.sendMessage(pmId, "Sorry, I'm having trouble connecting to my brain right now. Please try again in a moment.");
+    } else {
+      // Ollama fallback if no Gemini key
+      try {
+        console.log(`[Ollama fallback] PM ${pmId}: ${message}`);
+        const ollamaRes = await fetch(`${ollamaConfig.baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: ollamaConfig.models.primary,
+            messages: [
+              { role: 'system', content: 'You are Alfred, an AI property management assistant. Be concise and helpful.' },
+              { role: 'user', content: message },
+            ],
+            stream: false,
+          }),
+        });
+        const result = await ollamaRes.json();
+        const reply = result?.message?.content;
+        if (reply) await botManager.sendMessage(pmId, reply);
+      } catch (err) {
+        console.error(`[Ollama fallback] Failed for ${pmId}:`, err.message);
+      }
     }
   }
 };
