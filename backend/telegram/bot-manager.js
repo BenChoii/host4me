@@ -53,14 +53,32 @@ class BotManager {
   }
 
   /**
-   * Start all assigned bots (webhook mode for production).
+   * Start all assigned bots.
+   * Uses polling mode if TELEGRAM_WEBHOOK_BASE is not set or is a placeholder.
+   * Uses webhook mode for production with HTTPS.
    */
   async startAll() {
+    const usePolling = !WEBHOOK_BASE || WEBHOOK_BASE.includes('yourdomain.com') || WEBHOOK_BASE.startsWith('http://');
+
+    // Auto-assign first bot if pool has tokens and no bots assigned yet
+    if (this.activeBots.size === 0 && this.availableTokens.length > 0) {
+      this.assignBot('default');
+      console.log('Auto-assigned first bot to default PM');
+    }
+
     for (const [pmId, entry] of this.activeBots) {
       try {
-        const webhookUrl = `${WEBHOOK_BASE}/${pmId}`;
-        await entry.bot.telegram.setWebhook(webhookUrl);
-        console.log(`Bot for PM ${pmId} webhook set: ${webhookUrl}`);
+        if (usePolling) {
+          // Delete any existing webhook first
+          await entry.bot.telegram.deleteWebhook();
+          // Launch in polling mode
+          entry.bot.launch();
+          console.log(`Bot for PM ${pmId} started in polling mode`);
+        } else {
+          const webhookUrl = `${WEBHOOK_BASE}/${pmId}`;
+          await entry.bot.telegram.setWebhook(webhookUrl);
+          console.log(`Bot for PM ${pmId} webhook set: ${webhookUrl}`);
+        }
       } catch (err) {
         console.error(`Failed to start bot for PM ${pmId}:`, err.message);
       }
