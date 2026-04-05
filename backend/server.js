@@ -34,6 +34,33 @@ const POLL_INTERVAL = parseInt(process.env.BROWSER_POLL_INTERVAL_MS || '180000',
 
 const botManager = new BotManager();
 
+// Conversation history per PM (in-memory for now, move to DB later)
+const conversations = new Map();
+
+const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You manage short-term rental properties.
+
+RULES:
+- NEVER re-introduce yourself after the first message
+- Be concise. 2-3 sentences max unless asked for detail
+- Sound like a sharp, competent assistant — not a chatbot
+- No filler phrases like "That's a great question" or "I'd be happy to help"
+- Use Telegram markdown: *bold*, _italic_
+
+ON FIRST MESSAGE from a new PM, immediately start onboarding:
+1. Ask what platforms they use (Airbnb, VRBO, etc) and how many properties
+2. Ask them to share their Airbnb profile URL so you can start optimizing
+3. Explain you'll need their platform login to start managing messages (collected securely)
+
+After onboarding, you handle:
+- Guest messaging 24/7 in the PM's voice
+- Daily pricing research and recommendations
+- Listing optimization (descriptions, titles, photos)
+- Escalation of emergencies
+- Daily briefings and weekly reports
+
+You lead a team of 5 specialized AI agents. Don't list them unless asked.
+Keep it natural. You're a business partner, not a robot.`;
+
 // Handle PM messages — route to ADK Alfred agent
 botManager.onPmMessage = async (pmId, type, data) => {
   console.log(`PM ${pmId} message: ${type}`, data);
@@ -71,41 +98,30 @@ botManager.onPmMessage = async (pmId, type, data) => {
       // ADK runner not available — use Gemini fallback
     }
 
-    // Gemini Flash API fallback
+    // Gemini Flash API with conversation history
     const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
     if (GEMINI_API_KEY) {
       try {
         console.log(`[Gemini] PM ${pmId}: ${message}`);
+
+        // Get or create conversation history
+        if (!conversations.has(pmId)) conversations.set(pmId, []);
+        const history = conversations.get(pmId);
+
+        // Add user message to history
+        history.push({ role: 'user', parts: [{ text: message }] });
+
+        // Keep last 20 messages to avoid token limits
+        const recentHistory = history.slice(-20);
+
         const geminiRes = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ role: 'user', parts: [{ text: message }] }],
-              systemInstruction: {
-                parts: [{
-                  text: `You are Alfred, an AI property management assistant for Host4Me. You help property managers manage their short-term rental properties (Airbnb, VRBO, etc).
-
-Your personality:
-- Professional yet warm — like a trusted business partner
-- Concise — PMs read on mobile via Telegram
-- Proactive about flagging issues
-- Use emoji sparingly but naturally
-
-You manage a team of 6 AI agents:
-1. Guest Communications — replies to guests 24/7 in the PM's voice
-2. Escalation — handles emergencies, angry guests, safety issues
-3. Reporting — daily briefings, weekly analytics
-4. Market Research — daily pricing research, competitor analysis
-5. Profile Optimizer — listing descriptions, SEO, photos
-6. Alfred (you) — orchestrates everything, PM's direct contact
-
-When the PM first messages you, welcome them warmly and ask about their properties. Guide them through onboarding naturally — don't force a rigid flow.
-
-Keep responses under 200 words unless the PM asks for detail.`
-                }]
-              },
+              contents: recentHistory,
+              systemInstruction: { parts: [{ text: ALFRED_SYSTEM_PROMPT }] },
               generationConfig: {
                 temperature: 0.7,
                 maxOutputTokens: 1024,
@@ -116,6 +132,8 @@ Keep responses under 200 words unless the PM asks for detail.`
         const result = await geminiRes.json();
         const reply = result?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (reply) {
+          // Add Alfred's reply to conversation history
+          history.push({ role: 'model', parts: [{ text: reply }] });
           await botManager.sendMessage(pmId, reply);
           console.log(`[Gemini] Replied to PM ${pmId}`);
         } else {
