@@ -14,31 +14,31 @@ const EVENTS = [
     time: '11:47 PM', platform: 'Airbnb', guest: 'Sarah K.',
     issue: 'Parking question',
     resolution: 'Sent access codes + directions',
-    agent: 'comms', severity: 'low',
+    agent: 'comms', severity: 'low', timeSaved: 3,
   },
   {
     time: '1:14 AM', platform: 'Vrbo', guest: 'Mike R.',
     issue: 'Hot tub not heating',
     resolution: 'Sent troubleshooting guide',
-    agent: 'comms', severity: 'medium',
+    agent: 'comms', severity: 'medium', timeSaved: 5,
   },
   {
     time: '2:32 AM', platform: 'SMS', guest: 'Jessica L.',
     issue: "Can't find lockbox",
     resolution: 'Sent video walkthrough + escalated to host',
-    agent: 'escalation', severity: 'high',
+    agent: 'escalation', severity: 'high', timeSaved: 15,
   },
   {
     time: '3:07 AM', platform: 'Email', guest: 'David W.',
     issue: 'Restaurant recommendations',
     resolution: 'Sent 3 options with walking directions',
-    agent: 'comms', severity: 'low',
+    agent: 'comms', severity: 'low', timeSaved: 3,
   },
   {
     time: '4:15 AM', platform: 'Airbnb', guest: 'Emma T.',
     issue: 'WiFi password',
     resolution: 'Sent credentials + router restart guide',
-    agent: 'comms', severity: 'low',
+    agent: 'comms', severity: 'low', timeSaved: 2,
   },
 ];
 
@@ -137,9 +137,15 @@ function EventCard({ event, frame, enterFrame, fps, index }) {
             transform: `translateY(${interpolate(resolveS, [0, 1], [8, 0])}px)`,
           }}>
             <AgentIcon size={20} />
-            <span style={{ fontSize: 10, color: '#7FA695', fontWeight: 500 }}>
+            <span style={{ fontSize: 10, color: '#7FA695', fontWeight: 500, flex: 1 }}>
               ✓ {event.resolution}
             </span>
+            <span style={{
+              fontSize: 8, fontWeight: 600, color: '#7FA695',
+              padding: '2px 6px', borderRadius: 100,
+              background: 'rgba(168,197,184,0.12)',
+              whiteSpace: 'nowrap',
+            }}>⏱ {event.timeSaved} min saved</span>
           </div>
         )}
       </div>
@@ -190,8 +196,14 @@ export default function NightShift() {
             marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
           }}>
             <AlfredAvatar size={64} animated frame={frame} />
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>
-              {Math.min(EVENTS.length, Math.floor(interpolate(frame, [50, 300], [0, EVENTS.length], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })))} messages handled
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>
+              {Math.min(EVENTS.length, Math.floor(interpolate(frame, [50, 340], [0, EVENTS.length], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })))} messages handled
+            </div>
+            <div style={{
+              fontSize: 12, fontWeight: 700, color: '#A8C5B8', textAlign: 'center',
+              opacity: interpolate(frame, [120, 150], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
+            }}>
+              ~{Math.min(28, Math.floor(interpolate(frame, [120, 340], [0, 28], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })))} min saved
             </div>
           </div>
 

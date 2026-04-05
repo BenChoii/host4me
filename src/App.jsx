@@ -71,18 +71,23 @@ const STEPS = [
 
 const PRICING = [
   {
-    tier: 'Starter', desc: '1–3 listings', price: '$149', period: '/month + $499 setup',
-    features: ['Up to 3 properties', 'Message learning', 'Email & SMS support', 'Dashboard access'],
+    tier: 'Free', desc: 'Try it out', price: '$0', period: '100 actions included',
+    features: ['1 property', 'Full agent team access', 'Guest messaging', 'Time savings tracking', 'No credit card required'],
+    featured: false, badge: 'Start Here',
+  },
+  {
+    tier: 'Starter', desc: '1–3 listings', price: '$149', period: '/month',
+    features: ['Up to 3 properties', 'Unlimited actions', 'All 6 AI agents', 'Email & SMS support', 'Dashboard access'],
     featured: false,
   },
   {
-    tier: 'Growth', desc: '4–15 listings', price: '$299', period: '/month + $999 setup',
-    features: ['Up to 15 properties', 'Advanced message learning', 'Priority support', 'Analytics dashboard', 'Twilio SMS integration'],
+    tier: 'Growth', desc: '4–15 listings', price: '$299', period: '/month',
+    features: ['Up to 15 properties', 'Unlimited actions', 'All 6 AI agents', 'Priority support', 'Market research agent', 'Profile optimization'],
     featured: true, badge: 'Most Popular',
   },
   {
-    tier: 'Portfolio', desc: '15+ listings', price: '$499', period: '/month + $1,999 setup',
-    features: ['Unlimited properties', 'Custom AI fine-tuning', 'Dedicated account manager', 'Advanced reporting', 'API access'],
+    tier: 'Portfolio', desc: '15+ listings', price: '$499', period: '/month',
+    features: ['Unlimited properties', 'Unlimited actions', 'All 6 AI agents', 'Dedicated account manager', 'Custom AI fine-tuning', 'API access'],
     featured: false,
   },
 ];
@@ -93,7 +98,7 @@ const FAQ_ITEMS = [
   { q: "Can Alfred work with our existing tools?", a: "Yes. Alfred integrates with Airbnb, Vrbo, iCal, Stripe, and Twilio. If you use Hostaway or Guesty, we can migrate your data and message history seamlessly." },
   { q: "What if Alfred makes a mistake?", a: "You control when Alfred sends replies. Every outgoing message is reviewed by you first—think of Alfred as a highly accurate draft writer, not a complete replacement." },
   { q: "Can you scale to 50+ listings?", a: "Absolutely. Many of our Portfolio clients (15+ listings) manage hundreds across multiple properties. Alfred scales without extra cost per listing once you're on our Portfolio plan." },
-  { q: "How does pricing work? Are there hidden fees?", a: "Clear pricing: Starter ($149/mo), Growth ($299/mo), Portfolio ($499/mo). Setup is one-time ($499–$1,999). No per-listing fees, no overage charges. What you see is what you pay." },
+  { q: "How does the free tier work?", a: "You get 100 free actions — each guest reply, calendar sync, or optimization counts as one action. That's enough to fully onboard, see Alfred in action, and experience the time savings. No credit card required. When you're ready for unlimited actions, choose the plan that fits." },
 ];
 
 const HERO_CHAT = [
@@ -509,7 +514,7 @@ export default function App() {
           whileHover={{ scale: 1.04 }}
           whileTap={{ scale: 0.97 }}
         >
-          Book a Demo
+          Start Free
         </motion.a>
       </nav>
 
@@ -517,9 +522,9 @@ export default function App() {
       <section className="hero">
         <div className="hero-grid-bg" />
         <div className="hero-content">
-          <h1 className="hero-headline">Your AI Property Manager That Never Sleeps</h1>
+          <h1 className="hero-headline">A Full Office of AI Agents Managing Your Properties</h1>
           <p className="hero-subhead">
-            Alfred learns how you talk. Then handles your guests 24/7 with your voice.
+            6 specialized agents. Guest messaging, pricing research, profile optimization, and more — all working 24/7 in your voice. Start free with 100 actions.
           </p>
           <div className="hero-buttons">
             <motion.a
@@ -527,10 +532,10 @@ export default function App() {
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-primary"
-              whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(198, 125, 59, 0.4)' }}
+              whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(176, 124, 91, 0.3)' }}
               whileTap={{ scale: 0.97 }}
             >
-              Book a Demo
+              Start Free — 100 Actions
             </motion.a>
             <motion.button
               className="btn btn-secondary"
@@ -793,7 +798,7 @@ export default function App() {
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Pricing</span>
           <h2 className="section-heading">Simple, Transparent Pricing</h2>
-          <p className="pricing-subhead reveal">No per-listing fees. No overage charges. Pricing that scales with you.</p>
+          <p className="pricing-subhead reveal">Start free with 100 actions. No credit card. Upgrade when you're ready.</p>
           <div className="pricing-grid">
             {PRICING.map((p, i) => (
               <motion.div
@@ -818,7 +823,7 @@ export default function App() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  Book a Demo
+                  Start Free
                 </motion.a>
               </motion.div>
             ))}
@@ -909,7 +914,7 @@ export default function App() {
             whileHover={{ scale: 1.06, boxShadow: '0 16px 48px rgba(198, 125, 59, 0.5)' }}
             whileTap={{ scale: 0.97 }}
           >
-            Book a Demo
+            Start Free
           </motion.a>
         </div>
       </section>
