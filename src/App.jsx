@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, Component } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText } from 'gsap/SplitText';
@@ -6,12 +6,46 @@ import { useGSAP } from '@gsap/react';
 import Lenis from 'lenis';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, RefreshCw, Zap, BarChart3, Moon, CalendarX, MessageSquareOff, Check } from 'lucide-react';
-import { Player } from '@remotion/player';
+import SceneCanvas from './components/three/SceneCanvas';
+
 import HeroChat from './compositions/HeroChat';
 import Comparison from './compositions/Comparison';
 import HowItWorksComp from './compositions/HowItWorks';
 import AlfredAtWork from './compositions/AlfredAtWork';
-import SceneCanvas from './components/three/SceneCanvas';
+
+/* ─── Error Boundary so Remotion issues don't white-screen the site ─── */
+class PlayerErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback || null;
+    return this.props.children;
+  }
+}
+
+function SafePlayer({ fallback, ...props }) {
+  return (
+    <PlayerErrorBoundary fallback={fallback}>
+      <LazyPlayer {...props} />
+    </PlayerErrorBoundary>
+  );
+}
+
+function LazyPlayer(props) {
+  const [Player, setPlayer] = useState(null);
+
+  useEffect(() => {
+    import('@remotion/player').then(m => setPlayer(() => m.Player));
+  }, []);
+
+  if (!Player) return <div style={{ minHeight: 300 }} />;
+  return <Player {...props} />;
+}
 
 gsap.registerPlugin(ScrollTrigger, SplitText);
 
@@ -508,7 +542,7 @@ export default function App() {
 
           {/* Chat Mockup — Remotion Player */}
           <div className="chat-mockup remotion-player-wrap">
-            <Player
+            <SafePlayer
               component={HeroChat}
               durationInFrames={320}
               fps={30}
@@ -591,7 +625,7 @@ export default function App() {
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>The Solution</span>
           <h2 className="section-heading">Meet Alfred. He learns how you talk.</h2>
           <div className="comparison-grid remotion-player-wrap">
-            <Player
+            <SafePlayer
               component={Comparison}
               durationInFrames={360}
               fps={30}
@@ -715,7 +749,7 @@ export default function App() {
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Getting Started</span>
           <h2 className="section-heading">Three Steps to Effortless Guest Management</h2>
           <div className="steps-grid remotion-player-wrap">
-            <Player
+            <SafePlayer
               component={HowItWorksComp}
               durationInFrames={300}
               fps={30}
@@ -802,7 +836,7 @@ export default function App() {
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>See It In Action</span>
           <h2 className="section-heading">Alfred Works While You Sleep</h2>
           <div className="remotion-player-wrap alfred-work-player">
-            <Player
+            <SafePlayer
               component={AlfredAtWork}
               durationInFrames={360}
               fps={30}
