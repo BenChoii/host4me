@@ -57,22 +57,47 @@ botManager.onPmMessage = async (pmId, type, data) => {
   }
 
   if (type === 'command' || type === 'text') {
-    // Forward to ADK Alfred agent
-    const message =
-      type === 'command' ? `/${data.command}` : data.text;
+    const message = type === 'command' ? `/${data.command}` : data.text;
 
+    // Try ADK runner first, fall back to direct Ollama chat
     try {
-      await fetch(`${ADK_RUNNER_URL}/message`, {
+      const adkRes = await fetch(`${ADK_RUNNER_URL}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pm_id: pmId, message, source: 'telegram' }),
+      });
+      if (adkRes.ok) return;
+    } catch {
+      // ADK runner not available — use direct Ollama fallback
+    }
+
+    // Direct Ollama fallback — Alfred responds via Gemma 4
+    try {
+      console.log(`[Ollama fallback] PM ${pmId}: ${message}`);
+      const ollamaRes = await fetch(`${ollamaConfig.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pm_id: pmId,
-          message,
-          source: 'telegram',
+          model: ollamaConfig.models.primary,
+          messages: [
+            {
+              role: 'system',
+              content: `You are Alfred, an AI property management assistant for Host4Me. You help property managers manage their short-term rental properties. You are professional, warm, and concise. You communicate via Telegram. Keep responses short and helpful — PMs read on mobile. Use emoji sparingly but naturally.`
+            },
+            { role: 'user', content: message },
+          ],
+          stream: false,
         }),
       });
+      const result = await ollamaRes.json();
+      const reply = result?.message?.content;
+      if (reply) {
+        await botManager.sendMessage(pmId, reply);
+        console.log(`[Ollama] Replied to PM ${pmId}`);
+      }
     } catch (err) {
-      console.error(`Failed to send to ADK runner for ${pmId}:`, err.message);
+      console.error(`[Ollama fallback] Failed for ${pmId}:`, err.message);
+      await botManager.sendMessage(pmId, "Sorry, I'm having trouble connecting to my brain right now. Please try again in a moment.");
     }
   }
 };
