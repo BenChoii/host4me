@@ -1,0 +1,127 @@
+{
+  "name": "{{company_name}}",
+  "description": "AI property management office for {{pm_name}} — powered by Host4Me",
+  "industry": "Short-Term Rental Property Management",
+
+  "settings": {
+    "timezone": "{{timezone}}",
+    "language": "en",
+    "currency": "{{currency}}",
+    "shadow_mode": true,
+    "shadow_mode_duration_hours": 24
+  },
+
+  "llm": {
+    "provider": "openai-compatible",
+    "base_url": "http://localhost:11434/v1",
+    "models": {
+      "primary": "gemma4:26b",
+      "fast": "gemma4:e4b"
+    }
+  },
+
+  "org_chart": {
+    "ceo": {
+      "agent_id": "ceo-agent",
+      "title": "Alfred — CEO",
+      "prompt_file": "agents/ceo-agent.md",
+      "model": "gemma4:26b",
+      "reports_to": null,
+      "tools": [
+        "telegram_send",
+        "telegram_receive",
+        "get_daily_briefing",
+        "get_escalations",
+        "update_company_directive",
+        "get_agent_status"
+      ],
+      "schedule": {
+        "daily_briefing": "08:00",
+        "weekly_report": "monday 09:00"
+      }
+    },
+    "guest_comms": {
+      "agent_id": "guest-comms",
+      "title": "Guest Communications Specialist",
+      "prompt_file": "agents/guest-comms.md",
+      "model": "gemma4:e4b",
+      "reports_to": "ceo-agent",
+      "tools": [
+        "browser_check_inbox",
+        "browser_send_reply",
+        "browser_check_bookings",
+        "get_house_rules",
+        "get_style_guide",
+        "get_property_info",
+        "escalate_to_ceo"
+      ],
+      "schedule": {
+        "poll_inboxes": "*/3 * * * *"
+      }
+    },
+    "escalation": {
+      "agent_id": "escalation-agent",
+      "title": "Escalation Manager",
+      "prompt_file": "agents/escalation.md",
+      "model": "gemma4:26b",
+      "reports_to": "ceo-agent",
+      "tools": [
+        "classify_urgency",
+        "pause_auto_reply",
+        "resume_auto_reply",
+        "notify_ceo",
+        "get_escalation_history",
+        "get_thread_context"
+      ],
+      "rules": {
+        "auto_escalate": [
+          "guest_safety",
+          "property_damage",
+          "refund_request_over_100",
+          "negative_sentiment_score_below_0.3",
+          "maintenance_emergency",
+          "legal_threat"
+        ],
+        "pause_auto_reply_on_escalation": true
+      }
+    },
+    "reporting": {
+      "agent_id": "reporting-agent",
+      "title": "Analytics & Reporting",
+      "prompt_file": "agents/reporting.md",
+      "model": "gemma4:e4b",
+      "reports_to": "ceo-agent",
+      "tools": [
+        "query_message_stats",
+        "query_booking_stats",
+        "calculate_response_times",
+        "analyze_guest_sentiment",
+        "generate_report",
+        "send_report_to_ceo"
+      ],
+      "schedule": {
+        "daily_summary": "20:00",
+        "weekly_digest": "sunday 18:00"
+      }
+    }
+  },
+
+  "integrations": {
+    "platforms": "{{platforms}}",
+    "telegram_bot_token": "{{telegram_bot_token}}",
+    "telegram_chat_id": "{{telegram_chat_id}}"
+  },
+
+  "properties": "{{properties}}",
+
+  "communication_style": {
+    "preset": "{{style_preset}}",
+    "custom_samples": "{{custom_samples}}",
+    "tone_keywords": "{{tone_keywords}}"
+  },
+
+  "escalation_rules": {
+    "use_defaults": true,
+    "custom_overrides": "{{escalation_overrides}}"
+  }
+}
