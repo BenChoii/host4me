@@ -319,12 +319,6 @@ export default function App() {
       { y: 0, opacity: 1, scale: 1, duration: 1, ease: 'power3.out', delay: 1.3, clearProps: 'all' }
     );
 
-    /* Chat messages stagger */
-    gsap.fromTo('.chat-message-animated',
-      { y: 20, opacity: 0 },
-      { y: 0, opacity: 1, stagger: 0.3, duration: 0.6, ease: 'power2.out', delay: 1.8, clearProps: 'all' }
-    );
-
     /* ─── Text Scramble Stats ─── */
     document.querySelectorAll('.stat-number-scramble').forEach((el) => {
       const finalText = el.dataset.value;
@@ -410,14 +404,6 @@ export default function App() {
       );
     });
 
-    /* Steps staggered */
-    gsap.fromTo('.step',
-      { y: 40, opacity: 0 },
-      { y: 0, opacity: 1, stagger: 0.2, duration: 0.8, ease: 'power2.out', clearProps: 'all',
-        scrollTrigger: { trigger: '.steps-grid', start: 'top 85%', toggleActions: 'play none none none' },
-      }
-    );
-
     /* Pricing cards staggered */
     gsap.fromTo('.pricing-card',
       { y: 40, opacity: 0, scale: 0.96 },
@@ -439,14 +425,6 @@ export default function App() {
       { x: -40, opacity: 0 },
       { x: 0, opacity: 1, stagger: 0.15, duration: 0.8, ease: 'power3.out', clearProps: 'all',
         scrollTrigger: { trigger: '.pain-points', start: 'top 85%', toggleActions: 'play none none none' },
-      }
-    );
-
-    /* Comparison cards */
-    gsap.fromTo('.comparison-card',
-      { y: 40, opacity: 0 },
-      { y: 0, opacity: 1, stagger: 0.2, duration: 0.8, ease: 'power2.out', clearProps: 'all',
-        scrollTrigger: { trigger: '.comparison-grid', start: 'top 85%', toggleActions: 'play none none none' },
       }
     );
 
