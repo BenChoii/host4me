@@ -3,18 +3,18 @@
  *
  * Express server tying together:
  * - Telegram bot webhooks (PM communication)
+ * - ADK Agent Runner (replaces Paperclip)
  * - Browser agent API proxy
  * - Onboarding endpoints
- * - Paperclip integration
  * - Health monitoring
  */
 
 const express = require('express');
+const path = require('path');
 const { BotManager } = require('./telegram/bot-manager');
-const { OnboardingFlow } = require('./telegram/onboarding-flow');
 const { validateInitData } = require('./telegram/mini-app/validate');
 const { formatSessionExpired } = require('./telegram/notifications');
-const { encryptCredentials, decryptCredentials } = require('./onboarding/credential-vault');
+const { encryptCredentials } = require('./onboarding/credential-vault');
 const { analyzeStyle, generateStyleGuide, STYLE_PRESETS } = require('./onboarding/style-learner');
 const ollamaConfig = require('./config/ollama');
 
@@ -23,7 +23,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const BROWSER_AGENT_URL = process.env.BROWSER_AGENT_URL || 'http://localhost:8100';
-const PAPERCLIP_URL = process.env.PAPERCLIP_URL || 'http://localhost:3100';
+const ADK_RUNNER_URL = process.env.ADK_RUNNER_URL || 'http://localhost:3200';
 const POLL_INTERVAL = parseInt(process.env.BROWSER_POLL_INTERVAL_MS || '180000', 10);
 
 // ==========================================================================
@@ -31,9 +31,8 @@ const POLL_INTERVAL = parseInt(process.env.BROWSER_POLL_INTERVAL_MS || '180000',
 // ==========================================================================
 
 const botManager = new BotManager();
-const onboarding = new OnboardingFlow();
 
-// Handle PM messages — route to Paperclip CEO agent
+// Handle PM messages — route to ADK Alfred agent
 botManager.onPmMessage = async (pmId, type, data) => {
   console.log(`PM ${pmId} message: ${type}`, data);
 
@@ -56,25 +55,22 @@ botManager.onPmMessage = async (pmId, type, data) => {
   }
 
   if (type === 'command' || type === 'text') {
-    // Forward to Paperclip CEO agent via ticket/task
+    // Forward to ADK Alfred agent
+    const message =
+      type === 'command' ? `/${data.command}` : data.text;
+
     try {
-      await fetch(`${PAPERCLIP_URL}/api/tickets`, {
+      await fetch(`${ADK_RUNNER_URL}/message`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.PAPERCLIP_API_KEY || ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          company: pmId,
-          assignee: 'ceo-agent',
-          title: type === 'command' ? `Command: ${data.command}` : 'PM Message',
-          description: type === 'text' ? data.text : JSON.stringify(data),
-          priority: 'normal',
+          pm_id: pmId,
+          message,
           source: 'telegram',
         }),
       });
     } catch (err) {
-      console.error(`Failed to create Paperclip ticket for ${pmId}:`, err.message);
+      console.error(`Failed to send to ADK runner for ${pmId}:`, err.message);
     }
   }
 };
@@ -88,6 +84,30 @@ app.post('/api/telegram/:pmId', async (req, res) => {
     console.error('Webhook error:', err);
     res.sendStatus(500);
   }
+});
+
+// ==========================================================================
+// Internal API (called by ADK agent tools)
+// ==========================================================================
+
+// ADK agents call this to send Telegram messages to PMs
+app.post('/internal/telegram/send', async (req, res) => {
+  const { pmId, message, buttons } = req.body;
+  if (!pmId || !message) {
+    return res.status(400).json({ error: 'Missing pmId or message' });
+  }
+
+  let options = {};
+  if (buttons && buttons.length > 0) {
+    // Format as Telegraf inline keyboard
+    const keyboard = buttons.map((row) =>
+      Array.isArray(row) ? row : [row]
+    );
+    options.reply_markup = { inline_keyboard: keyboard };
+  }
+
+  const sent = await botManager.sendMessage(pmId, message, options);
+  res.json({ sent });
 });
 
 // ==========================================================================
@@ -180,7 +200,6 @@ app.post('/api/onboarding/mini-app-credentials', (req, res) => {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  // Re-encrypt with the server-side vault key (client-side encryption is just transport layer)
   const encrypted = encryptCredentials({
     email: payload.data.email || '',
     password: payload.data.password || '',
@@ -191,19 +210,8 @@ app.post('/api/onboarding/mini-app-credentials', (req, res) => {
   res.json({ status: 'stored', platform: payload.platform });
 });
 
-// Get onboarding config for a PM (after onboarding completes)
-app.get('/api/onboarding/:pmId/config', (req, res) => {
-  const config = onboarding.exportConfig(req.params.pmId);
-  if (!config) {
-    return res.status(404).json({ error: 'No onboarding data found' });
-  }
-  res.json(config);
-});
-
 // Serve Mini App static files
-app.use('/onboarding', require('express').static(
-  require('path').join(__dirname, 'telegram', 'mini-app')
-));
+app.use('/onboarding', express.static(path.join(__dirname, 'telegram', 'mini-app')));
 
 // ==========================================================================
 // Inbox Polling Scheduler
@@ -227,22 +235,17 @@ function startPolling(pmId, platforms) {
         if (data.status === 'auth_required') {
           await botManager.sendMessage(pmId, formatSessionExpired(platform));
         } else if (data.messages && data.messages.length > 0) {
-          // Route new messages to Paperclip Guest Comms agent
+          // Route new messages to ADK Guest Comms agent via Alfred
           for (const msg of data.messages) {
             if (msg.needs_reply) {
-              await fetch(`${PAPERCLIP_URL}/api/tickets`, {
+              await fetch(`${ADK_RUNNER_URL}/task`, {
                 method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${process.env.PAPERCLIP_API_KEY || ''}`,
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  company: pmId,
-                  assignee: 'guest-comms',
-                  title: `Reply to ${msg.guest_name}`,
-                  description: JSON.stringify(msg),
-                  priority: 'high',
-                  source: platform,
+                  pm_id: pmId,
+                  agent: 'guest_comms',
+                  task: `New guest message needs a reply on ${platform}`,
+                  context: msg,
                 }),
               });
             }
@@ -290,18 +293,18 @@ app.get('/api/health', async (req, res) => {
     checks.browserAgent = 'unreachable';
   }
 
-  // Check Paperclip
+  // Check ADK Agent Runner
   try {
-    const paperclipRes = await fetch(`${PAPERCLIP_URL}/api/health`);
-    checks.paperclip = paperclipRes.ok ? 'ok' : 'error';
+    const adkRes = await fetch(`${ADK_RUNNER_URL}/health`);
+    checks.adkRunner = adkRes.ok ? 'ok' : 'error';
   } catch {
-    checks.paperclip = 'unreachable';
+    checks.adkRunner = 'unreachable';
   }
 
   checks.telegram = botManager.getStatus();
   checks.pollers = activePollers.size;
 
-  const allOk = checks.ollama === 'ok' && checks.browserAgent === 'ok';
+  const allOk = checks.ollama === 'ok' && checks.browserAgent === 'ok' && checks.adkRunner === 'ok';
   res.status(allOk ? 200 : 503).json({
     status: allOk ? 'ok' : 'degraded',
     checks,
@@ -321,8 +324,8 @@ app.get('/api/status/bots', (req, res) => {
 app.listen(PORT, async () => {
   console.log(`Host4Me backend running on port ${PORT}`);
   console.log(`Ollama: ${ollamaConfig.baseUrl}`);
+  console.log(`ADK Runner: ${ADK_RUNNER_URL}`);
   console.log(`Browser Agents: ${BROWSER_AGENT_URL}`);
-  console.log(`Paperclip: ${PAPERCLIP_URL}`);
   console.log(`Poll interval: ${POLL_INTERVAL / 1000}s`);
 
   // Start all assigned Telegram bots

@@ -50,11 +50,9 @@ ollama pull gemma4:e4b
 echo "Verifying models..."
 ollama list
 
-# --- Paperclip ---
-echo "[7/8] Installing Paperclip..."
-if [ ! -d "/opt/paperclip" ]; then
-    curl -fsSL https://virtua.sh/i/paperclip | bash
-fi
+# --- Google ADK ---
+echo "[7/8] Installing Google ADK..."
+pip3 install "google-adk[extensions]>=1.28.0"
 
 # --- Project setup ---
 echo "[8/8] Setting up Host4Me..."
@@ -83,7 +81,7 @@ echo "  2. Run: certbot --nginx -d yourdomain.com"
 echo "  3. Copy .env.example to .env and fill in values"
 echo "  4. Run: cd $PROJECT_DIR/deploy && docker compose up -d"
 echo "  5. Verify Ollama: curl http://localhost:11434/api/tags"
-echo "  6. Verify Paperclip: open http://localhost:3100"
+echo "  6. Verify ADK Runner: curl http://localhost:3200/health"
 echo ""
 echo "Gemma 4 models installed:"
 ollama list
