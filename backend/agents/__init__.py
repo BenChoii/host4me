@@ -1,13 +1,15 @@
 """
 Host4Me Agent Definitions — Google ADK
 
-Four-agent org chart:
+Six-agent org chart (CPU-optimized with Gemma 4 E4B/E2B):
   Alfred (CEO) ─┬─ Guest Comms
                  ├─ Escalation
-                 └─ Reporting
+                 ├─ Reporting
+                 ├─ Market Research
+                 └─ Profile Optimizer
 
 Alfred is the PM-facing agent. He delegates to sub-agents via ADK's
-built-in TransferToAgentTool. All agents use Gemma 4 via Ollama.
+built-in TransferToAgentTool. All agents use Gemma 4 via Ollama on CPU.
 """
 
 from google.adk.agents import LlmAgent
@@ -50,8 +52,8 @@ from .tools.onboarding import (
 import os
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-MODEL_PRIMARY = os.environ.get("OLLAMA_MODEL_PRIMARY", "gemma4:26b")
-MODEL_FAST = os.environ.get("OLLAMA_MODEL_FAST", "gemma4:e4b")
+MODEL_PRIMARY = os.environ.get("OLLAMA_MODEL_PRIMARY", "gemma4:e4b")
+MODEL_FAST = os.environ.get("OLLAMA_MODEL_FAST", "gemma4:e2b")
 
 
 def _model(name: str) -> LiteLlm:
@@ -64,7 +66,7 @@ def _model(name: str) -> LiteLlm:
 # ---------------------------------------------------------------------------
 guest_comms = LlmAgent(
     name="guest_comms",
-    model=_model(MODEL_FAST),
+    model=_model(MODEL_PRIMARY),
     description=(
         "Handles all guest-facing messages on Airbnb and VRBO. "
         "Drafts and sends replies matching the PM's communication style. "
@@ -195,6 +197,107 @@ Keep it scannable — PMs read on mobile.""",
 )
 
 # ---------------------------------------------------------------------------
+# Market Research Agent
+# ---------------------------------------------------------------------------
+market_research = LlmAgent(
+    name="market_research",
+    model=_model(MODEL_PRIMARY),
+    description=(
+        "Conducts daily outbound research on competitor pricing, local events, "
+        "occupancy trends, and market conditions. Recommends pricing adjustments."
+    ),
+    instruction="""You are the Market Research Analyst. Every morning you research the market
+to help the PM optimize their pricing strategy.
+
+Daily research routine:
+1. Use check_competitor_pricing() to scan comparable listings
+2. Use check_local_events() to find upcoming events that affect demand
+3. Use get_occupancy_trends() to analyze booking patterns
+4. Compare current pricing against market data
+5. Generate pricing recommendations with reasoning
+
+Research areas:
+- Competitor pricing: similar properties within 5km, same platform
+- Local events: concerts, festivals, conferences, sports events
+- Seasonal trends: holiday weekends, school breaks, peak/off-peak
+- Occupancy patterns: which days book first, last-minute gaps
+
+Pricing recommendations format:
+📊 **Daily Pricing Brief** — [Date]
+**Market snapshot:** [1-2 sentences]
+**Recommendations:**
+- [Property]: $[current] → $[suggested] ([reason])
+**Events this week:** [list]
+**Occupancy forecast:** [X]% (vs [Y]% last week)
+
+Be data-driven. Never recommend changes without reasoning.
+Send via telegram_send() through Alfred.""",
+    tools=[
+        check_inbox,      # Reused for browser-based research
+        check_bookings,
+        telegram_send,
+        get_property_info,
+        list_properties,
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# Profile Optimizer Agent
+# ---------------------------------------------------------------------------
+profile_optimizer = LlmAgent(
+    name="profile_optimizer",
+    model=_model(MODEL_PRIMARY),
+    description=(
+        "Manages and optimizes platform listings — rewrites descriptions, "
+        "suggests photo improvements, optimizes titles for searchability, "
+        "and adjusts platform presets."
+    ),
+    instruction="""You are the Profile Optimization Specialist. You make sure every property
+listing is performing at its best across all platforms.
+
+Responsibilities:
+1. LISTING OPTIMIZATION
+   - Rewrite property descriptions for each platform's algorithm
+   - Airbnb: storytelling, amenity keywords, neighborhood highlights
+   - VRBO: family-focused, space details, value proposition
+   - Optimize titles for search: include location, property type, key amenity
+   - Keep tone matching PM's style via get_style_guide()
+
+2. PHOTO STRATEGY
+   - Suggest which photos to add, reorder, or replace
+   - Recommend caption text for each photo
+   - Flag low-quality or dark images
+
+3. PLATFORM PRESETS
+   - Review and optimize: cancellation policy, instant book settings, pricing rules
+   - Suggest minimum stay adjustments based on booking patterns
+   - Review response rate and suggest improvements
+
+4. SEARCH OPTIMIZATION
+   - Optimize property names: "[Amenity] + [Property Type] + [Location]"
+   - Good: "Hot Tub Cabin | Mountain View | 5min to Ski Lift"
+   - Bad: "Beautiful vacation home"
+   - A/B test suggestions for titles and descriptions
+
+Weekly optimization report format:
+✨ **Profile Optimization Report**
+**Listings reviewed:** [X]
+**Changes made:** [list]
+**Recommendations:** [list]
+**Search ranking impact:** [estimate]
+
+Only suggest changes that will measurably impact bookings or search ranking.""",
+    tools=[
+        check_inbox,      # For browser-based platform interaction
+        send_reply,       # For applying changes via browser
+        get_property_info,
+        get_style_guide,
+        list_properties,
+        telegram_send,
+    ],
+)
+
+# ---------------------------------------------------------------------------
 # Alfred (CEO Agent) — PM-facing, orchestrates everything
 # ---------------------------------------------------------------------------
 alfred = LlmAgent(
@@ -216,6 +319,8 @@ You have three capabilities:
    - Guest messages → transfer to guest_comms
    - Safety/refund/angry guest → transfer to escalation
    - Stats/reports → transfer to reporting
+   - Pricing/competitor analysis → transfer to market_research
+   - Listing optimization/descriptions → transfer to profile_optimizer
 
 2. ONBOARD new PMs:
    When a PM first connects, walk them through setup conversationally:
@@ -261,5 +366,5 @@ Response format: Telegram markdown — **bold** for headers, bullet points for l
         pause_auto_reply,
         resume_auto_reply,
     ],
-    sub_agents=[guest_comms, escalation_agent, reporting_agent],
+    sub_agents=[guest_comms, escalation_agent, reporting_agent, market_research, profile_optimizer],
 )

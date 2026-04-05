@@ -42,9 +42,9 @@ if ! command -v ollama &> /dev/null; then
 fi
 
 # --- Download Gemma 4 models ---
-echo "[6/8] Downloading Gemma 4 models (this may take 15-30 minutes)..."
-ollama pull gemma4:26b
+echo "[6/8] Downloading Gemma 4 CPU-optimized models..."
 ollama pull gemma4:e4b
+ollama pull gemma4:e2b
 
 # Verify models loaded
 echo "Verifying models..."

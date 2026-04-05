@@ -15,7 +15,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 24G
+          memory: 8G
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
