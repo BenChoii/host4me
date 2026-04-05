@@ -7,7 +7,6 @@ import Lenis from 'lenis';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, RefreshCw, Zap, BarChart3, Moon, CalendarX, MessageSquareOff, Check } from 'lucide-react';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
-import SceneCanvas from './components/three/SceneCanvas';
 
 import HeroChat from './compositions/HeroChat';
 import Comparison from './compositions/Comparison';
@@ -229,10 +228,6 @@ export default function App() {
   const [activeFeature, setActiveFeature] = useState(1);
   const containerRef = useRef(null);
 
-  /* ─── 3D Scene Scroll Progress ─── */
-  const scrollProgress = useRef({ hero: 0, global: 0, cta: 0 });
-  const canvasInvalidate = useRef(null);
-
   /* ─── Lenis Smooth Scroll ─── */
   useEffect(() => {
     const lenis = new Lenis({
@@ -244,32 +239,10 @@ export default function App() {
 
     lenis.on('scroll', () => {
       ScrollTrigger.update();
-      // Invalidate R3F canvas on every scroll tick (for frameloop="demand")
-      if (canvasInvalidate.current) canvasInvalidate.current();
     });
     const rafCallback = (time) => lenis.raf(time * 1000);
     gsap.ticker.add(rafCallback);
     gsap.ticker.lagSmoothing(0);
-
-    // Scroll progress triggers for 3D scenes
-    ScrollTrigger.create({
-      trigger: '.hero',
-      start: 'top top',
-      end: 'bottom top',
-      onUpdate: (self) => { scrollProgress.current.hero = self.progress; },
-    });
-    ScrollTrigger.create({
-      trigger: 'body',
-      start: 'top top',
-      end: 'bottom bottom',
-      onUpdate: (self) => { scrollProgress.current.global = self.progress; },
-    });
-    ScrollTrigger.create({
-      trigger: '.final-cta',
-      start: 'top bottom',
-      end: 'bottom bottom',
-      onUpdate: (self) => { scrollProgress.current.cta = self.progress; },
-    });
 
     // Anchor link smooth scroll
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
@@ -477,9 +450,6 @@ export default function App() {
 
   return (
     <div ref={containerRef}>
-      {/* ════════ 3D SCENE CANVAS ════════ */}
-      <SceneCanvas scrollProgress={scrollProgress} onInvalidateReady={(fn) => { canvasInvalidate.current = fn; }} />
-
       {/* ════════ NAVIGATION ════════ */}
       <nav className={`nav ${isScrolled ? 'scrolled' : ''}`}>
         <div className="nav-logo">Host4Me</div>
