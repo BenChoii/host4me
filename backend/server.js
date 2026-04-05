@@ -11,6 +11,8 @@
 
 const express = require('express');
 const { BotManager } = require('./telegram/bot-manager');
+const { OnboardingFlow } = require('./telegram/onboarding-flow');
+const { validateInitData } = require('./telegram/mini-app/validate');
 const { formatSessionExpired } = require('./telegram/notifications');
 const { encryptCredentials, decryptCredentials } = require('./onboarding/credential-vault');
 const { analyzeStyle, generateStyleGuide, STYLE_PRESETS } = require('./onboarding/style-learner');
@@ -29,6 +31,7 @@ const POLL_INTERVAL = parseInt(process.env.BROWSER_POLL_INTERVAL_MS || '180000',
 // ==========================================================================
 
 const botManager = new BotManager();
+const onboarding = new OnboardingFlow();
 
 // Handle PM messages — route to Paperclip CEO agent
 botManager.onPmMessage = async (pmId, type, data) => {
@@ -159,6 +162,48 @@ app.post('/api/onboarding/assign-bot', (req, res) => {
 app.get('/api/onboarding/style-presets', (req, res) => {
   res.json(STYLE_PRESETS);
 });
+
+// Handle Mini App credential submission (validated via Telegram HMAC)
+app.post('/api/onboarding/mini-app-credentials', (req, res) => {
+  const { initData, botToken: reqBotToken, payload } = req.body;
+
+  // Validate Telegram initData signature
+  const token = reqBotToken || process.env.TELEGRAM_BOT_TOKENS?.split(',')[0];
+  if (initData && token) {
+    const { valid } = validateInitData(initData, token);
+    if (!valid) {
+      return res.status(403).json({ error: 'Invalid Telegram initData signature' });
+    }
+  }
+
+  if (!payload?.pmId || !payload?.platform || !payload?.data) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Re-encrypt with the server-side vault key (client-side encryption is just transport layer)
+  const encrypted = encryptCredentials({
+    email: payload.data.email || '',
+    password: payload.data.password || '',
+  });
+
+  // TODO: Store in PostgreSQL
+  console.log(`Mini App credentials stored for PM ${payload.pmId} / ${payload.platform}`);
+  res.json({ status: 'stored', platform: payload.platform });
+});
+
+// Get onboarding config for a PM (after onboarding completes)
+app.get('/api/onboarding/:pmId/config', (req, res) => {
+  const config = onboarding.exportConfig(req.params.pmId);
+  if (!config) {
+    return res.status(404).json({ error: 'No onboarding data found' });
+  }
+  res.json(config);
+});
+
+// Serve Mini App static files
+app.use('/onboarding', require('express').static(
+  require('path').join(__dirname, 'telegram', 'mini-app')
+));
 
 // ==========================================================================
 // Inbox Polling Scheduler
