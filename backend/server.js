@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 /**
  * Host4Me Backend Server
  *
