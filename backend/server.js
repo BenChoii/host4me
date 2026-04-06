@@ -149,19 +149,14 @@ botManager.onPmMessage = async (pmId, type, data) => {
             console.log(`[Browser] Login triggered for PM ${pmId} on ${platform}`);
 
             try {
-              const browser = await getBrowser(pmId);
-              let result;
-              if (platform === 'airbnb') {
-                result = await browser.loginAirbnb(loginEmail.trim(), loginPassword.trim());
-              } else {
-                result = { status: 'error', message: `${platform} not yet supported` };
-              }
+              await botManager.sendMessage(pmId, `🔄 Launching browser agent to log into ${platform}... this may take a minute.`);
+              const result = await runBrowserAgent('login', pmId, loginEmail.trim(), loginPassword.trim());
 
-              console.log(`[Browser] Login result for ${pmId}:`, JSON.stringify(result));
+              console.log(`[Browser] Login result for ${pmId}:`, JSON.stringify(result).slice(0, 500));
 
-              if (result.status === 'logged_in' || result.status === 'already_logged_in') {
-                await botManager.sendMessage(pmId, `Attempting to access your ${platform} inbox...`);
-                const inbox = await browser.checkAirbnbInbox();
+              if (result.status === 'logged_in') {
+                await botManager.sendMessage(pmId, `✅ Logged into ${platform}. Checking your inbox now...`);
+                const inbox = await runBrowserAgent('inbox', pmId, platform);
                 console.log(`[Browser] Inbox result for ${pmId}:`, JSON.stringify(inbox).slice(0, 500));
 
                 // Inject REAL browser data into conversation history
@@ -242,75 +237,29 @@ app.post('/api/telegram/:pmId', async (req, res) => {
 // Internal API (called by ADK agent tools)
 // ==========================================================================
 
-const { PlatformBrowser } = require('./browser/platform-browser');
+const { runBrowserAgent } = require('./browser/run-agent');
 const activeBrowsers = new Map();
 
-async function getBrowser(pmId) {
-  if (!activeBrowsers.has(pmId)) {
-    const browser = new PlatformBrowser(pmId);
-    await browser.init();
-    activeBrowsers.set(pmId, browser);
-  }
-  return activeBrowsers.get(pmId);
-}
-
-// Platform login
+// Platform login via browser-use agent
 app.post('/internal/browser/login', async (req, res) => {
   const { pmId, platform, email, password } = req.body;
-  try {
-    const browser = await getBrowser(pmId);
-    let result;
-    if (platform === 'airbnb') {
-      result = await browser.loginAirbnb(email, password);
-    } else {
-      result = { status: 'error', message: `Platform ${platform} not yet supported` };
-    }
-    console.log(`[Browser] Login ${platform} for PM ${pmId}: ${result.status}`);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
-  }
+  const result = await runBrowserAgent('login', pmId, email, password);
+  console.log(`[Browser] Login ${platform} for PM ${pmId}: ${result.status}`);
+  res.json(result);
 });
 
-// Submit 2FA code
-app.post('/internal/browser/2fa', async (req, res) => {
-  const { pmId, code } = req.body;
-  try {
-    const browser = await getBrowser(pmId);
-    const result = await browser.submit2FA(code);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
-  }
-});
-
-// Check inbox
+// Check inbox via browser-use agent
 app.post('/internal/browser/inbox', async (req, res) => {
   const { pmId, platform } = req.body;
-  try {
-    const browser = await getBrowser(pmId);
-    let result;
-    if (platform === 'airbnb') {
-      result = await browser.checkAirbnbInbox();
-    } else {
-      result = { status: 'error', message: `Platform ${platform} not yet supported` };
-    }
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
-  }
+  const result = await runBrowserAgent('inbox', pmId, platform || 'airbnb');
+  res.json(result);
 });
 
-// Send reply
+// Send reply via browser-use agent
 app.post('/internal/browser/reply', async (req, res) => {
-  const { pmId, threadUrl, message } = req.body;
-  try {
-    const browser = await getBrowser(pmId);
-    const result = await browser.sendAirbnbReply(threadUrl, message);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
-  }
+  const { pmId, guestName, message } = req.body;
+  const result = await runBrowserAgent('reply', pmId, guestName, message);
+  res.json(result);
 });
 
 // ADK agents call this to send Telegram messages to PMs
