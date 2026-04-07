@@ -12,6 +12,9 @@ export default defineSchema({
     actionsUsed: v.number(),
     actionsLimit: v.union(v.number(), v.null()), // null = unlimited (paid)
     onboarded: v.boolean(),
+    shadowMode: v.boolean(), // true = Alfred drafts, PM approves. false = autonomous
+    communicationStyle: v.string(), // "casual" | "professional" | "friendly" | "luxury"
+    template: v.string(), // "airbnb_host" | "multi_property" | "luxury_rental"
     telegramChatId: v.union(v.string(), v.null()),
     telegramBotToken: v.union(v.string(), v.null()),
   })

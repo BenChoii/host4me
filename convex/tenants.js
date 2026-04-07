@@ -25,6 +25,9 @@ export const getOrCreate = mutation({
       actionsUsed: 0,
       actionsLimit: 100,
       onboarded: false,
+      shadowMode: true, // Draft mode by default — Alfred drafts, PM approves
+      communicationStyle: "friendly",
+      template: "airbnb_host",
       telegramChatId: null,
       telegramBotToken: null,
     });
@@ -121,6 +124,9 @@ export const createFromWebhook = internalMutation({
       actionsUsed: 0,
       actionsLimit: 100,
       onboarded: false,
+      shadowMode: true,
+      communicationStyle: "friendly",
+      template: "airbnb_host",
       telegramChatId: null,
       telegramBotToken: null,
     });
