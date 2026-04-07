@@ -60,16 +60,16 @@ gsap.registerPlugin(ScrollTrigger, SplitText);
 const CALENDLY_URL = 'https://calendly.com/benchoi-oktd/30min';
 
 const FEATURES = [
-  { icon: Brain, title: 'Learns Your Voice', desc: "Analyzes 100+ of your past messages to reply exactly how you would—same tone, same personality, same helpfulness." },
-  { icon: RefreshCw, title: 'Cross-Platform Sync', desc: "Replies to guests from Airbnb, Vrbo, iCal, and direct SMS all in one inbox. Alfred keeps everything in sync." },
-  { icon: Zap, title: 'Smart Escalation', desc: "Complex issues or billing disputes? Alfred knows to flag them. You review the draft and send with your approval." },
-  { icon: BarChart3, title: 'Mission Control Dashboard', desc: "See reply times, guest sentiment, and calendar conflicts at a glance. Real data, not AI theater." },
+  { icon: Brain, title: 'Learns Your Voice', desc: "Alfred analyzes your past messages and replies exactly how you would — same tone, same personality. No templates." },
+  { icon: RefreshCw, title: 'Learns from Gmail', desc: "WiFi passwords, gate codes, check-in instructions — Alfred extracts property details from your emails automatically." },
+  { icon: Zap, title: 'Shadow Mode', desc: "Alfred drafts every reply for your approval first. After a week of trust, he suggests going fully autonomous." },
+  { icon: BarChart3, title: 'Daily Briefings', desc: "Every morning at 8am, Alfred sends you a Telegram summary — messages handled, bookings, issues, and strategic insights." },
 ];
 
 const STEPS = [
-  { num: '01', title: 'Connect', desc: "Link your Airbnb, Vrbo, or property management account. Alfred sees your guest messages and calendar." },
-  { num: '02', title: 'Learn', desc: "Over 24–48 hours, Alfred analyzes your past messages to understand your style, preferences, and responses." },
-  { num: '03', title: 'Automate', desc: "Alfred replies to guests in real-time, handles FAQs, and escalates complex issues to you for final approval." },
+  { num: '01', title: 'Connect', desc: "Sign up, connect your Airbnb and Gmail. Alfred starts learning your properties, style, and house rules." },
+  { num: '02', title: 'Shadow', desc: "Alfred drafts guest replies and sends them to you in Telegram for approval. You train him by approving or editing." },
+  { num: '03', title: 'Autonomous', desc: "After a week of trust, Alfred handles everything. You get a morning briefing and only hear about issues that need you." },
 ];
 
 const PRICING = [
@@ -466,7 +466,7 @@ export default function LandingPage() {
                 whileHover={{ scale: 1.04 }}
                 whileTap={{ scale: 0.97 }}
               >
-                Start Free
+                Try Alfred Free
               </motion.button>
             </SignInButton>
           </SignedOut>
@@ -484,21 +484,32 @@ export default function LandingPage() {
       <section className="hero">
         <div className="hero-grid-bg" />
         <div className="hero-content">
-          <h1 className="hero-headline">A Full Office of AI Agents Managing Your Properties</h1>
+          <h1 className="hero-headline">Meet Alfred. Your AI Property Manager.</h1>
           <p className="hero-subhead">
-            6 specialized agents. Guest messaging, pricing research, profile optimization, and more — all working 24/7 in your voice. Start free with 100 actions.
+            Alfred lives in your Telegram. He replies to guests in your voice, learns your properties from Gmail, and sends you a daily briefing every morning. Set up in 60 seconds.
           </p>
           <div className="hero-buttons">
-            <motion.a
-              href={CALENDLY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-primary"
-              whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(176, 124, 91, 0.3)' }}
-              whileTap={{ scale: 0.97 }}
-            >
-              Start Free — 100 Actions
-            </motion.a>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <motion.button
+                  className="btn btn-primary"
+                  whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(176, 124, 91, 0.4)' }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  Try Alfred Free — 14 Days
+                </motion.button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <motion.a
+                href="/dashboard"
+                className="btn btn-primary"
+                whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(176, 124, 91, 0.4)' }}
+                whileTap={{ scale: 0.97 }}
+              >
+                Go to Dashboard
+              </motion.a>
+            </SignedIn>
             <motion.button
               className="btn btn-secondary"
               onClick={() => scrollToSection('how-it-works')}
@@ -866,18 +877,29 @@ export default function LandingPage() {
       <section className="final-cta">
         <div className="hero-grid-bg" />
         <div style={{ position: 'relative', zIndex: 2 }}>
-          <h2 className="cta-headline">Ready to let Alfred handle your guests?</h2>
-          <p className="reveal">Stop losing sleep over guest messages. Start free with 100 actions.</p>
-          <motion.a
-            href={CALENDLY_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-primary"
-            whileHover={{ scale: 1.06, boxShadow: '0 16px 48px rgba(198, 125, 59, 0.5)' }}
-            whileTap={{ scale: 0.97 }}
-          >
-            Start Free
-          </motion.a>
+          <h2 className="cta-headline">Stop losing sleep over guest messages</h2>
+          <p className="reveal">Alfred handles your guests at 2 AM, during holidays, and across time zones. Try free for 14 days — set up in 60 seconds.</p>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <motion.button
+                className="btn btn-primary"
+                whileHover={{ scale: 1.06, boxShadow: '0 16px 48px rgba(198, 125, 59, 0.5)' }}
+                whileTap={{ scale: 0.97 }}
+              >
+                Try Alfred Free
+              </motion.button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <motion.a
+              href="/dashboard"
+              className="btn btn-primary"
+              whileHover={{ scale: 1.06, boxShadow: '0 16px 48px rgba(198, 125, 59, 0.5)' }}
+              whileTap={{ scale: 0.97 }}
+            >
+              Go to Dashboard
+            </motion.a>
+          </SignedIn>
         </div>
       </section>
 
