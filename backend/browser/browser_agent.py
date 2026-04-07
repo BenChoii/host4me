@@ -12,17 +12,20 @@ import sys
 from pathlib import Path
 
 from browser_use import Agent, Browser, BrowserProfile
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 DATA_DIR = os.environ.get("HOST4ME_DATA_DIR", "/opt/host4me/data")
 
 
 def get_llm():
-    """Get Gemini model for browser-use agent."""
-    return ChatGoogleGenerativeAI(
+    """Get Gemini model compatible with browser-use."""
+    # browser-use works with OpenAI-compatible APIs via langchain_openai
+    # Gemini exposes an OpenAI-compatible endpoint
+    from langchain_openai import ChatOpenAI
+    return ChatOpenAI(
         model="gemini-2.5-flash",
-        google_api_key=GEMINI_API_KEY,
+        api_key=GEMINI_API_KEY,
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         temperature=0.1,
     )
 
