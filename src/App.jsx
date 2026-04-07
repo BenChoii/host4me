@@ -6,21 +6,26 @@ import { useGSAP } from '@gsap/react';
 import Lenis from 'lenis';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, RefreshCw, Zap, BarChart3, Moon, CalendarX, MessageSquareOff, Check } from 'lucide-react';
-import SceneCanvas from './components/three/SceneCanvas';
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
 import HeroChat from './compositions/HeroChat';
 import Comparison from './compositions/Comparison';
 import HowItWorksComp from './compositions/HowItWorks';
 import AlfredAtWork from './compositions/AlfredAtWork';
+import AgentOffice from './compositions/AgentOffice';
+import NightShift from './compositions/NightShift';
 
 /* ─── Error Boundary so Remotion issues don't white-screen the site ─── */
 class PlayerErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('[Remotion Player Error]', error.message, info.componentStack);
   }
   render() {
     if (this.state.hasError) return this.props.fallback || null;
@@ -69,18 +74,23 @@ const STEPS = [
 
 const PRICING = [
   {
-    tier: 'Starter', desc: '1–3 listings', price: '$149', period: '/month + $499 setup',
-    features: ['Up to 3 properties', 'Message learning', 'Email & SMS support', 'Dashboard access'],
+    tier: 'Free', desc: 'Try it out', price: '$0', period: '100 actions included',
+    features: ['1 property', 'Full agent team access', 'Guest messaging', 'Time savings tracking', 'No credit card required'],
+    featured: false, badge: 'Start Here',
+  },
+  {
+    tier: 'Starter', desc: '1–3 listings', price: '$149', period: '/month',
+    features: ['Up to 3 properties', 'Unlimited actions', 'All 6 AI agents', 'Email & SMS support', 'Dashboard access'],
     featured: false,
   },
   {
-    tier: 'Growth', desc: '4–15 listings', price: '$299', period: '/month + $999 setup',
-    features: ['Up to 15 properties', 'Advanced message learning', 'Priority support', 'Analytics dashboard', 'Twilio SMS integration'],
+    tier: 'Growth', desc: '4–15 listings', price: '$299', period: '/month',
+    features: ['Up to 15 properties', 'Unlimited actions', 'All 6 AI agents', 'Priority support', 'Market research agent', 'Profile optimization'],
     featured: true, badge: 'Most Popular',
   },
   {
-    tier: 'Portfolio', desc: '15+ listings', price: '$499', period: '/month + $1,999 setup',
-    features: ['Unlimited properties', 'Custom AI fine-tuning', 'Dedicated account manager', 'Advanced reporting', 'API access'],
+    tier: 'Portfolio', desc: '15+ listings', price: '$499', period: '/month',
+    features: ['Unlimited properties', 'Unlimited actions', 'All 6 AI agents', 'Dedicated account manager', 'Custom AI fine-tuning', 'API access'],
     featured: false,
   },
 ];
@@ -91,7 +101,7 @@ const FAQ_ITEMS = [
   { q: "Can Alfred work with our existing tools?", a: "Yes. Alfred integrates with Airbnb, Vrbo, iCal, Stripe, and Twilio. If you use Hostaway or Guesty, we can migrate your data and message history seamlessly." },
   { q: "What if Alfred makes a mistake?", a: "You control when Alfred sends replies. Every outgoing message is reviewed by you first—think of Alfred as a highly accurate draft writer, not a complete replacement." },
   { q: "Can you scale to 50+ listings?", a: "Absolutely. Many of our Portfolio clients (15+ listings) manage hundreds across multiple properties. Alfred scales without extra cost per listing once you're on our Portfolio plan." },
-  { q: "How does pricing work? Are there hidden fees?", a: "Clear pricing: Starter ($149/mo), Growth ($299/mo), Portfolio ($499/mo). Setup is one-time ($499–$1,999). No per-listing fees, no overage charges. What you see is what you pay." },
+  { q: "How does the free tier work?", a: "You get 100 free actions — each guest reply, calendar sync, or optimization counts as one action. That's enough to fully onboard, see Alfred in action, and experience the time savings. No credit card required. When you're ready for unlimited actions, choose the plan that fits." },
 ];
 
 const HERO_CHAT = [
@@ -218,10 +228,6 @@ export default function App() {
   const [activeFeature, setActiveFeature] = useState(1);
   const containerRef = useRef(null);
 
-  /* ─── 3D Scene Scroll Progress ─── */
-  const scrollProgress = useRef({ hero: 0, global: 0, cta: 0 });
-  const canvasInvalidate = useRef(null);
-
   /* ─── Lenis Smooth Scroll ─── */
   useEffect(() => {
     const lenis = new Lenis({
@@ -233,32 +239,10 @@ export default function App() {
 
     lenis.on('scroll', () => {
       ScrollTrigger.update();
-      // Invalidate R3F canvas on every scroll tick (for frameloop="demand")
-      if (canvasInvalidate.current) canvasInvalidate.current();
     });
     const rafCallback = (time) => lenis.raf(time * 1000);
     gsap.ticker.add(rafCallback);
     gsap.ticker.lagSmoothing(0);
-
-    // Scroll progress triggers for 3D scenes
-    ScrollTrigger.create({
-      trigger: '.hero',
-      start: 'top top',
-      end: 'bottom top',
-      onUpdate: (self) => { scrollProgress.current.hero = self.progress; },
-    });
-    ScrollTrigger.create({
-      trigger: 'body',
-      start: 'top top',
-      end: 'bottom bottom',
-      onUpdate: (self) => { scrollProgress.current.global = self.progress; },
-    });
-    ScrollTrigger.create({
-      trigger: '.final-cta',
-      start: 'top bottom',
-      end: 'bottom bottom',
-      onUpdate: (self) => { scrollProgress.current.cta = self.progress; },
-    });
 
     // Anchor link smooth scroll
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
@@ -310,12 +294,6 @@ export default function App() {
     gsap.fromTo('.chat-mockup',
       { y: 60, opacity: 0, scale: 0.95 },
       { y: 0, opacity: 1, scale: 1, duration: 1, ease: 'power3.out', delay: 1.3, clearProps: 'all' }
-    );
-
-    /* Chat messages stagger */
-    gsap.fromTo('.chat-message-animated',
-      { y: 20, opacity: 0 },
-      { y: 0, opacity: 1, stagger: 0.3, duration: 0.6, ease: 'power2.out', delay: 1.8, clearProps: 'all' }
     );
 
     /* ─── Text Scramble Stats ─── */
@@ -403,14 +381,6 @@ export default function App() {
       );
     });
 
-    /* Steps staggered */
-    gsap.fromTo('.step',
-      { y: 40, opacity: 0 },
-      { y: 0, opacity: 1, stagger: 0.2, duration: 0.8, ease: 'power2.out', clearProps: 'all',
-        scrollTrigger: { trigger: '.steps-grid', start: 'top 85%', toggleActions: 'play none none none' },
-      }
-    );
-
     /* Pricing cards staggered */
     gsap.fromTo('.pricing-card',
       { y: 40, opacity: 0, scale: 0.96 },
@@ -435,14 +405,6 @@ export default function App() {
       }
     );
 
-    /* Comparison cards */
-    gsap.fromTo('.comparison-card',
-      { y: 40, opacity: 0 },
-      { y: 0, opacity: 1, stagger: 0.2, duration: 0.8, ease: 'power2.out', clearProps: 'all',
-        scrollTrigger: { trigger: '.comparison-grid', start: 'top 85%', toggleActions: 'play none none none' },
-      }
-    );
-
     /* Final CTA text reveal */
     const ctaSplit = new SplitText('.cta-headline', { type: 'words', autoSplit: true });
     splits.push(ctaSplit);
@@ -455,14 +417,14 @@ export default function App() {
 
     /* ─── Color Shift ─── */
     const colorSections = [
-      { trigger: '.social-proof', bg: '#FDFCF8' },
-      { trigger: '.marquee-band', bg: '#FAF7F0' },
-      { trigger: '.mask-section', bg: '#0C1220' },
-      { trigger: '.solution-section', bg: '#FDFCF8' },
-      { trigger: '.features-section', bg: '#F8F6F1' },
-      { trigger: '.how-it-works', bg: '#FDFCF8' },
-      { trigger: '.pricing-section', bg: '#FAF7F0' },
-      { trigger: '.faq-section', bg: '#FDFCF8' },
+      { trigger: '.social-proof', bg: '#FAF8F5' },
+      { trigger: '.marquee-band', bg: '#F5F0EB' },
+      { trigger: '.mask-section', bg: '#2D2B3D' },
+      { trigger: '.solution-section', bg: '#FAF8F5' },
+      { trigger: '.features-section', bg: '#F7F2ED' },
+      { trigger: '.how-it-works', bg: '#FAF8F5' },
+      { trigger: '.pricing-section', bg: '#F5F0EB' },
+      { trigger: '.faq-section', bg: '#FAF8F5' },
     ];
 
     colorSections.forEach(({ trigger, bg }) => {
@@ -488,9 +450,6 @@ export default function App() {
 
   return (
     <div ref={containerRef}>
-      {/* ════════ 3D SCENE CANVAS ════════ */}
-      <SceneCanvas scrollProgress={scrollProgress} onInvalidateReady={(fn) => { canvasInvalidate.current = fn; }} />
-
       {/* ════════ NAVIGATION ════════ */}
       <nav className={`nav ${isScrolled ? 'scrolled' : ''}`}>
         <div className="nav-logo">Host4Me</div>
@@ -499,25 +458,35 @@ export default function App() {
           <li><a href="#pricing">Pricing</a></li>
           <li><a href="#faq">FAQ</a></li>
         </ul>
-        <motion.a
-          href={CALENDLY_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="nav-cta"
-          whileHover={{ scale: 1.04 }}
-          whileTap={{ scale: 0.97 }}
-        >
-          Book a Demo
-        </motion.a>
+        <div className="nav-auth">
+          <SignedOut>
+            <SignInButton mode="modal">
+              <motion.button
+                className="nav-cta"
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.97 }}
+              >
+                Start Free
+              </motion.button>
+            </SignInButton>
+          </SignedOut>
+          <SignedIn>
+            <UserButton
+              appearance={{
+                elements: { avatarBox: { width: 36, height: 36 } }
+              }}
+            />
+          </SignedIn>
+        </div>
       </nav>
 
       {/* ════════ HERO ════════ */}
       <section className="hero">
         <div className="hero-grid-bg" />
         <div className="hero-content">
-          <h1 className="hero-headline">Your AI Property Manager That Never Sleeps</h1>
+          <h1 className="hero-headline">A Full Office of AI Agents Managing Your Properties</h1>
           <p className="hero-subhead">
-            Alfred learns how you talk. Then handles your guests 24/7 with your voice.
+            6 specialized agents. Guest messaging, pricing research, profile optimization, and more — all working 24/7 in your voice. Start free with 100 actions.
           </p>
           <div className="hero-buttons">
             <motion.a
@@ -525,10 +494,10 @@ export default function App() {
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn-primary"
-              whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(198, 125, 59, 0.4)' }}
+              whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(176, 124, 91, 0.3)' }}
               whileTap={{ scale: 0.97 }}
             >
-              Book a Demo
+              Start Free — 100 Actions
             </motion.a>
             <motion.button
               className="btn btn-secondary"
@@ -639,6 +608,29 @@ export default function App() {
           <p className="comparison-caption reveal">
             Alfred analyzes your past 100+ messages to replicate your tone, humor, and helpfulness. No training required.
           </p>
+        </div>
+      </section>
+
+      {/* ════════ AGENT OFFICE — REMOTION ════════ */}
+      <section className="section agent-office-section">
+        <div className="section-wide">
+          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>The Team</span>
+          <h2 className="section-heading">Meet Alfred's Office</h2>
+          <p className="comparison-caption reveal">
+            Four specialized AI agents working together. Each one handles a different part of your property management.
+          </p>
+          <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0' }}>
+            <SafePlayer
+              component={AgentOffice}
+              durationInFrames={360}
+              fps={30}
+              compositionWidth={900}
+              compositionHeight={480}
+              loop
+              autoPlay
+              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
+            />
+          </div>
         </div>
       </section>
 
@@ -768,7 +760,7 @@ export default function App() {
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Pricing</span>
           <h2 className="section-heading">Simple, Transparent Pricing</h2>
-          <p className="pricing-subhead reveal">No per-listing fees. No overage charges. Pricing that scales with you.</p>
+          <p className="pricing-subhead reveal">Start free with 100 actions. No credit card. Upgrade when you're ready.</p>
           <div className="pricing-grid">
             {PRICING.map((p, i) => (
               <motion.div
@@ -793,7 +785,7 @@ export default function App() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  Book a Demo
+                  Start Free
                 </motion.a>
               </motion.div>
             ))}
@@ -830,18 +822,38 @@ export default function App() {
         </div>
       </section>
 
-      {/* ════════ ALFRED AT WORK — REMOTION ════════ */}
-      <section className="section alfred-work-section">
+      {/* ════════ NIGHT SHIFT — REMOTION ════════ */}
+      <section className="section night-shift-section">
         <div className="section-wide">
-          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>See It In Action</span>
-          <h2 className="section-heading">Alfred Works While You Sleep</h2>
-          <div className="remotion-player-wrap alfred-work-player">
+          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block', color: 'rgba(255,255,255,0.4)' }}>See It In Action</span>
+          <h2 className="section-heading" style={{ color: 'white' }}>Alfred Works While You Sleep</h2>
+          <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0', borderRadius: 20, border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 30px 80px rgba(0,0,0,0.3)' }}>
             <SafePlayer
-              component={AlfredAtWork}
-              durationInFrames={360}
+              component={NightShift}
+              durationInFrames={420}
               fps={30}
               compositionWidth={900}
               compositionHeight={520}
+              loop
+              autoPlay
+              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ════════ ALFRED DASHBOARD — REMOTION ════════ */}
+      <section className="section alfred-work-section">
+        <div className="section-wide">
+          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Your Dashboard</span>
+          <h2 className="section-heading">Everything at a Glance</h2>
+          <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0', borderRadius: 20, border: '1px solid rgba(45,43,61,0.06)', boxShadow: '0 12px 40px rgba(45,43,61,0.06)' }}>
+            <SafePlayer
+              component={AlfredAtWork}
+              durationInFrames={300}
+              fps={30}
+              compositionWidth={900}
+              compositionHeight={480}
               loop
               autoPlay
               style={{ width: '100%', height: 'auto', borderRadius: 20 }}
@@ -855,7 +867,7 @@ export default function App() {
         <div className="hero-grid-bg" />
         <div style={{ position: 'relative', zIndex: 2 }}>
           <h2 className="cta-headline">Ready to let Alfred handle your guests?</h2>
-          <p className="reveal">Stop losing sleep over guest messages. Start your free demo today.</p>
+          <p className="reveal">Stop losing sleep over guest messages. Start free with 100 actions.</p>
           <motion.a
             href={CALENDLY_URL}
             target="_blank"
@@ -864,7 +876,7 @@ export default function App() {
             whileHover={{ scale: 1.06, boxShadow: '0 16px 48px rgba(198, 125, 59, 0.5)' }}
             whileTap={{ scale: 0.97 }}
           >
-            Book a Demo
+            Start Free
           </motion.a>
         </div>
       </section>

@@ -1,0 +1,300 @@
+"""
+Host4Me Browser Agent — Direct Playwright with Gemini vision
+
+Uses Playwright for browser control + Gemini for visual understanding.
+Takes screenshots, sends them to Gemini for analysis, then acts.
+Simpler and more reliable than browser-use wrapper.
+"""
+
+import asyncio
+import base64
+import json
+import os
+import sys
+from pathlib import Path
+
+import httpx
+from playwright.async_api import async_playwright
+
+# Try both stealth package variants
+try:
+    from playwright_stealth import stealth_async
+except ImportError:
+    try:
+        from playwright_stealth import Stealth
+        async def stealth_async(page):
+            pass  # Stealth class handles it differently
+    except ImportError:
+        async def stealth_async(page):
+            # No stealth available — apply manual patches
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.chrome = {runtime: {}};
+                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            """)
+
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+DATA_DIR = os.environ.get("HOST4ME_DATA_DIR", "/opt/host4me/data")
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+
+
+async def ask_gemini_vision(screenshot_bytes: bytes, prompt: str) -> str:
+    """Send a screenshot to Gemini and get a text response."""
+    b64 = base64.b64encode(screenshot_bytes).decode()
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {"inline_data": {"mime_type": "image/png", "data": b64}},
+            ]
+        }],
+        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 1024},
+    }
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(GEMINI_URL, json=payload)
+        result = resp.json()
+        return result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+
+
+async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
+    """Login to Airbnb using Playwright + Gemini vision."""
+    session_dir = Path(DATA_DIR) / "sessions" / pm_id
+    session_dir.mkdir(parents=True, exist_ok=True)
+    storage_path = session_dir / "storage.json"
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--window-size=1280,900",
+            ],
+        )
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 900},
+            locale="en-US",
+            timezone_id="America/Vancouver",
+            storage_state=str(storage_path) if storage_path.exists() else None,
+        )
+        page = await context.new_page()
+        await stealth_async(page)
+
+        try:
+            # Go to Airbnb login
+            await page.goto("https://www.airbnb.com/login", wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(3000)
+
+            # Screenshot and ask Gemini what to click
+            ss = await page.screenshot()
+            plan = await ask_gemini_vision(ss,
+                "This is an Airbnb login page. I need to log in with email and password. "
+                "What should I click first to get to an email input? Look for buttons like "
+                "'Continue with email', 'Log in with email', or 'Email'. "
+                "Tell me the EXACT text of the button I should click. "
+                "If there's already an email input visible, say 'EMAIL_INPUT_VISIBLE'. "
+                "Respond with just the button text or EMAIL_INPUT_VISIBLE, nothing else.")
+
+            print(f"[Vision] Login plan: {plan[:200]}", file=sys.stderr)
+
+            email_filled = False
+
+            # If Gemini says email input is already visible, try to fill it
+            if "EMAIL_INPUT_VISIBLE" in plan.upper():
+                for sel in ['input[type="email"]', 'input[name="email"]', '#email-login-email', 'input[data-testid="email-login-email"]', 'input[type="text"]']:
+                    el = await page.query_selector(sel)
+                    if el:
+                        await el.fill(email)
+                        email_filled = True
+                        break
+            else:
+                # Click the button Gemini identified
+                clean_plan = plan.strip().strip('"').strip("'")
+                try:
+                    # Try exact text match
+                    await page.get_by_text(clean_plan, exact=False).first.click(timeout=5000)
+                    await page.wait_for_timeout(3000)
+                except Exception:
+                    # Try clicking any visible button/link with "email" in it
+                    try:
+                        await page.get_by_text("email", exact=False).first.click(timeout=5000)
+                        await page.wait_for_timeout(3000)
+                    except Exception:
+                        # Try clicking phone/email toggle or any login option
+                        try:
+                            await page.get_by_role("button").filter(has_text="email").first.click(timeout=3000)
+                            await page.wait_for_timeout(3000)
+                        except Exception:
+                            pass
+
+                # Now try to find email input
+                for sel in ['input[type="email"]', 'input[name="email"]', '#email-login-email', 'input[data-testid="email-login-email"]', 'input[type="text"]', 'input[inputmode="email"]']:
+                    el = await page.query_selector(sel)
+                    if el:
+                        await el.fill(email)
+                        email_filled = True
+                        break
+
+            if not email_filled:
+                # Last resort: ask Gemini to identify the input
+                ss2 = await page.screenshot()
+                hint = await ask_gemini_vision(ss2, "I need to type an email address. Is there any text input field on this page? Describe where it is.")
+                print(f"[Vision] Input search: {hint[:200]}", file=sys.stderr)
+
+                # Try any visible input
+                all_inputs = await page.query_selector_all("input:visible")
+                for inp in all_inputs:
+                    inp_type = await inp.get_attribute("type")
+                    if inp_type in ["email", "text", None, ""]:
+                        await inp.fill(email)
+                        email_filled = True
+                        break
+
+            if not email_filled:
+                ss = await page.screenshot(path=str(session_dir / "login-fail.png"))
+                await context.storage_state(path=str(storage_path))
+                await browser.close()
+                return {"status": "error", "message": "Could not find email input field"}
+
+            # Click continue/submit
+            submit = await page.query_selector('button[type="submit"]')
+            if submit:
+                await submit.click()
+            await page.wait_for_timeout(3000)
+
+            # Look for password field
+            pw_el = await page.query_selector('input[type="password"]')
+            if pw_el:
+                await pw_el.fill(password)
+                submit = await page.query_selector('button[type="submit"]')
+                if submit:
+                    await submit.click()
+                await page.wait_for_timeout(5000)
+
+            # Check what happened
+            ss = await page.screenshot(path=str(session_dir / "login-result.png"))
+            current_url = page.url
+
+            # Ask Gemini to analyze the result
+            analysis = await ask_gemini_vision(ss,
+                "Analyze this page. Is the user logged in? Is there a 2FA/verification code prompt? "
+                "Is there a CAPTCHA? Is there an error message? What page is this? "
+                "If there's a verification code prompt, tell me: is it asking for a code sent via EMAIL or PHONE/SMS? "
+                "What exact text does it show about where the code was sent? "
+                "Respond starting with one of: LOGGED_IN, 2FA_EMAIL, 2FA_PHONE, 2FA_UNKNOWN, CAPTCHA, LOGIN_ERROR, UNKNOWN. "
+                "Then on a new line, describe what you see.")
+
+            print(f"[Vision] Login result: {analysis[:200]}", file=sys.stderr)
+
+            await context.storage_state(path=str(storage_path))
+            await browser.close()
+
+            analysis_upper = analysis.upper()
+            if "LOGGED_IN" in analysis_upper or "/hosting" in current_url:
+                return {"status": "logged_in", "url": current_url, "analysis": analysis}
+            elif "2FA" in analysis_upper:
+                method = "email" if "EMAIL" in analysis_upper else "phone" if "PHONE" in analysis_upper else "unknown"
+                return {"status": "2fa_required", "method": method, "analysis": analysis}
+            elif "CAPTCHA" in analysis_upper:
+                return {"status": "captcha", "analysis": analysis}
+            elif "ERROR" in analysis_upper:
+                return {"status": "login_failed", "analysis": analysis}
+            else:
+                return {"status": "unknown", "url": current_url, "analysis": analysis}
+
+        except Exception as e:
+            try:
+                await page.screenshot(path=str(session_dir / "error.png"))
+                await context.storage_state(path=str(storage_path))
+                await browser.close()
+            except Exception:
+                pass
+            return {"status": "error", "message": str(e)}
+
+
+async def check_inbox(pm_id: str, platform: str = "airbnb") -> dict:
+    """Check Airbnb inbox using Playwright + Gemini vision."""
+    session_dir = Path(DATA_DIR) / "sessions" / pm_id
+    storage_path = session_dir / "storage.json"
+
+    if not storage_path.exists():
+        return {"status": "auth_required", "message": "No saved session. Login first."}
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--window-size=1280,900",
+            ],
+        )
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 900},
+            locale="en-US",
+            timezone_id="America/Vancouver",
+            storage_state=str(storage_path),
+        )
+        page = await context.new_page()
+        await stealth_async(page)
+
+        try:
+            await page.goto("https://www.airbnb.com/hosting/inbox", wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(5000)
+
+            if "/login" in page.url:
+                await browser.close()
+                return {"status": "auth_required"}
+
+            ss = await page.screenshot(path=str(session_dir / "inbox.png"))
+
+            # Ask Gemini to read the inbox
+            analysis = await ask_gemini_vision(ss,
+                "This is an Airbnb hosting inbox page. List ALL conversations visible in the left sidebar. "
+                "For each conversation, provide: guest name, message preview, whether it looks unread, and the date. "
+                "Format as JSON array: [{\"guest_name\": \"...\", \"preview\": \"...\", \"is_unread\": true/false, \"date\": \"...\"}]. "
+                "Only include what you actually see. If the page is not an inbox, describe what you see instead.")
+
+            await context.storage_state(path=str(storage_path))
+            await browser.close()
+
+            # Try to parse JSON from the response
+            try:
+                start = analysis.index("[")
+                end = analysis.rindex("]") + 1
+                messages = json.loads(analysis[start:end])
+                return {"status": "ok", "messages": messages, "count": len(messages)}
+            except (ValueError, json.JSONDecodeError):
+                return {"status": "ok", "raw": analysis, "messages": [], "count": 0}
+
+        except Exception as e:
+            try:
+                await browser.close()
+            except Exception:
+                pass
+            return {"status": "error", "message": str(e)}
+
+
+# CLI interface
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print(json.dumps({"error": "Usage: python browser_agent.py <action> <pm_id> [args...]"}))
+        sys.exit(1)
+
+    action = sys.argv[1]
+    pm_id = sys.argv[2]
+
+    if action == "login" and len(sys.argv) >= 5:
+        result = asyncio.run(login_airbnb(pm_id, sys.argv[3], sys.argv[4]))
+    elif action == "inbox":
+        platform = sys.argv[3] if len(sys.argv) > 3 else "airbnb"
+        result = asyncio.run(check_inbox(pm_id, platform))
+    else:
+        result = {"error": f"Unknown action: {action}"}
+
+    print(json.dumps(result))

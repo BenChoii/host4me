@@ -1,193 +1,152 @@
 import { useCurrentFrame, useVideoConfig, interpolate, spring, AbsoluteFill } from 'remotion';
+import { AlfredAvatar, CommsAvatar, EscalationAvatar, AGENT_COLORS } from '../components/agents/AgentAvatars';
 
-/* Simulated live feed of Alfred handling messages across platforms */
-const MESSAGES = [
-  { platform: 'Airbnb', guest: 'Sarah K.', msg: 'What time is check-in?', reply: 'Check-in is at 3 PM! I\'ll send door codes 2 hours before.', time: '2:14 AM' },
-  { platform: 'Vrbo', guest: 'Mike R.', msg: 'Is the hot tub working?', reply: 'Yes! It\'s heated to 102°F and ready for you. Towels are in the deck box.', time: '2:31 AM' },
-  { platform: 'SMS', guest: 'Jessica L.', msg: 'Can\'t find the lockbox', reply: 'It\'s to the right of the front door, behind the planter. Code: 4821. Here\'s a video walkthrough...', time: '3:07 AM' },
-  { platform: 'Email', guest: 'David W.', msg: 'Best restaurants nearby?', reply: 'Top 3 within walking distance: 1) Sushi Mura (8 min) 2) Cactus Club (5 min) 3) Earls (10 min)', time: '3:22 AM' },
-  { platform: 'Airbnb', guest: 'Emma T.', msg: 'WiFi password?', reply: 'WiFi: "CozyStay2024" — password: "welcome123". Router is in the living room if you need to restart it!', time: '4:15 AM' },
+/*
+  Alfred At Work — CTA Section Composition
+
+  Shows a live dashboard of Alfred managing properties.
+  Clean, data-driven, pastel. Makes property managers want this.
+*/
+
+const PROPERTIES = [
+  { name: 'Sunset Cottage', location: 'Vancouver', guests: 2, status: 'checked-in' },
+  { name: 'Mountain View Suite', location: 'Whistler', guests: 4, status: 'arriving' },
+  { name: 'Harbour Loft', location: 'Victoria', guests: 1, status: 'checked-in' },
 ];
 
-const PLATFORM_COLORS = {
-  Airbnb: '#FF5A5F',
-  Vrbo: '#3B5FC0',
-  SMS: '#4ADE80',
-  Email: '#8B5CF6',
+const ACTIVITY = [
+  { text: 'Replied to parking question', time: '2m ago', agent: 'comms' },
+  { text: 'Escalated noise complaint', time: '8m ago', agent: 'escalation' },
+  { text: 'Sent check-in instructions', time: '15m ago', agent: 'comms' },
+  { text: 'Generated weekly report', time: '1h ago', agent: 'reporting' },
+];
+
+const STATUS_COLORS = {
+  'checked-in': '#A8C5B8',
+  'arriving': '#F2C4A0',
 };
-
-function MessageCard({ msg, frame, enterFrame, fps, index }) {
-  const localFrame = Math.max(0, frame - enterFrame);
-  const entrySpring = spring({ frame: localFrame, fps, config: { damping: 14, stiffness: 100 } });
-
-  const opacity = interpolate(entrySpring, [0, 1], [0, 1]);
-  const translateX = interpolate(entrySpring, [0, 1], [-60, 0]);
-  const scale = interpolate(entrySpring, [0, 1], [0.9, 1]);
-
-  // Reply appears after a beat
-  const replyDelay = 25;
-  const replyVisible = localFrame > replyDelay;
-  const replySpring = spring({ frame: Math.max(0, localFrame - replyDelay), fps, config: { damping: 12, stiffness: 120 } });
-
-  // Resolved checkmark
-  const resolvedDelay = replyDelay + 30;
-  const resolved = localFrame > resolvedDelay;
-  const resolvedSpring = spring({ frame: Math.max(0, localFrame - resolvedDelay), fps, config: { damping: 10, stiffness: 200 } });
-
-  return (
-    <div style={{
-      opacity,
-      transform: `translateX(${translateX}px) scale(${scale})`,
-      marginBottom: 14,
-      display: 'flex', gap: 14, alignItems: 'flex-start',
-    }}>
-      {/* Platform badge */}
-      <div style={{
-        minWidth: 56, padding: '6px 0', textAlign: 'center',
-      }}>
-        <div style={{
-          fontSize: 10, fontWeight: 700, letterSpacing: '0.05em',
-          color: PLATFORM_COLORS[msg.platform],
-          fontFamily: "'Inter', sans-serif",
-          textTransform: 'uppercase',
-        }}>{msg.platform}</div>
-        <div style={{
-          fontSize: 10, color: 'rgba(255,255,255,0.3)',
-          fontFamily: "'Inter', sans-serif", marginTop: 2,
-        }}>{msg.time}</div>
-      </div>
-
-      {/* Card */}
-      <div style={{
-        flex: 1, borderRadius: 14,
-        background: 'rgba(255,255,255,0.04)',
-        border: `1px solid ${resolved ? 'rgba(74,222,128,0.2)' : 'rgba(255,255,255,0.06)'}`,
-        padding: '14px 18px',
-        transition: 'border-color 0.3s',
-      }}>
-        {/* Guest message */}
-        <div style={{
-          fontSize: 13, color: 'rgba(255,255,255,0.9)',
-          fontFamily: "'Inter', sans-serif", marginBottom: replyVisible ? 10 : 0,
-        }}>
-          <span style={{ fontWeight: 600, color: '#fff' }}>{msg.guest}:</span> {msg.msg}
-        </div>
-
-        {/* Alfred's reply */}
-        {replyVisible && (
-          <div style={{
-            opacity: interpolate(replySpring, [0, 1], [0, 1]),
-            transform: `translateY(${interpolate(replySpring, [0, 1], [10, 0])}px)`,
-            padding: '10px 14px', borderRadius: 10,
-            background: 'linear-gradient(135deg, rgba(198,125,59,0.15), rgba(198,125,59,0.08))',
-            border: '1px solid rgba(198,125,59,0.2)',
-            fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.5,
-            fontFamily: "'Inter', sans-serif",
-          }}>
-            <span style={{ color: '#C67D3B', fontWeight: 600, fontSize: 11 }}>Alfred: </span>
-            {msg.reply}
-          </div>
-        )}
-      </div>
-
-      {/* Resolved indicator */}
-      <div style={{
-        minWidth: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        opacity: resolved ? interpolate(resolvedSpring, [0, 1], [0, 1]) : 0,
-        transform: `scale(${resolved ? Math.min(resolvedSpring, 1) : 0})`,
-      }}>
-        <div style={{
-          width: 24, height: 24, borderRadius: '50%',
-          background: 'rgba(74,222,128,0.15)',
-          border: '1px solid rgba(74,222,128,0.3)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#4ADE80', fontSize: 14,
-        }}>✓</div>
-      </div>
-    </div>
-  );
-}
 
 export default function AlfredAtWork() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Counter animation
-  const handledCount = Math.min(
-    MESSAGES.length,
-    Math.floor(interpolate(frame, [60, 240], [0, MESSAGES.length], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }))
-  );
-
-  // Header entry
-  const headerSpring = spring({ frame, fps, config: { damping: 14, stiffness: 80 } });
+  const headerS = spring({ frame, fps, config: { damping: 14, stiffness: 80 } });
 
   return (
     <AbsoluteFill style={{
+      background: 'linear-gradient(160deg, #FAF8F5 0%, #F7F2ED 50%, #F0EBF5 100%)',
+      fontFamily: "'Inter', -apple-system, sans-serif",
+      padding: 24,
       display: 'flex', flexDirection: 'column',
-      padding: '30px 50px',
-      background: 'transparent',
     }}>
-      {/* Header bar */}
+      {/* Header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: 24, paddingBottom: 16,
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
-        opacity: interpolate(headerSpring, [0, 1], [0, 1]),
-        transform: `translateY(${interpolate(headerSpring, [0, 1], [-20, 0])}px)`,
+        marginBottom: 20, paddingBottom: 14,
+        borderBottom: '1px solid rgba(45,43,61,0.06)',
+        opacity: interpolate(headerS, [0, 1], [0, 1]),
+        transform: `translateY(${interpolate(headerS, [0, 1], [-15, 0])}px)`,
       }}>
-        <div>
-          <div style={{
-            fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
-            color: 'rgba(255,255,255,0.4)', fontFamily: "'Inter', sans-serif",
-            textTransform: 'uppercase', marginBottom: 4,
-          }}>Alfred — Live Feed</div>
-          <div style={{
-            fontSize: 20, fontWeight: 700, color: '#fff',
-            fontFamily: "'Inter', sans-serif",
-          }}>While you were sleeping...</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{
-            fontSize: 32, fontWeight: 800, color: '#C67D3B',
-            fontFamily: "'Inter', sans-serif",
-          }}>{handledCount}</div>
-          <div style={{
-            fontSize: 11, color: 'rgba(255,255,255,0.4)',
-            fontFamily: "'Inter', sans-serif",
-          }}>messages handled</div>
-        </div>
-      </div>
-
-      {/* Message feed */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        {MESSAGES.map((msg, i) => (
-          <MessageCard
-            key={i}
-            msg={msg}
-            frame={frame}
-            enterFrame={30 + i * 45}
-            fps={fps}
-            index={i}
-          />
-        ))}
-      </div>
-
-      {/* Bottom status bar */}
-      <div style={{
-        display: 'flex', gap: 24, justifyContent: 'center', paddingTop: 16,
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        opacity: interpolate(frame, [200, 230], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
-      }}>
-        {[
-          { label: 'Avg Response', value: '47s' },
-          { label: 'Platforms', value: '4 active' },
-          { label: 'Host Status', value: '😴 Sleeping' },
-        ].map((s, i) => (
-          <div key={i} style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#C67D3B', fontFamily: "'Inter', sans-serif" }}>{s.value}</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontFamily: "'Inter', sans-serif" }}>{s.label}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AlfredAvatar size={36} animated frame={frame} />
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#2D2B3D' }}>Alfred's Dashboard</div>
+            <div style={{ fontSize: 10, color: '#A8C5B8', fontWeight: 500 }}>All systems active</div>
           </div>
-        ))}
+        </div>
+        <div style={{
+          padding: '6px 14px', borderRadius: 100, fontSize: 10, fontWeight: 600,
+          background: 'rgba(168,197,184,0.12)', color: '#7FA695',
+          border: '1px solid rgba(168,197,184,0.2)',
+        }}>● Live</div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, flex: 1 }}>
+        {/* Left: Properties */}
+        <div style={{ flex: 1 }}>
+          <div style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+            color: '#9994AB', textTransform: 'uppercase', marginBottom: 10,
+          }}>Properties</div>
+
+          {PROPERTIES.map((prop, i) => {
+            const delay = 20 + i * 18;
+            const s = spring({ frame: Math.max(0, frame - delay), fps, config: { damping: 12, stiffness: 120 } });
+            return (
+              <div key={i} style={{
+                background: 'white', borderRadius: 14, padding: '12px 14px',
+                border: '1px solid rgba(45,43,61,0.06)', marginBottom: 8,
+                boxShadow: '0 2px 8px rgba(45,43,61,0.03)',
+                opacity: interpolate(s, [0, 1], [0, 1]),
+                transform: `translateX(${interpolate(s, [0, 1], [-20, 0])}px)`,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#2D2B3D' }}>{prop.name}</div>
+                    <div style={{ fontSize: 10, color: '#9994AB' }}>{prop.location} · {prop.guests} guests</div>
+                  </div>
+                  <div style={{
+                    padding: '3px 10px', borderRadius: 100, fontSize: 9, fontWeight: 600,
+                    background: `${STATUS_COLORS[prop.status]}20`,
+                    color: STATUS_COLORS[prop.status],
+                    textTransform: 'capitalize',
+                  }}>{prop.status.replace('-', ' ')}</div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Stats row */}
+          <div style={{
+            display: 'flex', gap: 8, marginTop: 12,
+            opacity: interpolate(frame, [80, 100], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
+          }}>
+            {[
+              { label: 'Response', value: '47s', color: AGENT_COLORS.comms.primary },
+              { label: 'Rating', value: '4.9★', color: AGENT_COLORS.alfred.primary },
+              { label: 'Saved', value: '$960', color: AGENT_COLORS.reporting.primary },
+            ].map((stat, i) => (
+              <div key={i} style={{
+                flex: 1, textAlign: 'center', padding: '10px 8px', borderRadius: 12,
+                background: `${stat.color}12`, border: `1px solid ${stat.color}25`,
+              }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#2D2B3D' }}>{stat.value}</div>
+                <div style={{ fontSize: 9, color: '#9994AB' }}>{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: Activity feed */}
+        <div style={{ width: 220 }}>
+          <div style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+            color: '#9994AB', textTransform: 'uppercase', marginBottom: 10,
+          }}>Recent Activity</div>
+
+          {ACTIVITY.map((item, i) => {
+            const delay = 40 + i * 25;
+            const s = spring({ frame: Math.max(0, frame - delay), fps, config: { damping: 12, stiffness: 120 } });
+            const AgentIcon = item.agent === 'escalation' ? EscalationAvatar : CommsAvatar;
+
+            return (
+              <div key={i} style={{
+                display: 'flex', gap: 8, alignItems: 'flex-start',
+                padding: '8px 10px', borderRadius: 10, marginBottom: 6,
+                background: 'white',
+                border: '1px solid rgba(45,43,61,0.04)',
+                opacity: interpolate(s, [0, 1], [0, 1]),
+                transform: `translateX(${interpolate(s, [0, 1], [15, 0])}px)`,
+              }}>
+                <AgentIcon size={22} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 10, fontWeight: 500, color: '#2D2B3D', lineHeight: 1.4 }}>{item.text}</div>
+                  <div style={{ fontSize: 9, color: '#9994AB' }}>{item.time}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </AbsoluteFill>
   );
