@@ -15,7 +15,24 @@ from pathlib import Path
 
 import httpx
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
+
+# Try both stealth package variants
+try:
+    from playwright_stealth import stealth_async
+except ImportError:
+    try:
+        from playwright_stealth import Stealth
+        async def stealth_async(page):
+            pass  # Stealth class handles it differently
+    except ImportError:
+        async def stealth_async(page):
+            # No stealth available — apply manual patches
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.chrome = {runtime: {}};
+                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            """)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 DATA_DIR = os.environ.get("HOST4ME_DATA_DIR", "/opt/host4me/data")
