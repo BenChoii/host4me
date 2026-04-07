@@ -341,12 +341,16 @@ export default function LandingPage() {
 
     /* ─── Sticky Stack Feature Activation ─── */
     document.querySelectorAll('.stack-feature-card').forEach((card) => {
+      // Click handler as fallback
+      card.addEventListener('click', () => activateStackFeature(card.dataset.feature));
+
       ScrollTrigger.create({
         trigger: card,
-        start: 'top 60%',
-        end: 'bottom 40%',
+        start: 'top 70%',
+        end: 'bottom 30%',
         onEnter: () => activateStackFeature(card.dataset.feature),
         onEnterBack: () => activateStackFeature(card.dataset.feature),
+        onToggle: (self) => { if (self.isActive) activateStackFeature(card.dataset.feature); },
       });
     });
 
@@ -622,25 +626,33 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ════════ AGENT OFFICE — REMOTION ════════ */}
+      {/* ════════ AGENT TEAM — STATIC CARDS ════════ */}
       <section className="section agent-office-section">
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Under the Hood</span>
           <h2 className="section-heading">Alfred's Specialist Team</h2>
           <p className="comparison-caption reveal">
-            Behind Alfred is a team of specialist agents — guest communications, escalation management, market research, and reporting. You just talk to Alfred.
+            Behind Alfred is a team of specialist agents. You just talk to Alfred — he delegates to the right specialist automatically.
           </p>
-          <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0' }}>
-            <SafePlayer
-              component={AgentOffice}
-              durationInFrames={360}
-              fps={30}
-              compositionWidth={900}
-              compositionHeight={480}
-              loop
-              autoPlay
-              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, maxWidth: 940, margin: '40px auto 0' }}>
+            {[
+              { emoji: '💬', name: 'Guest Comms', desc: 'Handles all guest messaging across platforms. Replies in your voice.' },
+              { emoji: '🚨', name: 'Escalation', desc: 'Detects urgent issues — safety, refunds, angry guests — and alerts you.' },
+              { emoji: '📊', name: 'Reporting', desc: 'Compiles daily briefings, weekly reports, and performance analytics.' },
+              { emoji: '💰', name: 'Market Research', desc: 'Monitors competitor pricing and suggests rate adjustments.' },
+            ].map((agent, i) => (
+              <div key={i} className="reveal" style={{
+                background: 'var(--glass-bg)',
+                border: '1px solid var(--border)',
+                borderRadius: 16,
+                padding: '28px 24px',
+                textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>{agent.emoji}</div>
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--navy)', marginBottom: 8 }}>{agent.name}</h3>
+                <p style={{ fontSize: 14, color: 'var(--text-light)', margin: 0, lineHeight: 1.6 }}>{agent.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
