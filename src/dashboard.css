@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
 /* ═══════════════════════════════════════════
    HOST4ME DASHBOARD DESIGN SYSTEM
    Dark theme with warm copper/amber accents
@@ -45,8 +47,6 @@
 
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
 }
-
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 /* ─── Dashboard Layout ─── */
 .dash {

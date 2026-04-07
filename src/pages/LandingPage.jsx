@@ -8,12 +8,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Brain, RefreshCw, Zap, BarChart3, Moon, CalendarX, MessageSquareOff, Check } from 'lucide-react';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
-import HeroChat from './compositions/HeroChat';
-import Comparison from './compositions/Comparison';
-import HowItWorksComp from './compositions/HowItWorks';
-import AlfredAtWork from './compositions/AlfredAtWork';
-import AgentOffice from './compositions/AgentOffice';
-import NightShift from './compositions/NightShift';
+import HeroChat from '../compositions/HeroChat';
+import Comparison from '../compositions/Comparison';
+import HowItWorksComp from '../compositions/HowItWorks';
+import AlfredAtWork from '../compositions/AlfredAtWork';
+import AgentOffice from '../compositions/AgentOffice';
+import NightShift from '../compositions/NightShift';
 
 /* ─── Error Boundary so Remotion issues don't white-screen the site ─── */
 class PlayerErrorBoundary extends Component {
