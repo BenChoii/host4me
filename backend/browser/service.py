@@ -328,6 +328,72 @@ async def run_agent_loop(pm_id: str, goal: str, max_steps: int = MAX_AGENT_STEPS
 # HTTP Handlers
 # ═══════════════════════════════════════════════════════════════════════════════
 
+async def find_and_fill_input(page, value, selectors, fallback_placeholder=None):
+    """Try multiple CSS selectors to find an input and fill it. Returns True if successful."""
+    for sel in selectors:
+        try:
+            el = await page.query_selector(sel)
+            if el and await el.is_visible():
+                await el.click()
+                await page.wait_for_timeout(300)
+                await el.fill(value)
+                return True
+        except Exception:
+            continue
+
+    # Fallback: find by placeholder text
+    if fallback_placeholder:
+        try:
+            el = await page.get_by_placeholder(fallback_placeholder, exact=False).first
+            if el:
+                await el.click()
+                await page.wait_for_timeout(300)
+                await el.fill(value)
+                return True
+        except Exception:
+            pass
+
+    # Last resort: find any visible text/email input
+    try:
+        inputs = await page.query_selector_all("input:visible")
+        for inp in inputs:
+            t = await inp.get_attribute("type") or "text"
+            if t in ("email", "text", "tel"):
+                await inp.click()
+                await page.wait_for_timeout(300)
+                await inp.fill(value)
+                return True
+    except Exception:
+        pass
+
+    return False
+
+
+async def click_submit(page):
+    """Click the submit/continue button."""
+    # Try submit button first
+    for sel in ['button[type="submit"]', 'button[data-testid="signup-login-submit-btn"]']:
+        try:
+            el = await page.query_selector(sel)
+            if el and await el.is_visible():
+                await el.click()
+                return True
+        except Exception:
+            continue
+
+    # Try by text content
+    for text in ["Continue", "Log in", "Log In", "Submit", "Next", "Sign in"]:
+        try:
+            btn = await page.get_by_role("button", name=text, exact=False).first
+            if btn:
+                await btn.click()
+                return True
+        except Exception:
+            continue
+
+    return False
+
+
 async def handle_login(request):
     data = await request.json()
     pm_id = data.get("pmId", "default")
@@ -342,48 +408,118 @@ async def handle_login(request):
         await page.goto("https://www.airbnb.com/login", wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(4000)
 
-        # Single agent loop for the ENTIRE login flow (email + password)
-        result = await run_agent_loop(pm_id,
-            f"You are on the Airbnb login page. Complete the ENTIRE login process:\n"
-            f"1. If you see a 'Continue with email' or phone/email input, enter this email: {email}\n"
-            f"2. Click Continue/Submit to proceed to the password step.\n"
-            f"3. When the password field appears, click on it and type this password: {password}\n"
-            f"4. Click Log In / Continue / Submit.\n"
-            f"5. Wait for the result.\n"
-            f"6. When you see EITHER: a dashboard/inbox (logged in), a 2FA/verification code prompt, "
-            f"or an error — say DONE and describe what you see.\n\n"
-            f"IMPORTANT: Complete ALL steps before saying DONE. Don't say DONE after just entering the email.",
-            max_steps=10)
+        # Step 1: Check if there's a "Continue with email" button to click first
+        try:
+            email_btn = await page.get_by_text("email", exact=False).first
+            if email_btn:
+                await email_btn.click()
+                await page.wait_for_timeout(2000)
+        except Exception:
+            pass
 
-        await page.wait_for_timeout(3000)
+        # Step 2: Fill email using DOM selectors (reliable)
+        email_selectors = [
+            'input[type="email"]', 'input[name="email"]',
+            'input[inputmode="email"]', 'input[type="tel"]',
+            'input[type="text"]',
+        ]
+        email_filled = await find_and_fill_input(page, email, email_selectors, "Phone number or email")
+        if not email_filled:
+            # Use agent loop as fallback for unusual layouts
+            print(f"[Login] DOM selectors failed for email, using agent loop")
+            result = await run_agent_loop(pm_id,
+                f"Find the email/phone input field and enter: {email}. Then say DONE.",
+                max_steps=3)
 
-        # Analyze final state — very specific about distinguishing login page vs actual 2FA
+        # Step 3: Click Continue/Submit
+        await page.wait_for_timeout(1000)
+        await click_submit(page)
+        await page.wait_for_timeout(4000)
+
+        # Step 4: Fill password (if password field appeared)
+        pw_filled = False
+        for sel in ['input[type="password"]', 'input[name="password"]']:
+            try:
+                el = await page.query_selector(sel)
+                if el and await el.is_visible():
+                    await el.click()
+                    await page.wait_for_timeout(300)
+                    await el.fill(password)
+                    pw_filled = True
+                    break
+            except Exception:
+                continue
+
+        if pw_filled:
+            await page.wait_for_timeout(1000)
+            await click_submit(page)
+            await page.wait_for_timeout(5000)
+        else:
+            # Maybe Airbnb went straight to 2FA or there's a different flow
+            print(f"[Login] No password field found — checking page state")
+
+        # Step 5: Analyze final state with vision
         analysis = await screenshot_and_analyze(pm_id,
             "Look at this page carefully and determine the EXACT state:\n\n"
             "LOGGED_IN — User is on a dashboard, hosting page, inbox, or any page that is NOT login/signup.\n"
             "2FA_EMAIL — There is an INPUT FIELD specifically asking for a VERIFICATION CODE sent to an EMAIL address. "
-            "The page must show an actual input field for entering a numeric code.\n"
+            "The page must show an actual input field for entering a numeric code, and text saying a code was sent.\n"
             "2FA_PHONE — Same but code was sent via SMS/phone.\n"
             "2FA_UNKNOWN — There is a code input field but unclear if email or phone.\n"
             "LOGIN_PAGE — This is still the initial login/signup page asking for email or phone number to START the login. "
             "Generic text like 'We will send a confirmation code' does NOT mean 2FA is active — that is just the login page.\n"
+            "PASSWORD — The page is showing a password input field.\n"
             "CAPTCHA — There is a CAPTCHA challenge.\n"
-            "LOGIN_ERROR — There is an error message.\n\n"
-            "Respond with EXACTLY ONE label on the first line, then explain.")
+            "LOGIN_ERROR — There is an error message (wrong password, account locked, etc).\n\n"
+            "Respond with EXACTLY ONE label on the first line, then explain what you see.")
 
         await save_session(pm_id)
 
         upper = analysis["analysis"].upper()
-        # Handle LOGIN_PAGE — agent loop didn't complete the login
+
+        # If still on login page, try once more with the agent loop
         if "LOGIN_PAGE" in upper and "2FA" not in upper:
-            return web.json_response({"status": "error", "message": "Login did not complete — still on login page. The browser agent may have failed to enter credentials.", "analysis": analysis["analysis"]})
-        elif "LOGGED_IN" in upper or "/hosting" in analysis["url"]:
+            print(f"[Login] Still on login page after DOM approach, trying agent loop")
+            result = await run_agent_loop(pm_id,
+                f"Enter the email {email} into the input field, then click Continue. "
+                f"After that, enter the password {password} and click Log In. "
+                f"When you see a 2FA prompt or dashboard, say DONE.",
+                max_steps=8)
+            await page.wait_for_timeout(3000)
+
+            # Re-analyze
+            analysis = await screenshot_and_analyze(pm_id,
+                "What state is this page in? LOGGED_IN, 2FA_EMAIL, 2FA_PHONE, 2FA_UNKNOWN, "
+                "LOGIN_PAGE, PASSWORD, CAPTCHA, or LOGIN_ERROR? "
+                "2FA means there is an actual input field for a verification CODE. "
+                "LOGIN_PAGE means still asking for email/phone. "
+                "First line: the label. Then explain.")
+            await save_session(pm_id)
+            upper = analysis["analysis"].upper()
+
+        if "PASSWORD" in upper and "2FA" not in upper:
+            # Password field visible but we didn't fill it — try again
+            for sel in ['input[type="password"]']:
+                el = await page.query_selector(sel)
+                if el:
+                    await el.fill(password)
+                    await click_submit(page)
+                    await page.wait_for_timeout(5000)
+                    analysis = await screenshot_and_analyze(pm_id,
+                        "What state is this page in now? LOGGED_IN, 2FA_EMAIL, 2FA_PHONE, 2FA_UNKNOWN, LOGIN_ERROR? First line: label.")
+                    await save_session(pm_id)
+                    upper = analysis["analysis"].upper()
+                    break
+
+        if "LOGGED_IN" in upper or "/hosting" in analysis["url"]:
             return web.json_response({"status": "logged_in", "analysis": analysis["analysis"]})
         elif "2FA" in upper:
             method = "email" if "EMAIL" in upper else "phone" if "PHONE" in upper else "unknown"
             return web.json_response({"status": "2fa_required", "method": method, "analysis": analysis["analysis"]})
         elif "CAPTCHA" in upper:
             return web.json_response({"status": "captcha", "analysis": analysis["analysis"]})
+        elif "LOGIN_PAGE" in upper:
+            return web.json_response({"status": "error", "message": "Login did not complete — still on login page.", "analysis": analysis["analysis"]})
         else:
             return web.json_response({"status": "unknown", "analysis": analysis["analysis"]})
 
@@ -428,22 +564,53 @@ async def handle_2fa(request):
                 "analysis": "Already logged in — no 2FA needed.",
             })
 
-        # We're on the 2FA page — submit the code
-        result = await run_agent_loop(pm_id,
-            f"There is a verification code input field on this page. "
-            f"Step 1: Click on the code input field (it should be a text input for a 6-digit code). "
-            f"Step 2: Type this code: {code}\n"
-            f"Step 3: Click the Submit / Continue / Verify button.\n"
-            f"Step 4: Wait 3 seconds for the page to respond.\n"
-            f"Step 5: Say DONE and describe what happened (logged in? error? still loading?).\n\n"
-            f"IMPORTANT: Make sure to click the input field FIRST before typing the code. "
-            f"The code is exactly: {code}",
-            max_steps=6)
+        # We're on the 2FA page — submit the code using DOM selectors first
+        code_filled = False
+        code_selectors = [
+            'input[data-testid="verification-code-input"]',
+            'input[name="code"]', 'input[inputmode="numeric"]',
+            'input[type="tel"]', 'input[type="number"]',
+            'input[autocomplete="one-time-code"]',
+        ]
+        code_filled = await find_and_fill_input(page, code, code_selectors)
+
+        if not code_filled:
+            # Fallback: try any visible text input
+            try:
+                inputs = await page.query_selector_all("input:visible")
+                for inp in inputs:
+                    t = await inp.get_attribute("type") or "text"
+                    if t in ("text", "tel", "number"):
+                        await inp.click()
+                        await page.wait_for_timeout(300)
+                        await inp.fill(code)
+                        code_filled = True
+                        break
+            except Exception:
+                pass
+
+        if not code_filled:
+            # Last resort: agent loop
+            print(f"[2FA] DOM selectors failed, using agent loop")
+            result = await run_agent_loop(pm_id,
+                f"Find the verification code input and enter: {code}. Then click Submit. Say DONE when complete.",
+                max_steps=4)
+
+        if code_filled:
+            await page.wait_for_timeout(1000)
+            await click_submit(page)
+            await page.wait_for_timeout(5000)
+
+        # Analyze result
+        analysis = await screenshot_and_analyze(pm_id,
+            "Did the 2FA/verification succeed? What page is showing now? "
+            "LOGGED_IN if on dashboard/inbox. 2FA_ERROR if code was wrong. LOGIN_PAGE if back to login. "
+            "First line: the label.")
 
         await save_session(pm_id)
         return web.json_response({
             "status": "submitted",
-            "analysis": result.get("result", result.get("reason", "unknown")),
+            "analysis": analysis["analysis"],
         })
 
     except Exception as e:
