@@ -52,6 +52,7 @@ const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You 
 7. NEVER combine [SUBMIT_2FA] with [CHECK_INBOX] in the same reply. Submit 2FA first. The system will check inbox automatically after success.
 8. Only reference data from [BROWSER_DATA] tags that appear in YOUR conversation history.
 9. NEVER re-introduce yourself after the first message.
+10. REMEMBER credentials. If the PM already gave you their email and password in this conversation, REUSE them. NEVER ask for credentials you already have. If a login fails and you need to retry, use the SAME credentials from earlier in the chat.
 10. Be concise but thorough. Anticipate what the PM needs.
 
 ═══ BROWSER COMMANDS ═══
@@ -287,21 +288,30 @@ botManager.onPmMessage = async (pmId, type, data) => {
               const browserData = `[BROWSER_DATA] 2FA result: ${JSON.stringify(result)}`;
               history.push({ role: 'user', parts: [{ text: browserData }] });
 
+              // Check if the browser was on the wrong page
+              if (result.status === 'error' && result.message && result.message.includes('login page')) {
+                await botManager.sendMessage(pmId, `⚠️ The browser session expired and went back to the login page. I'll re-login with your saved credentials.`);
+                history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Session expired — need to re-login before 2FA.` }] });
+                // Don't ask for credentials again — tell Gemini to retry
+                history.push({ role: 'user', parts: [{ text: 'The browser session expired. Please log in again using the credentials I already gave you.' }] });
+              }
               // After successful 2FA, automatically check inbox
-              const analysis = (result.analysis || '').toUpperCase();
-              if (analysis.includes('LOGGED') || analysis.includes('SUCCESS') || analysis.includes('DASHBOARD') || analysis.includes('HOSTING')) {
-                await botManager.sendMessage(pmId, `✅ Verification successful! Checking your inbox...`);
-                const inbox = await runBrowserAgent('inbox', pmId);
-                const inboxData = `[BROWSER_DATA] Inbox after 2FA: ${JSON.stringify(inbox)}`;
-                history.push({ role: 'user', parts: [{ text: inboxData }] });
-                if (inbox.messages && inbox.messages.length > 0) {
-                  const summary = inbox.messages.map(m => `• ${m.guest_name}: ${m.preview || ''} ${m.is_unread ? '🔴' : ''}`).join('\n');
-                  await botManager.sendMessage(pmId, `📨 Found ${inbox.count} conversation(s):\n\n${summary}`);
+              else {
+                const analysis = (result.analysis || '').toUpperCase();
+                if (analysis.includes('LOGGED') || analysis.includes('SUCCESS') || analysis.includes('DASHBOARD') || analysis.includes('HOSTING')) {
+                  await botManager.sendMessage(pmId, `✅ Verification successful! Checking your inbox...`);
+                  const inbox = await runBrowserAgent('inbox', pmId);
+                  const inboxData = `[BROWSER_DATA] Inbox after 2FA: ${JSON.stringify(inbox)}`;
+                  history.push({ role: 'user', parts: [{ text: inboxData }] });
+                  if (inbox.messages && inbox.messages.length > 0) {
+                    const summary = inbox.messages.map(m => `• ${m.guest_name}: ${m.preview || ''} ${m.is_unread ? '🔴' : ''}`).join('\n');
+                    await botManager.sendMessage(pmId, `📨 Found ${inbox.count} conversation(s):\n\n${summary}`);
+                  } else {
+                    await botManager.sendMessage(pmId, inbox.raw || '📭 No conversations found or could not read inbox.');
+                  }
                 } else {
-                  await botManager.sendMessage(pmId, inbox.raw || '📭 No conversations found or could not read inbox.');
+                  await botManager.sendMessage(pmId, `${result.analysis || result.message || 'Code submitted'}`);
                 }
-              } else {
-                await botManager.sendMessage(pmId, `${result.analysis || result.message || 'Code submitted'}`);
               }
             } catch (err) {
               await botManager.sendMessage(pmId, `⚠️ Could not submit code: ${err.message}`);

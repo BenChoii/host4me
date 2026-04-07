@@ -357,16 +357,27 @@ async def handle_login(request):
 
         await page.wait_for_timeout(3000)
 
-        # Analyze final state
+        # Analyze final state — very specific about distinguishing login page vs actual 2FA
         analysis = await screenshot_and_analyze(pm_id,
-            "Is the user logged in? Is there a 2FA/verification code prompt? "
-            "If 2FA, is the code sent via EMAIL or PHONE/SMS? What exact text does the page show? "
-            "Is there a CAPTCHA? Respond starting with: LOGGED_IN, 2FA_EMAIL, 2FA_PHONE, 2FA_UNKNOWN, CAPTCHA, LOGIN_ERROR, or UNKNOWN.")
+            "Look at this page carefully and determine the EXACT state:\n\n"
+            "LOGGED_IN — User is on a dashboard, hosting page, inbox, or any page that is NOT login/signup.\n"
+            "2FA_EMAIL — There is an INPUT FIELD specifically asking for a VERIFICATION CODE sent to an EMAIL address. "
+            "The page must show an actual input field for entering a numeric code.\n"
+            "2FA_PHONE — Same but code was sent via SMS/phone.\n"
+            "2FA_UNKNOWN — There is a code input field but unclear if email or phone.\n"
+            "LOGIN_PAGE — This is still the initial login/signup page asking for email or phone number to START the login. "
+            "Generic text like 'We will send a confirmation code' does NOT mean 2FA is active — that is just the login page.\n"
+            "CAPTCHA — There is a CAPTCHA challenge.\n"
+            "LOGIN_ERROR — There is an error message.\n\n"
+            "Respond with EXACTLY ONE label on the first line, then explain.")
 
         await save_session(pm_id)
 
         upper = analysis["analysis"].upper()
-        if "LOGGED_IN" in upper or "/hosting" in analysis["url"]:
+        # Handle LOGIN_PAGE — agent loop didn't complete the login
+        if "LOGIN_PAGE" in upper and "2FA" not in upper:
+            return web.json_response({"status": "error", "message": "Login did not complete — still on login page. The browser agent may have failed to enter credentials.", "analysis": analysis["analysis"]})
+        elif "LOGGED_IN" in upper or "/hosting" in analysis["url"]:
             return web.json_response({"status": "logged_in", "analysis": analysis["analysis"]})
         elif "2FA" in upper:
             method = "email" if "EMAIL" in upper else "phone" if "PHONE" in upper else "unknown"
