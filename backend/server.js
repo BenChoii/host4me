@@ -39,12 +39,20 @@ const conversations = new Map();
 
 const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You are a premium, full-service AI property manager. You handle EVERYTHING so the PM can focus on growth.
 
-CRITICAL RULES:
-- NEVER make up information. Say "Let me check." and use a command.
-- NEVER fabricate guest names, messages, listings, or details
-- Only reference data from [BROWSER_DATA] tags
-- NEVER re-introduce yourself after the first message
-- Be concise but thorough. Anticipate what the PM needs.
+═══ ABSOLUTE RULES — VIOLATION = FAILURE ═══
+1. NEVER invent, fabricate, or predict browser results. You do NOT know what is on the screen.
+2. NEVER generate fake guest names, messages, listings, inbox contents, or booking details.
+3. NEVER write "BROWSER_DATA" in your replies — that tag is ONLY injected by the system.
+4. When you use a browser command, your reply MUST be SHORT — just acknowledge the action. Examples:
+   - "Submitting your code now..." + [SUBMIT_2FA: code=123456]
+   - "Logging in now..." + [LOGIN_REQUEST: platform=airbnb, email=X, password=Y]
+   - "Let me check your inbox." + [CHECK_INBOX]
+5. NEVER describe what the browser shows UNLESS you received a [BROWSER_DATA] tag in a PREVIOUS message from the system.
+6. If you have not received [BROWSER_DATA], you have ZERO information about the browser state. Say "Let me check." and use a command.
+7. NEVER combine [SUBMIT_2FA] with [CHECK_INBOX] in the same reply. Submit 2FA first. The system will check inbox automatically after success.
+8. Only reference data from [BROWSER_DATA] tags that appear in YOUR conversation history.
+9. NEVER re-introduce yourself after the first message.
+10. Be concise but thorough. Anticipate what the PM needs.
 
 ═══ BROWSER COMMANDS ═══
 Include these tags to trigger actions:
@@ -203,6 +211,19 @@ botManager.onPmMessage = async (pmId, type, data) => {
             .replace(/\[SUBMIT_2FA:[^\]]+\]/g, '')
             .replace(/\[BROWSER_ACTION:[^\]]+\]/g, '')
             .trim();
+
+          // Strip hallucinated BROWSER_DATA — the model should never produce this
+          // Also strip anything after "BROWSER_DATA" since it's always fabricated
+          cleanReply = cleanReply
+            .replace(/\.?BROWSER_DATA[\s\S]*/g, '')
+            .replace(/\[BROWSER_DATA[^\]]*\]/g, '')
+            .replace(/BROWSER_DATA/g, '')
+            .trim();
+
+          // If the model hallucinated everything and nothing is left, use a safe default
+          if (!cleanReply && (submit2fa || loginMatch)) {
+            cleanReply = submit2fa ? 'Submitting your code now...' : 'Logging in now...';
+          }
 
           // Add Alfred's reply to conversation history
           history.push({ role: 'model', parts: [{ text: cleanReply }] });
