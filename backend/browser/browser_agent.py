@@ -15,6 +15,7 @@ from pathlib import Path
 
 import httpx
 from playwright.async_api import async_playwright
+from playwright_stealth import stealth_async
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 DATA_DIR = os.environ.get("HOST4ME_DATA_DIR", "/opt/host4me/data")
@@ -46,13 +47,24 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
     storage_path = session_dir / "storage.json"
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--window-size=1280,900",
+            ],
+        )
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 900},
+            locale="en-US",
+            timezone_id="America/Vancouver",
             storage_state=str(storage_path) if storage_path.exists() else None,
         )
         page = await context.new_page()
+        await stealth_async(page)
 
         try:
             # Go to Airbnb login
@@ -191,13 +203,24 @@ async def check_inbox(pm_id: str, platform: str = "airbnb") -> dict:
         return {"status": "auth_required", "message": "No saved session. Login first."}
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-infobars",
+                "--window-size=1280,900",
+            ],
+        )
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             viewport={"width": 1280, "height": 900},
+            locale="en-US",
+            timezone_id="America/Vancouver",
             storage_state=str(storage_path),
         )
         page = await context.new_page()
+        await stealth_async(page)
 
         try:
             await page.goto("https://www.airbnb.com/hosting/inbox", wait_until="domcontentloaded", timeout=30000)
