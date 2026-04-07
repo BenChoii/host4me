@@ -1,6 +1,6 @@
 /**
- * Bridge to the persistent Python browser service.
- * Calls HTTP endpoints instead of spawning subprocesses.
+ * Bridge to the persistent Python browser agent.
+ * Calls HTTP endpoints on the vision-based agent loop.
  */
 
 const BROWSER_SERVICE_URL = process.env.BROWSER_SERVICE_URL || 'http://localhost:8100';
@@ -13,6 +13,7 @@ async function runBrowserAgent(action, pmId, ...args) {
     screenshot: { path: '/screenshot', body: { pmId, prompt: args[0] } },
     navigate: { path: '/navigate', body: { pmId, url: args[0] } },
     action: { path: '/action', body: { pmId, action: args[0] } },
+    goal: { path: '/goal', body: { pmId, goal: args[0], maxSteps: args[1] || 10, startUrl: args[2] || '' } },
   };
 
   const ep = endpoints[action];
@@ -27,11 +28,11 @@ async function runBrowserAgent(action, pmId, ...args) {
       body: JSON.stringify(ep.body),
     });
     const result = await resp.json();
-    console.log(`[BrowserAgent] Result: ${JSON.stringify(result).slice(0, 300)}`);
+    console.log(`[BrowserAgent] Result: ${JSON.stringify(result).slice(0, 500)}`);
     return result;
   } catch (err) {
     console.error(`[BrowserAgent] Error: ${err.message}`);
-    return { status: 'error', message: `Browser service unavailable: ${err.message}` };
+    return { status: 'error', message: `Browser agent unavailable: ${err.message}` };
   }
 }
 
