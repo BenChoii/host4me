@@ -1,4 +1,4 @@
-import { query, mutation, internalMutation } from "./_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 // Get the current user's tenant (creates one if it doesn't exist)
@@ -101,6 +101,58 @@ export const completeOnboarding = mutation({
     if (!tenant) throw new Error("Tenant not found");
 
     await ctx.db.patch(tenant._id, { onboarded: true });
+  },
+});
+
+// Create tenant from Clerk webhook (when user signs up)
+export const createFromWebhook = internalMutation({
+  args: {
+    clerkUserId: v.string(),
+    name: v.string(),
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tenantId = await ctx.db.insert("tenants", {
+      clerkUserId: args.clerkUserId,
+      name: args.name,
+      email: args.email,
+      timezone: "America/New_York",
+      plan: "free",
+      actionsUsed: 0,
+      actionsLimit: 100,
+      onboarded: false,
+      telegramChatId: null,
+      telegramBotToken: null,
+    });
+
+    // Default scheduled reports
+    await ctx.db.insert("scheduledReports", {
+      tenantId,
+      type: "daily",
+      enabled: true,
+      sendAt: "08:00",
+      lastSentAt: null,
+    });
+    await ctx.db.insert("scheduledReports", {
+      tenantId,
+      type: "weekly",
+      enabled: true,
+      sendAt: "monday 09:00",
+      lastSentAt: null,
+    });
+
+    return tenantId;
+  },
+});
+
+// Internal query: find tenant by Clerk user ID
+export const tenantByClerkId = internalQuery({
+  args: { clerkUserId: v.string() },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("tenants")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .unique();
   },
 });
 

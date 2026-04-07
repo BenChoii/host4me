@@ -1,4 +1,4 @@
-import { mutation, action } from "./_generated/server";
+import { mutation, action, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
@@ -146,6 +146,46 @@ export const connectGmail = mutation({
     if (!tenant) throw new Error("Tenant not found");
 
     // Upsert Gmail connection
+    const existing = await ctx.db
+      .query("gmailConnections")
+      .withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        email: args.email,
+        accessToken: args.accessToken,
+        refreshToken: args.refreshToken,
+        status: "active",
+      });
+    } else {
+      await ctx.db.insert("gmailConnections", {
+        tenantId: tenant._id,
+        email: args.email,
+        accessToken: args.accessToken,
+        refreshToken: args.refreshToken,
+        status: "active",
+        lastSyncAt: null,
+      });
+    }
+  },
+});
+
+// Internal: Connect Gmail from OAuth callback (no auth context, uses clerkUserId)
+export const connectGmailInternal = internalMutation({
+  args: {
+    clerkUserId: v.string(),
+    email: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db
+      .query("tenants")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .unique();
+    if (!tenant) throw new Error("Tenant not found for Clerk user");
+
     const existing = await ctx.db
       .query("gmailConnections")
       .withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id))

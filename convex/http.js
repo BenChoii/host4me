@@ -15,7 +15,7 @@ http.route({
       const user = body.data;
       // Check if tenant already exists
       const existing = await ctx.runQuery(
-        internal.queries.tenantByClerkId,
+        internal.tenants.tenantByClerkId,
         { clerkUserId: user.id }
       );
 

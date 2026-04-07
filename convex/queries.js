@@ -1,4 +1,4 @@
-import { internalQuery, query } from "./_generated/server";
+import { internalQuery, internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
 // Internal: Get all tenants with active browser sessions (for cron inbox checks)

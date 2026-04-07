@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAction, useMutation } from 'convex/react';
+import { api } from '../../../convex/_generated/api';
 import { Building2, Mail, MessageSquare, Check, ArrowRight, ArrowLeft } from 'lucide-react';
 
 const STEPS = [
@@ -14,7 +16,10 @@ export default function Onboarding() {
   const [airbnbEmail, setAirbnbEmail] = useState('');
   const [airbnbPassword, setAirbnbPassword] = useState('');
   const [connecting, setConnecting] = useState(false);
+  const [loginResult, setLoginResult] = useState(null);
   const navigate = useNavigate();
+  const connectAirbnb = useAction(api.onboarding.connectAirbnb);
+  const completeOnboarding = useMutation(api.tenants.completeOnboarding);
 
   const currentStep = STEPS[step];
 
@@ -136,13 +141,23 @@ export default function Onboarding() {
               disabled={!airbnbEmail || !airbnbPassword || connecting}
               onClick={async () => {
                 setConnecting(true);
-                // TODO: Call Convex action to trigger browser agent login
-                // const result = await connectAirbnb({ email: airbnbEmail, password: airbnbPassword });
-                setTimeout(() => {
+                try {
+                  const result = await connectAirbnb({ email: airbnbEmail, password: airbnbPassword });
+                  setLoginResult(result);
+                  if (result.status === 'logged_in') {
+                    setStep(2);
+                  } else if (result.status === '2fa_required') {
+                    alert('Airbnb requires a verification code. Check your email/phone and enter it in Telegram via /auth airbnb YOUR_CODE');
+                    setStep(2);
+                  } else {
+                    alert(`Login issue: ${result.message || result.status}. You can retry or skip for now.`);
+                  }
+                } catch (err) {
+                  alert(`Connection error: ${err.message}. You can skip and try again later.`);
+                } finally {
                   setConnecting(false);
-                  setStep(2);
-                }, 2000);
-              }}
+                }
+              }
             >
               {connecting ? 'Connecting...' : 'Connect Airbnb'} <ArrowRight size={16} />
             </button>
@@ -220,7 +235,10 @@ export default function Onboarding() {
             </a>
             <button
               style={btnSecondary}
-              onClick={() => navigate('/dashboard')}
+              onClick={async () => {
+                await completeOnboarding();
+                navigate('/dashboard');
+              }}
             >
               Go to Dashboard
             </button>

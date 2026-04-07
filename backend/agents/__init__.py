@@ -1,7 +1,7 @@
 """
 Host4Me Agent Definitions — Google ADK
 
-Six-agent org chart (CPU-optimized with Gemma 4 E4B/E2B):
+Six-agent org chart powered by OpenRouter (Gemma 4 26B MoE):
   Alfred (CEO) ─┬─ Guest Comms
                  ├─ Escalation
                  ├─ Reporting
@@ -9,7 +9,7 @@ Six-agent org chart (CPU-optimized with Gemma 4 E4B/E2B):
                  └─ Profile Optimizer
 
 Alfred is the PM-facing agent. He delegates to sub-agents via ADK's
-built-in TransferToAgentTool. All agents use Gemma 4 via Ollama on CPU.
+built-in TransferToAgentTool. All agents use Gemma 4 via OpenRouter.
 """
 
 from google.adk.agents import LlmAgent
@@ -51,14 +51,20 @@ from .tools.onboarding import (
 
 import os
 
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-MODEL_PRIMARY = os.environ.get("OLLAMA_MODEL_PRIMARY", "gemma4:e4b")
-MODEL_FAST = os.environ.get("OLLAMA_MODEL_FAST", "gemma4:e2b")
+# OpenRouter configuration — replaces local Ollama
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+MODEL_PRIMARY = os.environ.get("AGENT_MODEL_PRIMARY", "google/gemma-4-26b-a4b-it")
+MODEL_FAST = os.environ.get("AGENT_MODEL_FAST", "google/gemma-4-26b-a4b-it")
 
 
 def _model(name: str) -> LiteLlm:
-    """Create a LiteLLM model pointing at Ollama."""
-    return LiteLlm(model=f"ollama/{name}", api_base=OLLAMA_BASE_URL)
+    """Create a LiteLLM model pointing at OpenRouter."""
+    return LiteLlm(
+        model=f"openrouter/{name}",
+        api_base=OPENROUTER_BASE_URL,
+        api_key=OPENROUTER_API_KEY,
+    )
 
 
 # ---------------------------------------------------------------------------
