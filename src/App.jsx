@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { SignedIn, SignedOut, SignIn, SignUp } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignIn, SignUp, useAuth } from '@clerk/clerk-react';
 
 import LandingPage from './pages/LandingPage';
 import DashboardLayout from './pages/dashboard/DashboardLayout';
@@ -19,16 +19,24 @@ function ProtectedRoute({ children }) {
   );
 }
 
+// Redirect signed-in users away from the landing page
+function LandingOrDashboard() {
+  const { isSignedIn, isLoaded } = useAuth();
+  if (!isLoaded) return null;
+  if (isSignedIn) return <Navigate to="/dashboard" replace />;
+  return <LandingPage />;
+}
+
 export default function App() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/" element={<LandingPage />} />
+      <Route path="/" element={<LandingOrDashboard />} />
       <Route
         path="/sign-in/*"
         element={
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0a0a0a' }}>
-            <SignIn routing="path" path="/sign-in" afterSignInUrl="/dashboard" />
+            <SignIn routing="path" path="/sign-in" forceRedirectUrl="/dashboard" />
           </div>
         }
       />
@@ -36,7 +44,7 @@ export default function App() {
         path="/sign-up/*"
         element={
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0a0a0a' }}>
-            <SignUp routing="path" path="/sign-up" afterSignUpUrl="/dashboard" />
+            <SignUp routing="path" path="/sign-up" forceRedirectUrl="/dashboard" />
           </div>
         }
       />
