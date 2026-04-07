@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -9,6 +10,8 @@ import {
   MessageSquare,
   Bell,
   Shield,
+  Menu,
+  X,
 } from 'lucide-react';
 import '../../dashboard.css';
 
@@ -20,16 +23,41 @@ const NAV_ITEMS = [
 
 export default function DashboardLayout() {
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <div className="dash">
+      {/* Mobile menu overlay */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMobileMenuOpen(false)}
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+              zIndex: 20, display: 'none',
+            }}
+            className="dash-mobile-overlay"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
-      <aside className="dash-sidebar">
+      <aside className={`dash-sidebar ${mobileMenuOpen ? 'open' : ''}`}>
         <div className="dash-sidebar-header">
           <div className="dash-logo">
             <div className="dash-logo-icon">H</div>
             Host4Me
           </div>
+          <button
+            className="dash-mobile-close dash-btn dash-btn-ghost"
+            onClick={() => setMobileMenuOpen(false)}
+            style={{ display: 'none', padding: 4 }}
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="dash-nav">
@@ -89,12 +117,21 @@ export default function DashboardLayout() {
       {/* Main content */}
       <div className="dash-main">
         <header className="dash-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              className="dash-mobile-hamburger dash-btn dash-btn-ghost"
+              onClick={() => setMobileMenuOpen(true)}
+              style={{ display: 'none', padding: 6 }}
+            >
+              <Menu size={20} />
+            </button>
           <h1>
             {location.pathname === '/dashboard' && 'Overview'}
             {location.pathname === '/dashboard/properties' && 'Properties'}
             {location.pathname === '/dashboard/settings' && 'Settings'}
             {location.pathname === '/dashboard/onboarding' && 'Get Started'}
           </h1>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className="dash-btn dash-btn-ghost" style={{ position: 'relative' }}>
               <Bell size={16} />

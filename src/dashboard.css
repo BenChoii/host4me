@@ -610,8 +610,61 @@
 
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
-  .dash-sidebar { display: none; }
+  /* Sidebar — hidden by default, slides in as overlay */
+  .dash-sidebar {
+    position: fixed;
+    left: -260px;
+    top: 0;
+    height: 100vh;
+    z-index: 30;
+    transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 260px;
+  }
+  .dash-sidebar.open { left: 0; }
+
+  /* Mobile overlay */
+  .dash-mobile-overlay { display: block !important; }
+
+  /* Show hamburger and close buttons */
+  .dash-mobile-hamburger { display: flex !important; }
+  .dash-mobile-close { display: flex !important; }
+
+  /* Sidebar header — row with close button */
+  .dash-sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Content */
   .dash-content { padding: 20px 16px; }
-  .dash-metrics { grid-template-columns: repeat(2, 1fr); }
+  .dash-header { padding: 12px 16px; }
+  .dash-header h1 { font-size: 14px; }
+
+  /* Metrics — 2 columns */
+  .dash-metrics { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .dash-metric { padding: 14px 16px; }
+  .dash-metric-value { font-size: 22px; }
+  .dash-metric-label { font-size: 11px; }
+
+  /* Property grid */
   .dash-property-grid { grid-template-columns: 1fr; }
+
+  /* Cards */
+  .dash-card { padding: 16px; }
+  .dash-settings-section { padding: 18px; }
+
+  /* Onboarding */
+  .dash-onboarding { padding: 0; }
+
+  /* Feed */
+  .dash-feed-title { font-size: 12.5px; }
+
+  /* Hide upgrade button on mobile header */
+  .dash-header .dash-btn-primary { display: none; }
+}
+
+@media (max-width: 480px) {
+  .dash-metrics { grid-template-columns: 1fr; }
+  .dash-metric-value { font-size: 24px; }
 }

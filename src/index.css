@@ -1709,3 +1709,114 @@ p {
     border-radius: 14px;
   }
 }
+
+/* ═══════════════════════════════════════════
+   COMPREHENSIVE MOBILE OVERRIDES
+   ═══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Nav — compact */
+  .nav {
+    padding: 0 16px;
+    height: 64px;
+  }
+  .nav-logo { font-size: 20px; }
+  .nav-links { display: none; }
+  .nav-cta { font-size: 13px; padding: 8px 16px; }
+
+  /* Hero — tighter */
+  .hero {
+    padding: 100px 20px 50px;
+    min-height: auto;
+  }
+  .hero h1 { font-size: clamp(2rem, 8vw, 3rem); }
+  .hero-subhead { font-size: 15px; }
+  .hero-buttons {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .hero-buttons .btn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+  .chat-mockup { margin: 30px -10px 0; }
+
+  /* Social proof */
+  .stats-grid {
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+  }
+  .stat-item { text-align: center; }
+
+  /* Marquee */
+  .marquee-giant .marquee-content .marquee-item { font-size: clamp(24px, 6vw, 48px); }
+  .marquee-outline .marquee-content .marquee-item { font-size: clamp(20px, 5vw, 40px); }
+
+  /* Mask section */
+  .mask-text, .mask-text-filled { font-size: clamp(40px, 12vw, 100px); }
+
+  /* Sections */
+  .section { padding: 50px 20px; }
+  .section-wide, .section-container { padding: 0; }
+  .section-heading { font-size: clamp(1.6rem, 5vw, 2.5rem); }
+
+  /* Pain points */
+  .pain-points { gap: 20px; }
+  .pain-point { flex-direction: column; gap: 12px; }
+
+  /* Comparison */
+  .comparison-grid { margin: 24px 0 0; }
+
+  /* Agent team cards (inline styles in JSX need override) */
+  .agent-office-section .section-wide > div:last-child {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Stack features — unstick and stack */
+  .stack-container { grid-template-columns: 1fr !important; }
+  .stack-visual {
+    position: relative !important;
+    top: 0 !important;
+    margin-bottom: 24px;
+  }
+  .stack-feature-card { padding: 24px 20px; }
+  .mockup { margin: 0 auto; max-width: 400px; }
+
+  /* Pricing */
+  .pricing-grid {
+    grid-template-columns: 1fr !important;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+  .pricing-card.featured { transform: none; }
+
+  /* FAQ */
+  .faq-container { padding: 0; }
+  .faq-question h3 { font-size: 15px; }
+
+  /* Night shift */
+  .night-shift-section .remotion-player-wrap {
+    margin: 24px -10px 0 !important;
+    border-radius: 12px !important;
+  }
+
+  /* Final CTA */
+  .final-cta { padding: 60px 20px; }
+  .cta-headline { font-size: clamp(1.5rem, 5vw, 2.5rem) !important; }
+
+  /* Footer */
+  .footer { padding: 40px 20px; }
+}
+
+@media (max-width: 480px) {
+  .hero { padding: 90px 16px 40px; }
+  .hero h1 { font-size: 1.8rem; }
+  .section { padding: 40px 16px; }
+  .agent-office-section .section-wide > div:last-child {
+    grid-template-columns: 1fr !important;
+  }
+  .nav-cta { font-size: 12px; padding: 7px 14px; }
+}
