@@ -340,34 +340,27 @@ async def handle_login(request):
     try:
         # Navigate to login
         await page.goto("https://www.airbnb.com/login", wait_until="domcontentloaded", timeout=30000)
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(4000)
 
-        # Use agent loop to fill email
+        # Single agent loop for the ENTIRE login flow (email + password)
         result = await run_agent_loop(pm_id,
-            f"I need to log in. First, find the email/phone input field and enter this email: {email}. "
-            f"Then click the Continue or Submit button. "
-            f"If there's a 'Continue with email' or 'Log in with email' button, click that first. "
-            f"When you've submitted the email and see a password field or next step, say DONE.",
-            max_steps=5)
-
-        if result["status"] == "failed":
-            return web.json_response({"status": "error", "message": result.get("reason", "Could not enter email")})
-
-        # Now handle password
-        await page.wait_for_timeout(2000)
-        result = await run_agent_loop(pm_id,
-            f"I see a login page. If there's a password input field, click on it and type this password: {password}. "
-            f"Then click the Log In / Continue / Submit button. "
-            f"If you don't see a password field, describe what you see. "
-            f"When you've submitted the password, say DONE.",
-            max_steps=5)
+            f"You are on the Airbnb login page. Complete the ENTIRE login process:\n"
+            f"1. If you see a 'Continue with email' or phone/email input, enter this email: {email}\n"
+            f"2. Click Continue/Submit to proceed to the password step.\n"
+            f"3. When the password field appears, click on it and type this password: {password}\n"
+            f"4. Click Log In / Continue / Submit.\n"
+            f"5. Wait for the result.\n"
+            f"6. When you see EITHER: a dashboard/inbox (logged in), a 2FA/verification code prompt, "
+            f"or an error — say DONE and describe what you see.\n\n"
+            f"IMPORTANT: Complete ALL steps before saying DONE. Don't say DONE after just entering the email.",
+            max_steps=10)
 
         await page.wait_for_timeout(3000)
 
         # Analyze final state
         analysis = await screenshot_and_analyze(pm_id,
             "Is the user logged in? Is there a 2FA/verification code prompt? "
-            "If 2FA, is the code sent via EMAIL or PHONE/SMS? What text does the page show? "
+            "If 2FA, is the code sent via EMAIL or PHONE/SMS? What exact text does the page show? "
             "Is there a CAPTCHA? Respond starting with: LOGGED_IN, 2FA_EMAIL, 2FA_PHONE, 2FA_UNKNOWN, CAPTCHA, LOGIN_ERROR, or UNKNOWN.")
 
         await save_session(pm_id)
@@ -393,13 +386,48 @@ async def handle_2fa(request):
     pm_id = data.get("pmId", "default")
     code = data.get("code", "")
 
+    s = await get_session(pm_id)
+    page = s["page"]
+
     try:
+        # First, check what page we're actually on
+        current_url = page.url
+        ss = await take_screenshot(pm_id)
+        state_check = await ask_gemini_vision(ss,
+            "What page is this? Is there a verification/2FA code input field visible? "
+            "Or is this a login page asking for email/phone? "
+            "Respond with: 2FA_READY (if code input visible), LOGIN_PAGE (if asking for email/phone), "
+            "LOGGED_IN (if already logged in), or OTHER (describe what you see).")
+
+        state_upper = state_check.upper()
+        print(f"[2FA] Page state check: {state_check[:100]}")
+
+        # If we're on the login page instead of 2FA, we need to re-login
+        if "LOGIN_PAGE" in state_upper and "2FA" not in state_upper:
+            return web.json_response({
+                "status": "error",
+                "message": "Browser is on the login page, not the 2FA page. The session may have expired. Please try logging in again.",
+                "analysis": state_check,
+            })
+
+        # If already logged in, no need for 2FA
+        if "LOGGED_IN" in state_upper:
+            return web.json_response({
+                "status": "submitted",
+                "analysis": "Already logged in — no 2FA needed.",
+            })
+
+        # We're on the 2FA page — submit the code
         result = await run_agent_loop(pm_id,
-            f"There should be a verification code input field on this page. "
-            f"Click on the input field and type this code: {code}. "
-            f"Then click the Submit/Continue/Verify button. "
-            f"When done, say DONE with the result (logged in, error, etc).",
-            max_steps=5)
+            f"There is a verification code input field on this page. "
+            f"Step 1: Click on the code input field (it should be a text input for a 6-digit code). "
+            f"Step 2: Type this code: {code}\n"
+            f"Step 3: Click the Submit / Continue / Verify button.\n"
+            f"Step 4: Wait 3 seconds for the page to respond.\n"
+            f"Step 5: Say DONE and describe what happened (logged in? error? still loading?).\n\n"
+            f"IMPORTANT: Make sure to click the input field FIRST before typing the code. "
+            f"The code is exactly: {code}",
+            max_steps=6)
 
         await save_session(pm_id)
         return web.json_response({
