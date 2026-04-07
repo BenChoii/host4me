@@ -7,28 +7,28 @@ const crons = cronJobs();
 crons.interval(
   "check-inboxes",
   { minutes: 3 },
-  internal.worker.checkAllInboxes
+  internal.actions.worker.checkAllInboxes
 );
 
 // Sync Gmail every 15 minutes
 crons.interval(
   "sync-gmail",
   { minutes: 15 },
-  internal.worker.syncAllGmail
+  internal.actions.worker.syncAllGmail
 );
 
 // Daily briefings at 8am UTC (tenants adjust via timezone)
 crons.daily(
   "daily-briefings",
   { hourUTC: 13, minuteUTC: 0 }, // 8am ET
-  internal.worker.sendDailyBriefings
+  internal.actions.worker.sendDailyBriefings
 );
 
 // Weekly reports on Mondays at 9am UTC
 crons.weekly(
   "weekly-reports",
   { dayOfWeek: "monday", hourUTC: 14, minuteUTC: 0 },
-  internal.worker.sendWeeklyReports
+  internal.actions.worker.sendWeeklyReports
 );
 
 export default crons;
