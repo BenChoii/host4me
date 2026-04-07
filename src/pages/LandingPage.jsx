@@ -101,7 +101,7 @@ const FAQ_ITEMS = [
   { q: "Can Alfred work with our existing tools?", a: "Yes. Alfred integrates with Airbnb, Vrbo, iCal, Stripe, and Twilio. If you use Hostaway or Guesty, we can migrate your data and message history seamlessly." },
   { q: "What if Alfred makes a mistake?", a: "You control when Alfred sends replies. Every outgoing message is reviewed by you first—think of Alfred as a highly accurate draft writer, not a complete replacement." },
   { q: "Can you scale to 50+ listings?", a: "Absolutely. Many of our Portfolio clients (15+ listings) manage hundreds across multiple properties. Alfred scales without extra cost per listing once you're on our Portfolio plan." },
-  { q: "How does the free tier work?", a: "You get 100 free actions — each guest reply, calendar sync, or optimization counts as one action. That's enough to fully onboard, see Alfred in action, and experience the time savings. No credit card required. When you're ready for unlimited actions, choose the plan that fits." },
+  { q: "How does the free trial work?", a: "You get 14 days of full access to Alfred — shadow mode, daily briefings, guest messaging, Gmail learning. No credit card required. After 14 days, choose the plan that fits your portfolio." },
 ];
 
 const HERO_CHAT = [
@@ -625,10 +625,10 @@ export default function LandingPage() {
       {/* ════════ AGENT OFFICE — REMOTION ════════ */}
       <section className="section agent-office-section">
         <div className="section-wide">
-          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>The Team</span>
-          <h2 className="section-heading">Meet Alfred's Office</h2>
+          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Under the Hood</span>
+          <h2 className="section-heading">Alfred's Specialist Team</h2>
           <p className="comparison-caption reveal">
-            Four specialized AI agents working together. Each one handles a different part of your property management.
+            Behind Alfred is a team of specialist agents — guest communications, escalation management, market research, and reporting. You just talk to Alfred.
           </p>
           <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0' }}>
             <SafePlayer
@@ -662,7 +662,7 @@ export default function LandingPage() {
                     <div className="mockup-dot" />
                   </div>
                   <div className="mockup-body">
-                    {/* State 1: Voice learning metric */}
+                    {/* State 1: Voice learning */}
                     <div className={`mockup-state ${activeFeature === 1 ? 'active' : ''}`} data-state="1">
                       <div className="mock-metric">97.3%</div>
                       <div className="mock-label">Voice match accuracy</div>
@@ -671,55 +671,55 @@ export default function LandingPage() {
                         <div className="mock-bar" style={{ flex: 0.2 }} />
                       </div>
                     </div>
-                    {/* State 2: Cross-platform grid */}
+                    {/* State 2: Gmail learning */}
                     <div className={`mockup-state ${activeFeature === 2 ? 'active' : ''}`} data-state="2">
+                      <ul className="mock-list">
+                        <li><div className="mock-check">✓</div> WiFi: BeachLife2024</li>
+                        <li><div className="mock-check">✓</div> Gate code: #4521</li>
+                        <li><div className="mock-check">✓</div> Check-in: 3 PM, lockbox</li>
+                        <li><div className="mock-check">✓</div> Parking: 2 spots, rear</li>
+                        <li><div className="mock-check">✓</div> Cleaning: Tuesdays 10 AM</li>
+                      </ul>
+                    </div>
+                    {/* State 3: Shadow mode */}
+                    <div className={`mockup-state ${activeFeature === 3 ? 'active' : ''}`} data-state="3">
                       <div className="mock-grid">
                         <div className="mock-card">
-                          <div className="mock-card-num">Airbnb</div>
-                          <div className="mock-card-label">14 messages today</div>
+                          <div className="mock-card-num">23</div>
+                          <div className="mock-card-label">Drafts sent</div>
                         </div>
                         <div className="mock-card">
-                          <div className="mock-card-num">Vrbo</div>
-                          <div className="mock-card-label">8 messages today</div>
+                          <div className="mock-card-num">21</div>
+                          <div className="mock-card-label">Approved</div>
                         </div>
                         <div className="mock-card">
-                          <div className="mock-card-num">SMS</div>
-                          <div className="mock-card-label">3 messages today</div>
+                          <div className="mock-card-num">91%</div>
+                          <div className="mock-card-label">Approval rate</div>
                         </div>
                         <div className="mock-card">
-                          <div className="mock-card-num">Email</div>
-                          <div className="mock-card-label">6 messages today</div>
+                          <div className="mock-card-num">2</div>
+                          <div className="mock-card-label">Edited</div>
                         </div>
                       </div>
                     </div>
-                    {/* State 3: Escalation checklist */}
-                    <div className={`mockup-state ${activeFeature === 3 ? 'active' : ''}`} data-state="3">
-                      <ul className="mock-list">
-                        <li><div className="mock-check">✓</div> Billing dispute flagged</li>
-                        <li><div className="mock-check">✓</div> Draft response created</li>
-                        <li><div className="mock-check">✓</div> Owner notified via SMS</li>
-                        <li><div className="mock-check">✓</div> Guest sees "escalated" status</li>
-                        <li><div className="mock-check">✓</div> Resolution logged</li>
-                      </ul>
-                    </div>
-                    {/* State 4: Dashboard analytics */}
+                    {/* State 4: Daily briefing */}
                     <div className={`mockup-state ${activeFeature === 4 ? 'active' : ''}`} data-state="4" style={{ alignItems: 'center', textAlign: 'center' }}>
                       <div className="mock-grid">
+                        <div className="mock-card">
+                          <div className="mock-card-num">14</div>
+                          <div className="mock-card-label">Messages handled</div>
+                        </div>
                         <div className="mock-card">
                           <div className="mock-card-num">47s</div>
                           <div className="mock-card-label">Avg reply time</div>
                         </div>
                         <div className="mock-card">
-                          <div className="mock-card-num">4.9★</div>
-                          <div className="mock-card-label">Guest sentiment</div>
+                          <div className="mock-card-num">2</div>
+                          <div className="mock-card-label">New bookings</div>
                         </div>
                         <div className="mock-card">
-                          <div className="mock-card-num">0</div>
-                          <div className="mock-card-label">Calendar conflicts</div>
-                        </div>
-                        <div className="mock-card">
-                          <div className="mock-card-num">312</div>
-                          <div className="mock-card-label">Messages this month</div>
+                          <div className="mock-card-num">$0</div>
+                          <div className="mock-card-label">Escalations</div>
                         </div>
                       </div>
                     </div>
@@ -771,7 +771,7 @@ export default function LandingPage() {
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Pricing</span>
           <h2 className="section-heading">Simple, Transparent Pricing</h2>
-          <p className="pricing-subhead reveal">Start free with 100 actions. No credit card. Upgrade when you're ready.</p>
+          <p className="pricing-subhead reveal">Try Alfred free for 14 days. No credit card required.</p>
           <div className="pricing-grid">
             {PRICING.map((p, i) => (
               <motion.div
@@ -788,16 +788,27 @@ export default function LandingPage() {
                 <ul className="pricing-features">
                   {p.features.map((f, j) => <li key={j}><Check size={16} strokeWidth={2.5} className="pricing-check" />{f}</li>)}
                 </ul>
-                <motion.a
-                  href={CALENDLY_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`btn ${p.featured ? 'btn-primary' : 'btn-outline'}`}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                >
-                  Start Free
-                </motion.a>
+                <SignedOut>
+                  <SignInButton mode="modal">
+                    <motion.button
+                      className={`btn ${p.featured ? 'btn-primary' : 'btn-outline'}`}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                    >
+                      {p.tier === 'Trial' ? 'Start Free Trial' : 'Get Started'}
+                    </motion.button>
+                  </SignInButton>
+                </SignedOut>
+                <SignedIn>
+                  <motion.a
+                    href="/dashboard"
+                    className={`btn ${p.featured ? 'btn-primary' : 'btn-outline'}`}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    Go to Dashboard
+                  </motion.a>
+                </SignedIn>
               </motion.div>
             ))}
           </div>
