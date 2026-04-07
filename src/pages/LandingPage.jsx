@@ -421,14 +421,14 @@ export default function LandingPage() {
 
     /* ─── Color Shift ─── */
     const colorSections = [
-      { trigger: '.social-proof', bg: '#FAF8F5' },
-      { trigger: '.marquee-band', bg: '#F5F0EB' },
-      { trigger: '.mask-section', bg: '#2D2B3D' },
-      { trigger: '.solution-section', bg: '#FAF8F5' },
-      { trigger: '.features-section', bg: '#F7F2ED' },
-      { trigger: '.how-it-works', bg: '#FAF8F5' },
-      { trigger: '.pricing-section', bg: '#F5F0EB' },
-      { trigger: '.faq-section', bg: '#FAF8F5' },
+      { trigger: '.social-proof', bg: '#fafafa' },
+      { trigger: '.marquee-band', bg: '#f4f4f5' },
+      { trigger: '.mask-section', bg: '#09090b' },
+      { trigger: '.solution-section', bg: '#fafafa' },
+      { trigger: '.features-section', bg: '#f4f4f5' },
+      { trigger: '.how-it-works', bg: '#fafafa' },
+      { trigger: '.pricing-section', bg: '#f4f4f5' },
+      { trigger: '.faq-section', bg: '#fafafa' },
     ];
 
     colorSections.forEach(({ trigger, bg }) => {
@@ -497,7 +497,7 @@ export default function LandingPage() {
               <SignInButton mode="modal">
                 <motion.button
                   className="btn btn-primary"
-                  whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(176, 124, 91, 0.4)' }}
+                  whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(99, 102, 241, 0.35)' }}
                   whileTap={{ scale: 0.97 }}
                 >
                   Try Alfred Free — 14 Days
@@ -508,7 +508,7 @@ export default function LandingPage() {
               <motion.a
                 href="/dashboard"
                 className="btn btn-primary"
-                whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(176, 124, 91, 0.4)' }}
+                whileHover={{ scale: 1.05, boxShadow: '0 16px 40px rgba(99, 102, 241, 0.35)' }}
                 whileTap={{ scale: 0.97 }}
               >
                 Go to Dashboard
@@ -579,21 +579,21 @@ export default function LandingPage() {
           <h2 className="section-heading">Managing guests shouldn't feel like a second job</h2>
           <div className="pain-points">
             <div className="pain-point">
-              <div className="pain-icon"><Moon size={22} strokeWidth={2} color="var(--copper)" /></div>
+              <div className="pain-icon"><Moon size={22} strokeWidth={2} color="var(--primary)" /></div>
               <div>
                 <h3>Late-night messages</h3>
                 <p>Guests ask questions at 2 AM. You're asleep. By morning, they've left a bad review.</p>
               </div>
             </div>
             <div className="pain-point">
-              <div className="pain-icon"><CalendarX size={22} strokeWidth={2} color="var(--copper)" /></div>
+              <div className="pain-icon"><CalendarX size={22} strokeWidth={2} color="var(--primary)" /></div>
               <div>
                 <h3>Calendar conflicts</h3>
                 <p>Managing check-ins, cleanings, and maintenance across multiple properties becomes a spreadsheet nightmare.</p>
               </div>
             </div>
             <div className="pain-point">
-              <div className="pain-icon"><MessageSquareOff size={22} strokeWidth={2} color="var(--copper)" /></div>
+              <div className="pain-icon"><MessageSquareOff size={22} strokeWidth={2} color="var(--primary)" /></div>
               <div>
                 <h3>Inconsistent responses</h3>
                 <p>You're tired. Your responses get shorter and less helpful. Guests feel it. Your ratings suffer.</p>
@@ -649,7 +649,7 @@ export default function LandingPage() {
                 textAlign: 'center',
               }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>{agent.emoji}</div>
-                <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--navy)', marginBottom: 8 }}>{agent.name}</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>{agent.name}</h3>
                 <p style={{ fontSize: 14, color: 'var(--text-light)', margin: 0, lineHeight: 1.6 }}>{agent.desc}</p>
               </div>
             ))}
@@ -906,7 +906,7 @@ export default function LandingPage() {
             <SignInButton mode="modal">
               <motion.button
                 className="btn btn-primary"
-                whileHover={{ scale: 1.06, boxShadow: '0 16px 48px rgba(198, 125, 59, 0.5)' }}
+                whileHover={{ scale: 1.06, boxShadow: '0 16px 48px rgba(99, 102, 241, 0.4)' }}
                 whileTap={{ scale: 0.97 }}
               >
                 Try Alfred Free
@@ -917,7 +917,7 @@ export default function LandingPage() {
             <motion.a
               href="/dashboard"
               className="btn btn-primary"
-              whileHover={{ scale: 1.06, boxShadow: '0 16px 48px rgba(198, 125, 59, 0.5)' }}
+              whileHover={{ scale: 1.06, boxShadow: '0 16px 48px rgba(99, 102, 241, 0.4)' }}
               whileTap={{ scale: 0.97 }}
             >
               Go to Dashboard

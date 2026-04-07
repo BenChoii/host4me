@@ -32,7 +32,7 @@ function WelcomeView() {
         className="dash-card dash-card-glow"
         style={{
           padding: '36px 32px',
-          background: 'linear-gradient(135deg, var(--dash-surface), rgba(198, 125, 59, 0.06))',
+          background: 'linear-gradient(135deg, var(--dash-surface), rgba(99, 102, 241, 0.06))',
           marginBottom: 24,
           textAlign: 'center',
         }}
@@ -50,7 +50,7 @@ function WelcomeView() {
             alignItems: 'center',
             justifyContent: 'center',
             margin: '0 auto 16px',
-            boxShadow: '0 8px 32px rgba(198, 125, 59, 0.3)',
+            boxShadow: '0 8px 32px rgba(99, 102, 241, 0.3)',
           }}
         >
           <Bot size={32} color="white" />
@@ -64,7 +64,7 @@ function WelcomeView() {
         <motion.button
           className="dash-btn dash-btn-primary"
           style={{ padding: '12px 28px', fontSize: 14 }}
-          whileHover={{ scale: 1.03, boxShadow: '0 0 24px rgba(198, 125, 59, 0.3)' }}
+          whileHover={{ scale: 1.03, boxShadow: '0 0 24px rgba(99, 102, 241, 0.3)' }}
           whileTap={{ scale: 0.97 }}
           onClick={() => navigate('/dashboard/onboarding')}
         >
@@ -163,7 +163,7 @@ function ActiveDashboard() {
           alignItems: 'center',
           gap: 16,
           padding: '16px 20px',
-          background: 'linear-gradient(135deg, var(--dash-surface), rgba(198, 125, 59, 0.04))',
+          background: 'linear-gradient(135deg, var(--dash-surface), rgba(99, 102, 241, 0.04))',
         }}
       >
         <div style={{

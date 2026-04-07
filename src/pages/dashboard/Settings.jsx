@@ -16,8 +16,8 @@ export default function Settings() {
 
       {/* Shadow Mode — prominent toggle */}
       <div className="dash-settings-section" style={{
-        background: 'linear-gradient(135deg, var(--dash-surface), rgba(198, 125, 59, 0.04))',
-        borderColor: 'rgba(198, 125, 59, 0.15)',
+        background: 'linear-gradient(135deg, var(--dash-surface), rgba(99, 102, 241, 0.04))',
+        borderColor: 'rgba(99, 102, 241, 0.15)',
       }}>
         <div className="dash-settings-title">
           <Shield size={16} color="var(--dash-accent)" />

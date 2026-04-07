@@ -17,12 +17,12 @@
   --dash-text-secondary: #9d9db5;
   --dash-text-muted: #4e4e6a;
 
-  --dash-accent: #c67d3b;
-  --dash-accent-hover: #d4934f;
-  --dash-accent-subtle: rgba(198, 125, 59, 0.12);
-  --dash-accent-glow: rgba(198, 125, 59, 0.25);
+  --dash-accent: #6366f1;
+  --dash-accent-hover: #4f46e5;
+  --dash-accent-subtle: rgba(99, 102, 241, 0.12);
+  --dash-accent-glow: rgba(99, 102, 241, 0.25);
 
-  --dash-purple: #7c5cfc;
+  --dash-purple: #6366f1;
   --dash-purple-subtle: rgba(124, 92, 252, 0.1);
   --dash-blue: #4d8eff;
   --dash-blue-subtle: rgba(77, 142, 255, 0.1);
@@ -393,13 +393,13 @@
 }
 
 .dash-btn-primary {
-  background: linear-gradient(135deg, var(--dash-accent), #d4934f);
+  background: var(--dash-accent);
   color: white;
-  box-shadow: 0 2px 12px rgba(198, 125, 59, 0.2);
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.2);
 }
 
 .dash-btn-primary:hover {
-  box-shadow: 0 4px 20px rgba(198, 125, 59, 0.35);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
   transform: translateY(-1px);
 }
 

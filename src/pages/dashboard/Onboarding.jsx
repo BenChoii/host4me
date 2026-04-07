@@ -28,7 +28,7 @@ export default function Onboarding() {
           <div className="dash-card dash-card-glow" style={{
             textAlign: 'center',
             padding: '40px 32px',
-            background: 'linear-gradient(135deg, var(--dash-surface), rgba(198, 125, 59, 0.06))',
+            background: 'linear-gradient(135deg, var(--dash-surface), rgba(99, 102, 241, 0.06))',
             marginBottom: 24,
           }}>
             <motion.div
@@ -44,7 +44,7 @@ export default function Onboarding() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 margin: '0 auto 20px',
-                boxShadow: '0 8px 32px rgba(198, 125, 59, 0.3)',
+                boxShadow: '0 8px 32px rgba(99, 102, 241, 0.3)',
               }}
             >
               <Bot size={40} color="white" />
@@ -86,7 +86,7 @@ export default function Onboarding() {
           <motion.button
             className="dash-btn dash-btn-primary"
             style={{ width: '100%', justifyContent: 'center', padding: '14px 24px', fontSize: 15 }}
-            whileHover={{ scale: 1.02, boxShadow: '0 0 24px rgba(198, 125, 59, 0.3)' }}
+            whileHover={{ scale: 1.02, boxShadow: '0 0 24px rgba(99, 102, 241, 0.3)' }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setStep('connect')}
           >
@@ -206,7 +206,7 @@ export default function Onboarding() {
               rel="noopener noreferrer"
               className="dash-btn dash-btn-primary"
               style={{ textDecoration: 'none', padding: '14px 28px', fontSize: 15 }}
-              whileHover={{ scale: 1.03, boxShadow: '0 0 24px rgba(198, 125, 59, 0.3)' }}
+              whileHover={{ scale: 1.03, boxShadow: '0 0 24px rgba(99, 102, 241, 0.3)' }}
               whileTap={{ scale: 0.97 }}
             >
               <MessageSquare size={16} /> Open Telegram <ExternalLink size={12} />
