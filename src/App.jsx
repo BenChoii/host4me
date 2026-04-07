@@ -36,7 +36,7 @@ export default function App() {
         path="/sign-up/*"
         element={
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0a0a0a' }}>
-            <SignUp routing="path" path="/sign-up" afterSignUpUrl="/dashboard/onboarding" />
+            <SignUp routing="path" path="/sign-up" afterSignUpUrl="/dashboard" />
           </div>
         }
       />
