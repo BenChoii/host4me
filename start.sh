@@ -3,7 +3,7 @@
 # Run this once after git pull to start all services
 # Usage: ./start.sh
 
-set -e
+# Don't use set -e — we handle errors individually
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$SCRIPT_DIR/backend"
@@ -64,8 +64,10 @@ fi
 "$VENV/bin/pip" install -q -r "$BROWSER_DIR/requirements.txt"
 ok "Python deps installed"
 
-# Source env vars for the browser service
-set -a; source "$ENV_FILE"; set +a
+# Source env vars for the browser service (filter out comments and blank lines)
+set -a
+eval "$(grep -v '^\s*#' "$ENV_FILE" | grep -v '^\s*$')"
+set +a
 
 # Start browser service in background
 nohup "$VENV/bin/python" "$BROWSER_DIR/service.py" \
