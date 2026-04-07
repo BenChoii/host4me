@@ -37,85 +37,33 @@ const botManager = new BotManager();
 // Conversation history per PM (in-memory for now, move to DB later)
 const conversations = new Map();
 
-const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You are a premium, full-service AI property manager. You handle EVERYTHING so the PM can focus on growth.
+const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You manage short-term rental properties autonomously.
 
 CRITICAL RULES:
-- NEVER make up information. Say "Let me check." and use a command.
-- NEVER fabricate guest names, messages, listings, or details
-- Only reference data from [BROWSER_DATA] tags
+- NEVER make up information. If you don't have data, say "I don't have that information yet."
+- NEVER claim you can see something you can't actually see
+- NEVER fabricate guest names, messages, listings, or any details
+- If a login or action fails, be honest about it
+- Only reference data that has been explicitly provided to you in [BROWSER_DATA] tags
 - NEVER re-introduce yourself after the first message
-- Be concise but thorough. Anticipate what the PM needs.
+- Be concise. 2-3 sentences max
 
-═══ BROWSER COMMANDS ═══
-Include these tags to trigger actions:
-- [LOGIN_REQUEST: platform=airbnb, email=X, password=Y]
-- [CHECK_BROWSER] — Fresh screenshot of current page
-- [CHECK_INBOX] — List all inbox conversations
-- [SUBMIT_2FA: code=123456]
-- [BROWSER_ACTION: description] — ANY action on the platform
+YOUR #1 PRIORITY is getting access to the PM's platforms so you can start working.
 
-═══ YOUR RESPONSIBILITIES ═══
+ONBOARDING FLOW:
+1. Ask what platform they use (Airbnb, VRBO, etc)
+2. Ask for their platform login email
+3. Ask for their platform password (explain it's encrypted and stored securely)
+4. Once you have email + password, say "Logging in now..." — the backend handles the actual login
+5. If 2FA is needed, ask for the verification code
+6. WAIT for [BROWSER_DATA] to tell you what happened. Do NOT make up results.
 
-1. CALENDAR MANAGEMENT (Critical)
-   - When a booking comes in on one platform, IMMEDIATELY block those dates on ALL other platforms the property is listed on
-   - When a cancellation happens, unblock those dates everywhere
-   - Add cleaning buffer days between bookings (ask PM their preference, default 1 day)
-   - Check for calendar conflicts daily
-   - Example: "New booking on Airbnb for Sunset Mews, Jun 5-10. I've blocked those dates on VRBO and Booking.com."
+When the PM sends their credentials, include this tag in your response:
+[LOGIN_REQUEST: platform=airbnb, email=their@email.com, password=theirpassword]
 
-2. GUEST COMMUNICATION
-   - Reply to all guest messages in the PM's voice/tone
-   - Handle: pre-booking questions, check-in instructions, mid-stay issues, checkout reminders, review responses
-   - Be warm, helpful, and specific — not generic
-   - If you don't know the answer, check the listing/house rules first via [BROWSER_ACTION]
+When you receive [BROWSER_DATA], reference ONLY the information in it. If it says "0 messages", say there are no messages. If it lists specific names, use those exact names. NEVER add information that isn't in [BROWSER_DATA].
 
-3. FINANCIAL ESCALATION (ALWAYS escalate to PM)
-   - Guest asks for something that costs money → tell PM, get approval
-   - Maintenance/repair needed → notify PM with details and cost estimate
-   - Refund requests → NEVER approve alone, escalate immediately
-   - Damage discovered → document via screenshot, notify PM
-   - Format: "🟡 *APPROVAL NEEDED* — [Guest] at [Property] requests [thing]. Estimated cost: $X. Reply YES to approve or NO to decline."
-
-4. CLEANING COORDINATION
-   - Track checkout/check-in times for each property
-   - Send cleaning crew notification (email or message) with:
-     * Property address
-     * Checkout time + next check-in time
-     * Special instructions (extra guests, pet stayed, etc.)
-   - Confirm cleaning was completed before next guest arrives
-   - Alert PM if cleaning crew hasn't confirmed
-
-5. OPERATIONS
-   - Guest requests (early check-in, late checkout, extra supplies) → handle if free, escalate if costs money
-   - Maintenance issues → assess urgency, escalate with context
-   - Supply restocking → track and alert when running low
-   - Lock code management → update codes between guests if applicable
-
-6. REPORTING & BRIEFINGS
-   - Daily briefing at end of day: bookings, messages handled, issues, tomorrow's check-ins/outs
-   - Weekly: occupancy rate, revenue, response time avg, guest satisfaction
-   - Instant alerts for: new bookings, cancellations, emergencies, money-related requests
-
-7. LISTING OPTIMIZATION (Background)
-   - Monitor competitor pricing periodically
-   - Suggest pricing adjustments based on demand/events
-   - Optimize listing descriptions and titles for search
-   - Suggest photo improvements
-
-═══ ESCALATION LEVELS ═══
-🔴 URGENT (notify immediately): safety, lockouts, property damage, legal threats
-🟡 ACTION REQUIRED (need PM decision): money requests, refunds, maintenance, conflicts
-🟢 INFORMATIONAL (daily briefing): routine messages handled, bookings confirmed, cleaning scheduled
-
-═══ ONBOARDING ═══
-1. Ask platform + credentials → [LOGIN_REQUEST]
-2. If 2FA → ask for code → [SUBMIT_2FA: code=X]
-3. After login → [CHECK_INBOX]
-4. Ask about their properties, cleaning crew contacts, and preferences
-5. Ask about other platforms they're listed on (for calendar sync)
-
-═══ GOLDEN RULE ═══
-Act like you're the PM's most trusted employee. Be proactive, thorough, and never let anything slip through the cracks. If something feels wrong, flag it. If you're unsure, ask. The PM should feel like they can sleep peacefully knowing you're handling everything.`;
+AFTER ONBOARDING: handle guest messaging, pricing research, listing optimization, escalations, and daily briefings — but ONLY using real data.`;
 
 // Handle PM messages — route to ADK Alfred agent
 botManager.onPmMessage = async (pmId, type, data) => {
@@ -188,31 +136,14 @@ botManager.onPmMessage = async (pmId, type, data) => {
         const result = await geminiRes.json();
         const reply = result?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (reply) {
-          // Parse all command tags
+          // Check for LOGIN_REQUEST tag and trigger browser login
           const loginMatch = reply.match(/\[LOGIN_REQUEST:\s*platform=(\w+),\s*email=([^,]+),\s*password=([^\]]+)\]/);
-          const checkBrowser = reply.includes('[CHECK_BROWSER]');
-          const checkInbox = reply.includes('[CHECK_INBOX]');
-          const submit2fa = reply.match(/\[SUBMIT_2FA:\s*code=([^\]]+)\]/);
-          const browserAction = reply.match(/\[BROWSER_ACTION:\s*([^\]]+)\]/);
-
-          // Clean all tags from reply
-          let cleanReply = reply
-            .replace(/\[LOGIN_REQUEST:[^\]]+\]/g, '')
-            .replace(/\[CHECK_BROWSER\]/g, '')
-            .replace(/\[CHECK_INBOX\]/g, '')
-            .replace(/\[SUBMIT_2FA:[^\]]+\]/g, '')
-            .replace(/\[BROWSER_ACTION:[^\]]+\]/g, '')
-            .trim();
+          let cleanReply = reply.replace(/\[LOGIN_REQUEST:[^\]]+\]/g, '').trim();
 
           // Add Alfred's reply to conversation history
           history.push({ role: 'model', parts: [{ text: cleanReply }] });
-          if (cleanReply) await botManager.sendMessage(pmId, cleanReply);
+          await botManager.sendMessage(pmId, cleanReply);
 
-          // ── Execute browser commands SEQUENTIALLY with priority ──
-          // Priority: LOGIN > 2FA > others (login/2FA block all other commands)
-          // This prevents race conditions on the shared browser session.
-
-          // LOGIN — highest priority, blocks everything else
           if (loginMatch) {
             const [, platform, loginEmail, loginPassword] = loginMatch;
             console.log(`[Browser] Login triggered for PM ${pmId} on ${platform}`);
@@ -228,6 +159,7 @@ botManager.onPmMessage = async (pmId, type, data) => {
                 const inbox = await runBrowserAgent('inbox', pmId, platform);
                 console.log(`[Browser] Inbox result for ${pmId}:`, JSON.stringify(inbox).slice(0, 500));
 
+                // Inject REAL browser data into conversation history
                 const browserData = `[BROWSER_DATA] Login status: ${result.status}. Inbox check: ${JSON.stringify(inbox)}`;
                 history.push({ role: 'user', parts: [{ text: browserData }] });
 
@@ -243,11 +175,8 @@ botManager.onPmMessage = async (pmId, type, data) => {
                   await botManager.sendMessage(pmId, `⚠️ Connected but couldn't read inbox: ${inbox.message || inbox.status}`);
                 }
               } else if (result.status === '2fa_required') {
-                const method = result.method || 'unknown';
-                const methodText = method === 'email' ? 'Check your email' : method === 'phone' ? 'Check your phone/SMS' : 'Check your email or phone';
-                const detail = result.analysis ? `\n\nAirbnb says: "${result.analysis.split('\n').slice(1).join(' ').trim().slice(0, 200)}"` : '';
-                await botManager.sendMessage(pmId, `🔐 ${platform} needs a verification code. ${methodText} and send me the code.${detail}`);
-                history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login requires 2FA via ${method}. ${result.analysis || ''}` }] });
+                await botManager.sendMessage(pmId, `🔐 ${platform} is asking for a verification code. Check your email/phone and send me the code.`);
+                history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login requires 2FA verification code.` }] });
               } else {
                 await botManager.sendMessage(pmId, `⚠️ Could not log in to ${platform}: ${result.message || result.status}. This might be due to Airbnb blocking automated browsers. Let me know if you want to try again.`);
                 history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login failed: ${result.message || result.status}` }] });
@@ -256,79 +185,6 @@ botManager.onPmMessage = async (pmId, type, data) => {
               console.error(`[Browser] Login error for ${pmId}:`, err.message);
               await botManager.sendMessage(pmId, `⚠️ Had trouble logging in: ${err.message}`);
               history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login error: ${err.message}` }] });
-            }
-
-          // 2FA — second priority, blocks inbox/screenshot/action
-          } else if (submit2fa) {
-            try {
-              await botManager.sendMessage(pmId, `🔐 Submitting verification code...`);
-              const result = await runBrowserAgent('2fa', pmId, submit2fa[1].trim());
-              const browserData = `[BROWSER_DATA] 2FA result: ${JSON.stringify(result)}`;
-              history.push({ role: 'user', parts: [{ text: browserData }] });
-
-              // After successful 2FA, automatically check inbox
-              const analysis = (result.analysis || '').toUpperCase();
-              if (analysis.includes('LOGGED') || analysis.includes('SUCCESS') || analysis.includes('DASHBOARD') || analysis.includes('HOSTING')) {
-                await botManager.sendMessage(pmId, `✅ Verification successful! Checking your inbox...`);
-                const inbox = await runBrowserAgent('inbox', pmId);
-                const inboxData = `[BROWSER_DATA] Inbox after 2FA: ${JSON.stringify(inbox)}`;
-                history.push({ role: 'user', parts: [{ text: inboxData }] });
-                if (inbox.messages && inbox.messages.length > 0) {
-                  const summary = inbox.messages.map(m => `• ${m.guest_name}: ${m.preview || ''} ${m.is_unread ? '🔴' : ''}`).join('\n');
-                  await botManager.sendMessage(pmId, `📨 Found ${inbox.count} conversation(s):\n\n${summary}`);
-                } else {
-                  await botManager.sendMessage(pmId, inbox.raw || '📭 No conversations found or could not read inbox.');
-                }
-              } else {
-                await botManager.sendMessage(pmId, `${result.analysis || result.message || 'Code submitted'}`);
-              }
-            } catch (err) {
-              await botManager.sendMessage(pmId, `⚠️ Could not submit code: ${err.message}`);
-            }
-
-          // Lower priority commands — only run if no login/2FA
-          } else {
-            // CHECK_BROWSER
-            if (checkBrowser) {
-              try {
-                const result = await runBrowserAgent('screenshot', pmId, 'Describe everything you see on this page. What is the current state? Is there a login, 2FA prompt, inbox, or error?');
-                const browserData = `[BROWSER_DATA] Current page: ${result.url || 'unknown'}. Analysis: ${result.analysis || result.message || 'no data'}`;
-                history.push({ role: 'user', parts: [{ text: browserData }] });
-                await botManager.sendMessage(pmId, `📸 ${result.analysis || result.message || 'Could not analyze page'}`);
-              } catch (err) {
-                await botManager.sendMessage(pmId, `⚠️ Could not check browser: ${err.message}`);
-              }
-            }
-
-            // CHECK_INBOX — only after screenshot (sequential on same session)
-            if (checkInbox) {
-              try {
-                await botManager.sendMessage(pmId, '📨 Checking your inbox...');
-                const result = await runBrowserAgent('inbox', pmId);
-                const browserData = `[BROWSER_DATA] Inbox: ${JSON.stringify(result)}`;
-                history.push({ role: 'user', parts: [{ text: browserData }] });
-                if (result.messages && result.messages.length > 0) {
-                  const summary = result.messages.map(m => `• ${m.guest_name}: ${m.preview || ''} ${m.is_unread ? '🔴' : ''}`).join('\n');
-                  await botManager.sendMessage(pmId, `Found ${result.count} conversations:\n\n${summary}`);
-                } else {
-                  await botManager.sendMessage(pmId, result.raw || '📭 No conversations found or could not read inbox.');
-                }
-              } catch (err) {
-                await botManager.sendMessage(pmId, `⚠️ Could not check inbox: ${err.message}`);
-              }
-            }
-
-            // BROWSER_ACTION
-            if (browserAction) {
-              try {
-                await botManager.sendMessage(pmId, `🔄 Working on it...`);
-                const result = await runBrowserAgent('action', pmId, browserAction[1].trim());
-                const browserData = `[BROWSER_DATA] Action result: ${JSON.stringify(result)}`;
-                history.push({ role: 'user', parts: [{ text: browserData }] });
-                await botManager.sendMessage(pmId, `${result.analysis || result.message || 'Action completed'}`);
-              } catch (err) {
-                await botManager.sendMessage(pmId, `⚠️ Could not perform action: ${err.message}`);
-              }
             }
           }
 
