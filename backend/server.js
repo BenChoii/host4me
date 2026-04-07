@@ -208,62 +208,11 @@ botManager.onPmMessage = async (pmId, type, data) => {
           history.push({ role: 'model', parts: [{ text: cleanReply }] });
           if (cleanReply) await botManager.sendMessage(pmId, cleanReply);
 
-          // Handle CHECK_BROWSER — fresh screenshot
-          if (checkBrowser) {
-            try {
-              const result = await runBrowserAgent('screenshot', pmId, 'Describe everything you see on this page. What is the current state? Is there a login, 2FA prompt, inbox, or error?');
-              const browserData = `[BROWSER_DATA] Current page: ${result.url || 'unknown'}. Analysis: ${result.analysis || result.message || 'no data'}`;
-              history.push({ role: 'user', parts: [{ text: browserData }] });
-              await botManager.sendMessage(pmId, `📸 ${result.analysis || result.message || 'Could not analyze page'}`);
-            } catch (err) {
-              await botManager.sendMessage(pmId, `⚠️ Could not check browser: ${err.message}`);
-            }
-          }
+          // ── Execute browser commands SEQUENTIALLY with priority ──
+          // Priority: LOGIN > 2FA > others (login/2FA block all other commands)
+          // This prevents race conditions on the shared browser session.
 
-          // Handle CHECK_INBOX
-          if (checkInbox) {
-            try {
-              await botManager.sendMessage(pmId, '📨 Checking your inbox...');
-              const result = await runBrowserAgent('inbox', pmId);
-              const browserData = `[BROWSER_DATA] Inbox: ${JSON.stringify(result)}`;
-              history.push({ role: 'user', parts: [{ text: browserData }] });
-              if (result.messages && result.messages.length > 0) {
-                const summary = result.messages.map(m => `• ${m.guest_name}: ${m.preview || ''} ${m.is_unread ? '🔴' : ''}`).join('\n');
-                await botManager.sendMessage(pmId, `Found ${result.count} conversations:\n\n${summary}`);
-              } else {
-                await botManager.sendMessage(pmId, result.raw || '📭 No conversations found or could not read inbox.');
-              }
-            } catch (err) {
-              await botManager.sendMessage(pmId, `⚠️ Could not check inbox: ${err.message}`);
-            }
-          }
-
-          // Handle SUBMIT_2FA
-          if (submit2fa) {
-            try {
-              await botManager.sendMessage(pmId, `🔐 Submitting verification code...`);
-              const result = await runBrowserAgent('2fa', pmId, submit2fa[1].trim());
-              const browserData = `[BROWSER_DATA] 2FA result: ${JSON.stringify(result)}`;
-              history.push({ role: 'user', parts: [{ text: browserData }] });
-              await botManager.sendMessage(pmId, `${result.analysis || result.message || 'Code submitted'}`);
-            } catch (err) {
-              await botManager.sendMessage(pmId, `⚠️ Could not submit code: ${err.message}`);
-            }
-          }
-
-          // Handle BROWSER_ACTION
-          if (browserAction) {
-            try {
-              await botManager.sendMessage(pmId, `🔄 Working on it...`);
-              const result = await runBrowserAgent('action', pmId, browserAction[1].trim());
-              const browserData = `[BROWSER_DATA] Action result: ${JSON.stringify(result)}`;
-              history.push({ role: 'user', parts: [{ text: browserData }] });
-              await botManager.sendMessage(pmId, `${result.analysis || result.message || 'Action completed'}`);
-            } catch (err) {
-              await botManager.sendMessage(pmId, `⚠️ Could not perform action: ${err.message}`);
-            }
-          }
-
+          // LOGIN — highest priority, blocks everything else
           if (loginMatch) {
             const [, platform, loginEmail, loginPassword] = loginMatch;
             console.log(`[Browser] Login triggered for PM ${pmId} on ${platform}`);
@@ -279,7 +228,6 @@ botManager.onPmMessage = async (pmId, type, data) => {
                 const inbox = await runBrowserAgent('inbox', pmId, platform);
                 console.log(`[Browser] Inbox result for ${pmId}:`, JSON.stringify(inbox).slice(0, 500));
 
-                // Inject REAL browser data into conversation history
                 const browserData = `[BROWSER_DATA] Login status: ${result.status}. Inbox check: ${JSON.stringify(inbox)}`;
                 history.push({ role: 'user', parts: [{ text: browserData }] });
 
@@ -308,6 +256,79 @@ botManager.onPmMessage = async (pmId, type, data) => {
               console.error(`[Browser] Login error for ${pmId}:`, err.message);
               await botManager.sendMessage(pmId, `⚠️ Had trouble logging in: ${err.message}`);
               history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login error: ${err.message}` }] });
+            }
+
+          // 2FA — second priority, blocks inbox/screenshot/action
+          } else if (submit2fa) {
+            try {
+              await botManager.sendMessage(pmId, `🔐 Submitting verification code...`);
+              const result = await runBrowserAgent('2fa', pmId, submit2fa[1].trim());
+              const browserData = `[BROWSER_DATA] 2FA result: ${JSON.stringify(result)}`;
+              history.push({ role: 'user', parts: [{ text: browserData }] });
+
+              // After successful 2FA, automatically check inbox
+              const analysis = (result.analysis || '').toUpperCase();
+              if (analysis.includes('LOGGED') || analysis.includes('SUCCESS') || analysis.includes('DASHBOARD') || analysis.includes('HOSTING')) {
+                await botManager.sendMessage(pmId, `✅ Verification successful! Checking your inbox...`);
+                const inbox = await runBrowserAgent('inbox', pmId);
+                const inboxData = `[BROWSER_DATA] Inbox after 2FA: ${JSON.stringify(inbox)}`;
+                history.push({ role: 'user', parts: [{ text: inboxData }] });
+                if (inbox.messages && inbox.messages.length > 0) {
+                  const summary = inbox.messages.map(m => `• ${m.guest_name}: ${m.preview || ''} ${m.is_unread ? '🔴' : ''}`).join('\n');
+                  await botManager.sendMessage(pmId, `📨 Found ${inbox.count} conversation(s):\n\n${summary}`);
+                } else {
+                  await botManager.sendMessage(pmId, inbox.raw || '📭 No conversations found or could not read inbox.');
+                }
+              } else {
+                await botManager.sendMessage(pmId, `${result.analysis || result.message || 'Code submitted'}`);
+              }
+            } catch (err) {
+              await botManager.sendMessage(pmId, `⚠️ Could not submit code: ${err.message}`);
+            }
+
+          // Lower priority commands — only run if no login/2FA
+          } else {
+            // CHECK_BROWSER
+            if (checkBrowser) {
+              try {
+                const result = await runBrowserAgent('screenshot', pmId, 'Describe everything you see on this page. What is the current state? Is there a login, 2FA prompt, inbox, or error?');
+                const browserData = `[BROWSER_DATA] Current page: ${result.url || 'unknown'}. Analysis: ${result.analysis || result.message || 'no data'}`;
+                history.push({ role: 'user', parts: [{ text: browserData }] });
+                await botManager.sendMessage(pmId, `📸 ${result.analysis || result.message || 'Could not analyze page'}`);
+              } catch (err) {
+                await botManager.sendMessage(pmId, `⚠️ Could not check browser: ${err.message}`);
+              }
+            }
+
+            // CHECK_INBOX — only after screenshot (sequential on same session)
+            if (checkInbox) {
+              try {
+                await botManager.sendMessage(pmId, '📨 Checking your inbox...');
+                const result = await runBrowserAgent('inbox', pmId);
+                const browserData = `[BROWSER_DATA] Inbox: ${JSON.stringify(result)}`;
+                history.push({ role: 'user', parts: [{ text: browserData }] });
+                if (result.messages && result.messages.length > 0) {
+                  const summary = result.messages.map(m => `• ${m.guest_name}: ${m.preview || ''} ${m.is_unread ? '🔴' : ''}`).join('\n');
+                  await botManager.sendMessage(pmId, `Found ${result.count} conversations:\n\n${summary}`);
+                } else {
+                  await botManager.sendMessage(pmId, result.raw || '📭 No conversations found or could not read inbox.');
+                }
+              } catch (err) {
+                await botManager.sendMessage(pmId, `⚠️ Could not check inbox: ${err.message}`);
+              }
+            }
+
+            // BROWSER_ACTION
+            if (browserAction) {
+              try {
+                await botManager.sendMessage(pmId, `🔄 Working on it...`);
+                const result = await runBrowserAgent('action', pmId, browserAction[1].trim());
+                const browserData = `[BROWSER_DATA] Action result: ${JSON.stringify(result)}`;
+                history.push({ role: 'user', parts: [{ text: browserData }] });
+                await botManager.sendMessage(pmId, `${result.analysis || result.message || 'Action completed'}`);
+              } catch (err) {
+                await botManager.sendMessage(pmId, `⚠️ Could not perform action: ${err.message}`);
+              }
             }
           }
 
