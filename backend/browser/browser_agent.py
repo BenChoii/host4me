@@ -88,7 +88,10 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
             return {"status": "unknown", "detail": result_text}
 
     except Exception as e:
-        await browser.close()
+        try:
+            await browser.close()
+        except Exception:
+            pass
         return {"status": "error", "message": str(e)}
 
 
@@ -123,7 +126,10 @@ async def check_inbox(pm_id: str, platform: str = "airbnb") -> dict:
     try:
         agent = Agent(task=task, llm=llm, browser=browser, max_actions=10)
         result = await agent.run()
-        await browser.close()
+        try:
+            await browser.close()
+        except Exception:
+            pass
 
         result_text = str(result)
 
@@ -141,7 +147,10 @@ async def check_inbox(pm_id: str, platform: str = "airbnb") -> dict:
             return {"status": "ok", "raw": result_text, "messages": [], "count": 0}
 
     except Exception as e:
-        await browser.close()
+        try:
+            await browser.close()
+        except Exception:
+            pass
         return {"status": "error", "message": str(e)}
 
 
@@ -168,7 +177,10 @@ async def send_reply(pm_id: str, guest_name: str, message: str) -> dict:
     try:
         agent = Agent(task=task, llm=llm, browser=browser, max_actions=15)
         result = await agent.run()
-        await browser.close()
+        try:
+            await browser.close()
+        except Exception:
+            pass
 
         result_text = str(result)
         if "AUTH_REQUIRED" in result_text:
@@ -179,7 +191,10 @@ async def send_reply(pm_id: str, guest_name: str, message: str) -> dict:
             return {"status": "unknown", "detail": result_text}
 
     except Exception as e:
-        await browser.close()
+        try:
+            await browser.close()
+        except Exception:
+            pass
         return {"status": "error", "message": str(e)}
 
 
