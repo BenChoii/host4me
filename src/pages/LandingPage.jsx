@@ -74,23 +74,23 @@ const STEPS = [
 
 const PRICING = [
   {
-    tier: 'Free', desc: 'Try it out', price: '$0', period: '100 actions included',
-    features: ['1 property', 'Full agent team access', 'Guest messaging', 'Time savings tracking', 'No credit card required'],
+    tier: 'Trial', desc: 'See Alfred in action', price: '$0', period: '14 days free',
+    features: ['1 property', 'Full Alfred access', 'Shadow mode (you approve replies)', 'Daily briefings via Telegram', 'No credit card required'],
     featured: false, badge: 'Start Here',
   },
   {
-    tier: 'Starter', desc: '1–3 listings', price: '$149', period: '/month',
-    features: ['Up to 3 properties', 'Unlimited actions', 'All 6 AI agents', 'Email & SMS support', 'Dashboard access'],
+    tier: 'Solo', desc: '1–2 listings', price: '$49', period: '/month',
+    features: ['Up to 2 properties', 'Autonomous Alfred', 'Guest messaging + escalations', 'Daily & weekly reports', 'Email support'],
     featured: false,
   },
   {
-    tier: 'Growth', desc: '4–15 listings', price: '$299', period: '/month',
-    features: ['Up to 15 properties', 'Unlimited actions', 'All 6 AI agents', 'Priority support', 'Market research agent', 'Profile optimization'],
+    tier: 'Pro', desc: '3–5 listings', price: '$99', period: '/month',
+    features: ['Up to 5 properties', 'Everything in Solo', 'Gmail learning (auto-extracts WiFi, codes)', 'Style customization', 'Priority support', 'Strategic pricing insights'],
     featured: true, badge: 'Most Popular',
   },
   {
-    tier: 'Portfolio', desc: '15+ listings', price: '$499', period: '/month',
-    features: ['Unlimited properties', 'Unlimited actions', 'All 6 AI agents', 'Dedicated account manager', 'Custom AI fine-tuning', 'API access'],
+    tier: 'Portfolio', desc: '6+ listings', price: '$199', period: '/month + $29/property over 10',
+    features: ['Up to 30 properties', 'Everything in Pro', 'Custom escalation rules', 'Dedicated onboarding', 'API access', 'Multi-platform (Airbnb + VRBO)'],
     featured: false,
   },
 ];

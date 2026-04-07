@@ -42,7 +42,11 @@
 
   --dash-transition: 150ms cubic-bezier(0.16, 1, 0.3, 1);
   --dash-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
 }
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 /* ─── Dashboard Layout ─── */
 .dash {
@@ -196,7 +200,9 @@
 
 /* ─── Cards ─── */
 .dash-card {
-  background: var(--dash-surface);
+  background: rgba(17, 17, 19, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--dash-border);
   border-radius: var(--dash-radius-lg);
   padding: 20px;
@@ -205,6 +211,7 @@
 
 .dash-card:hover {
   border-color: var(--dash-border-hover);
+  box-shadow: 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .dash-card-glow {
@@ -239,7 +246,9 @@
 }
 
 .dash-metric {
-  background: var(--dash-surface);
+  background: rgba(17, 17, 19, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--dash-border);
   border-radius: var(--dash-radius-lg);
   padding: 20px;
@@ -248,7 +257,7 @@
 
 .dash-metric:hover {
   border-color: var(--dash-border-hover);
-  transform: translateY(-1px);
+  box-shadow: 0 0 20px rgba(198, 125, 59, 0.08);
 }
 
 .dash-metric-label {
@@ -262,6 +271,7 @@
 }
 
 .dash-metric-value {
+  font-family: var(--font-mono);
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -700,6 +710,58 @@
 .dash-animate-in:nth-child(3) { animation-delay: 100ms; }
 .dash-animate-in:nth-child(4) { animation-delay: 150ms; }
 .dash-animate-in:nth-child(5) { animation-delay: 200ms; }
+
+/* ─── Skeleton Loading ─── */
+.dash-skeleton {
+  background: var(--dash-surface-hover);
+  border-radius: var(--dash-radius);
+  position: relative;
+  overflow: hidden;
+}
+
+.dash-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.04),
+    transparent
+  );
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.dash-skeleton-text {
+  height: 14px;
+  width: 60%;
+  margin-bottom: 8px;
+}
+
+.dash-skeleton-number {
+  height: 28px;
+  width: 40%;
+}
+
+.dash-skeleton-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--dash-radius);
+}
+
+/* ─── Glassmorphism Accent Card ─── */
+.dash-card-glass {
+  background: rgba(17, 17, 19, 0.5);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--dash-radius-lg);
+}
 
 /* ─── Responsive ─── */
 @media (max-width: 768px) {

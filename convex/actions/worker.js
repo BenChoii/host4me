@@ -127,22 +127,23 @@ export const checkInbox = internalAction({
 });
 
 // Check all tenants' inboxes (called by cron)
+// Fan-out: schedule each tenant as a separate action to avoid 10-min timeout
 export const checkAllInboxes = internalAction({
   handler: async (ctx) => {
-    // Get all onboarded tenants with active browser sessions
     const sessions = await ctx.runQuery(
       internal.queries.getActiveBrowserSessions
     );
 
-    for (const session of sessions) {
-      try {
-        await ctx.runAction(internal.actions.worker.checkInbox, {
-          tenantId: session.tenantId,
-        });
-      } catch (err) {
-        console.error(`Inbox check failed for ${session.tenantId}:`, err);
-      }
+    // Fan out: schedule each tenant individually with staggered delays
+    // This avoids sequential processing and the 10-min Convex action timeout
+    for (let i = 0; i < sessions.length; i++) {
+      const delayMs = i * 5000; // Stagger by 5 seconds per tenant
+      await ctx.scheduler.runAfter(delayMs, internal.actions.worker.checkInbox, {
+        tenantId: sessions[i].tenantId,
+      });
     }
+
+    console.log(`Scheduled inbox checks for ${sessions.length} tenants`);
   },
 });
 
@@ -179,21 +180,21 @@ export const syncGmail = internalAction({
 });
 
 // Sync all tenants' Gmail (called by cron)
+// Fan-out: schedule each tenant individually
 export const syncAllGmail = internalAction({
   handler: async (ctx) => {
     const connections = await ctx.runQuery(
       internal.queries.getActiveGmailConnections
     );
 
-    for (const conn of connections) {
-      try {
-        await ctx.runAction(internal.actions.worker.syncGmail, {
-          tenantId: conn.tenantId,
-        });
-      } catch (err) {
-        console.error(`Gmail sync failed for ${conn.tenantId}:`, err);
-      }
+    for (let i = 0; i < connections.length; i++) {
+      const delayMs = i * 3000;
+      await ctx.scheduler.runAfter(delayMs, internal.actions.worker.syncGmail, {
+        tenantId: connections[i].tenantId,
+      });
     }
+
+    console.log(`Scheduled Gmail sync for ${connections.length} tenants`);
   },
 });
 
@@ -218,43 +219,55 @@ export const sendDailyBriefing = internalAction({
 });
 
 // Send daily briefings to all tenants (called by cron)
+// Fan-out: schedule each tenant individually
 export const sendDailyBriefings = internalAction({
   handler: async (ctx) => {
     const tenants = await ctx.runQuery(internal.queries.getOnboardedTenants);
 
-    for (const tenant of tenants) {
-      try {
-        await ctx.runAction(internal.actions.worker.sendDailyBriefing, {
-          tenantId: tenant._id,
-        });
-      } catch (err) {
-        console.error(`Daily briefing failed for ${tenant._id}:`, err);
-      }
+    for (let i = 0; i < tenants.length; i++) {
+      const delayMs = i * 2000;
+      await ctx.scheduler.runAfter(delayMs, internal.actions.worker.sendDailyBriefing, {
+        tenantId: tenants[i]._id,
+      });
     }
+
+    console.log(`Scheduled daily briefings for ${tenants.length} tenants`);
   },
 });
 
 // Send weekly reports to all tenants (called by cron)
+// Fan-out: schedule each tenant individually
 export const sendWeeklyReports = internalAction({
   handler: async (ctx) => {
     const tenants = await ctx.runQuery(internal.queries.getOnboardedTenants);
 
-    for (const tenant of tenants) {
-      try {
-        await workerFetch("/agent/briefing", {
-          tenant_id: tenant._id,
-          type: "weekly",
-        });
-
-        await ctx.runMutation(internal.agents.logActivity, {
-          tenantId: tenant._id,
-          agentType: "alfred",
-          actionType: "report_sent",
-          summary: "Weekly report delivered",
-        });
-      } catch (err) {
-        console.error(`Weekly report failed for ${tenant._id}:`, err);
-      }
+    for (let i = 0; i < tenants.length; i++) {
+      const delayMs = i * 2000;
+      await ctx.scheduler.runAfter(delayMs, internal.actions.worker.sendWeeklyReport, {
+        tenantId: tenants[i]._id,
+      });
     }
+
+    console.log(`Scheduled weekly reports for ${tenants.length} tenants`);
+  },
+});
+
+// Send a single weekly report
+export const sendWeeklyReport = internalAction({
+  args: { tenantId: v.id("tenants") },
+  handler: async (ctx, args) => {
+    const result = await workerFetch("/agent/briefing", {
+      tenant_id: args.tenantId,
+      type: "weekly",
+    });
+
+    await ctx.runMutation(internal.agents.logActivity, {
+      tenantId: args.tenantId,
+      agentType: "alfred",
+      actionType: "report_sent",
+      summary: "Weekly report delivered",
+    });
+
+    return result;
   },
 });
