@@ -1,9 +1,9 @@
 """
-Host4Me Browser Agent — Direct Playwright with Gemini vision
+Host4Me Browser Agent — Direct Playwright with Gemma 4 vision via OpenRouter
 
-Uses Playwright for browser control + Gemini for visual understanding.
-Takes screenshots, sends them to Gemini for analysis, then acts.
-Simpler and more reliable than browser-use wrapper.
+Uses Playwright for browser control + Gemma 4 26B MoE (via OpenRouter) for
+visual understanding. Takes screenshots, sends them to the model for analysis,
+then acts. OpenRouter provides an OpenAI-compatible API.
 """
 
 import asyncio
@@ -16,31 +16,41 @@ from pathlib import Path
 import httpx
 from playwright.async_api import async_playwright
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 DATA_DIR = os.environ.get("HOST4ME_DATA_DIR", "/opt/host4me/data")
-GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+VISION_MODEL = os.environ.get("VISION_MODEL", "google/gemma-4-26b-a4b-it")
 
 
-async def ask_gemini_vision(screenshot_bytes: bytes, prompt: str) -> str:
-    """Send a screenshot to Gemini and get a text response."""
+async def ask_vision(screenshot_bytes: bytes, prompt: str) -> str:
+    """Send a screenshot to Gemma 4 via OpenRouter and get a text response."""
     b64 = base64.b64encode(screenshot_bytes).decode()
     payload = {
-        "contents": [{
-            "parts": [
-                {"text": prompt},
-                {"inline_data": {"mime_type": "image/png", "data": b64}},
-            ]
+        "model": VISION_MODEL,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+            ],
         }],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 1024},
+        "temperature": 0.1,
+        "max_tokens": 1024,
+    }
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://host4me.ai",
+        "X-Title": "Host4Me Browser Agent",
     }
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(GEMINI_URL, json=payload)
+        resp = await client.post(OPENROUTER_URL, json=payload, headers=headers)
         result = resp.json()
-        return result.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        return result.get("choices", [{}])[0].get("message", {}).get("content", "")
 
 
 async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
-    """Login to Airbnb using Playwright + Gemini vision."""
+    """Login to Airbnb using Playwright + Gemma 4 vision via OpenRouter."""
     session_dir = Path(DATA_DIR) / "sessions" / pm_id
     session_dir.mkdir(parents=True, exist_ok=True)
     storage_path = session_dir / "storage.json"
@@ -59,9 +69,9 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
             await page.goto("https://www.airbnb.com/login", wait_until="domcontentloaded", timeout=30000)
             await page.wait_for_timeout(3000)
 
-            # Screenshot and ask Gemini what to click
+            # Screenshot and ask vision model what to click
             ss = await page.screenshot()
-            plan = await ask_gemini_vision(ss,
+            plan = await ask_vision(ss,
                 "This is an Airbnb login page. I need to log in with email and password. "
                 "What should I click first to get to an email input? Look for buttons like "
                 "'Continue with email', 'Log in with email', or 'Email'. "
@@ -73,7 +83,7 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
 
             email_filled = False
 
-            # If Gemini says email input is already visible, try to fill it
+            # If model says email input is already visible, try to fill it
             if "EMAIL_INPUT_VISIBLE" in plan.upper():
                 for sel in ['input[type="email"]', 'input[name="email"]', '#email-login-email', 'input[data-testid="email-login-email"]', 'input[type="text"]']:
                     el = await page.query_selector(sel)
@@ -82,7 +92,7 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
                         email_filled = True
                         break
             else:
-                # Click the button Gemini identified
+                # Click the button the model identified
                 clean_plan = plan.strip().strip('"').strip("'")
                 try:
                     # Try exact text match
@@ -110,9 +120,9 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
                         break
 
             if not email_filled:
-                # Last resort: ask Gemini to identify the input
+                # Last resort: ask vision model to identify the input
                 ss2 = await page.screenshot()
-                hint = await ask_gemini_vision(ss2, "I need to type an email address. Is there any text input field on this page? Describe where it is.")
+                hint = await ask_vision(ss2, "I need to type an email address. Is there any text input field on this page? Describe where it is.")
                 print(f"[Vision] Input search: {hint[:200]}", file=sys.stderr)
 
                 # Try any visible input
@@ -149,8 +159,8 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
             ss = await page.screenshot(path=str(session_dir / "login-result.png"))
             current_url = page.url
 
-            # Ask Gemini to analyze the result
-            analysis = await ask_gemini_vision(ss,
+            # Ask vision model to analyze the result
+            analysis = await ask_vision(ss,
                 "Analyze this page. Is the user logged in? Is there a 2FA/verification code prompt? "
                 "Is there a CAPTCHA? Is there an error message? What page is this? "
                 "Respond with exactly one of: LOGGED_IN, 2FA_REQUIRED, CAPTCHA, LOGIN_ERROR, UNKNOWN")
@@ -183,7 +193,7 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
 
 
 async def check_inbox(pm_id: str, platform: str = "airbnb") -> dict:
-    """Check Airbnb inbox using Playwright + Gemini vision."""
+    """Check Airbnb inbox using Playwright + Gemma 4 vision via OpenRouter."""
     session_dir = Path(DATA_DIR) / "sessions" / pm_id
     storage_path = session_dir / "storage.json"
 
@@ -209,8 +219,8 @@ async def check_inbox(pm_id: str, platform: str = "airbnb") -> dict:
 
             ss = await page.screenshot(path=str(session_dir / "inbox.png"))
 
-            # Ask Gemini to read the inbox
-            analysis = await ask_gemini_vision(ss,
+            # Ask vision model to read the inbox
+            analysis = await ask_vision(ss,
                 "This is an Airbnb hosting inbox page. List ALL conversations visible in the left sidebar. "
                 "For each conversation, provide: guest name, message preview, whether it looks unread, and the date. "
                 "Format as JSON array: [{\"guest_name\": \"...\", \"preview\": \"...\", \"is_unread\": true/false, \"date\": \"...\"}]. "

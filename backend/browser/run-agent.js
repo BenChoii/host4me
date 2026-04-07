@@ -20,7 +20,8 @@ function runBrowserAgent(action, pmId, ...args) {
       timeout: TIMEOUT,
       env: {
         ...process.env,
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+        OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+        VISION_MODEL: process.env.VISION_MODEL || 'google/gemma-4-26b-a4b-it',
         HOST4ME_DATA_DIR: process.env.HOST4ME_DATA_DIR || '/opt/host4me/data',
       },
     }, (error, stdout, stderr) => {
