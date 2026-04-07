@@ -13,13 +13,14 @@ require('dotenv').config();
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const { BotManager } = require('./telegram/bot-manager');
 const { validateInitData } = require('./telegram/mini-app/validate');
 const { formatSessionExpired } = require('./telegram/notifications');
 const { encryptCredentials } = require('./onboarding/credential-vault');
 const { analyzeStyle, generateStyleGuide, STYLE_PRESETS } = require('./onboarding/style-learner');
 const ollamaConfig = require('./config/ollama');
-const { GmailMonitor } = require('./gmail/monitor');
+const { GmailService } = require('./gmail/monitor');
 
 const app = express();
 app.use(express.json());
@@ -29,6 +30,9 @@ const BROWSER_AGENT_URL = process.env.BROWSER_AGENT_URL || 'http://localhost:810
 const ADK_RUNNER_URL = process.env.ADK_RUNNER_URL || 'http://localhost:3200';
 const POLL_INTERVAL = parseInt(process.env.BROWSER_POLL_INTERVAL_MS || '180000', 10);
 const GMAIL_POLL_INTERVAL = parseInt(process.env.GMAIL_POLL_INTERVAL_MS || '60000', 10);
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'urn:ietf:wg:oauth:2.0:oob';
 
 // ==========================================================================
 // Telegram Bot Manager
@@ -39,8 +43,11 @@ const botManager = new BotManager();
 // Conversation history per PM (in-memory for now, move to DB later)
 const conversations = new Map();
 
-// Gmail monitors per PM
-const gmailMonitors = new Map();
+// Gmail services per PM
+const gmailServices = new Map();
+
+// Pending Gmail OAuth flows: pmId -> GmailService (waiting for auth code)
+const pendingGmailAuth = new Map();
 
 const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You are a premium, full-service AI property manager. You handle EVERYTHING so the PM can focus on growth.
 
@@ -64,9 +71,10 @@ const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You 
 Include these tags to trigger actions:
 
 GMAIL (Primary — connect this FIRST):
-- [CONNECT_GMAIL: email=X, app_password=Y] — Connect PM's Gmail to monitor booking emails
-- [CHECK_GMAIL] — Check for recent platform emails
-- [READ_EMAIL: uid=123] — Read a specific email in full
+- [CONNECT_GMAIL] — Start Gmail OAuth flow. Alfred will send a link for the PM to click and grant access. No passwords needed.
+- [GMAIL_AUTH_CODE: code=X] — PM sends back the authorization code from Google.
+- [CHECK_GMAIL] — Check for recent platform emails (Airbnb, VRBO, Booking.com)
+- [READ_EMAIL: id=abc123] — Read a specific email in full
 
 BROWSER (Secondary — for actions on platforms):
 - [LOGIN_REQUEST: platform=airbnb, email=X, password=Y]
@@ -129,13 +137,13 @@ BROWSER (Secondary — for actions on platforms):
 🟢 INFORMATIONAL (daily briefing): routine messages handled, bookings confirmed, cleaning scheduled
 
 ═══ ONBOARDING (follow this order) ═══
-1. GMAIL FIRST: Ask for the Gmail address attached to their booking platforms.
-   Then explain how to create an App Password:
-   "Go to myaccount.google.com → Security → 2-Step Verification → App Passwords.
-   Create one for 'Mail' and send me the 16-character code."
-   → [CONNECT_GMAIL: email=X, app_password=Y]
+1. GMAIL FIRST: Ask "What Gmail do you use for your booking platforms?"
+   Then say: "Let me connect to your Gmail so I can monitor booking emails."
+   Use [CONNECT_GMAIL] — this sends the PM a link to click. No passwords needed.
+   The PM clicks the link, grants access, and sends back a code.
+   Then use [GMAIL_AUTH_CODE: code=THE_CODE_THEY_SEND]
 
-2. Once Gmail is connected, I'll automatically monitor for new booking emails from Airbnb, VRBO, Booking.com, etc.
+2. Once Gmail is connected, I'll automatically monitor for new booking emails from Airbnb, VRBO, Booking.com — every 60 seconds.
 
 3. Ask which platforms they use (Airbnb, VRBO, Booking.com, etc.)
 
@@ -144,7 +152,7 @@ BROWSER (Secondary — for actions on platforms):
 5. Ask about preferences: cleaning buffer days, auto-reply style, escalation preferences.
 
 6. OPTIONAL: Offer to log into platforms for direct actions → [LOGIN_REQUEST]
-   (Gmail monitoring handles most notifications — platform login is for taking actions like replying to guests, updating calendars, etc.)
+   (Gmail monitoring handles notifications — platform login is for taking actions.)
 
 ═══ GOLDEN RULE ═══
 Act like you're the PM's most trusted employee. Be proactive, thorough, and never let anything slip through the cracks. If something feels wrong, flag it. If you're unsure, ask. The PM should feel like they can sleep peacefully knowing you're handling everything.`;
@@ -226,9 +234,10 @@ botManager.onPmMessage = async (pmId, type, data) => {
           const checkInbox = reply.includes('[CHECK_INBOX]');
           const submit2fa = reply.match(/\[SUBMIT_2FA:\s*code=([^\]]+)\]/);
           const browserAction = reply.match(/\[BROWSER_ACTION:\s*([^\]]+)\]/);
-          const connectGmail = reply.match(/\[CONNECT_GMAIL:\s*email=([^,]+),\s*app_password=([^\]]+)\]/);
+          const connectGmail = reply.includes('[CONNECT_GMAIL]');
+          const gmailAuthCode = reply.match(/\[GMAIL_AUTH_CODE:\s*code=([^\]]+)\]/);
           const checkGmail = reply.includes('[CHECK_GMAIL]');
-          const readEmail = reply.match(/\[READ_EMAIL:\s*uid=([^\]]+)\]/);
+          const readEmail = reply.match(/\[READ_EMAIL:\s*id=([^\]]+)\]/);
 
           // Clean all tags from reply
           let cleanReply = reply
@@ -237,7 +246,8 @@ botManager.onPmMessage = async (pmId, type, data) => {
             .replace(/\[CHECK_INBOX\]/g, '')
             .replace(/\[SUBMIT_2FA:[^\]]+\]/g, '')
             .replace(/\[BROWSER_ACTION:[^\]]+\]/g, '')
-            .replace(/\[CONNECT_GMAIL:[^\]]+\]/g, '')
+            .replace(/\[CONNECT_GMAIL\]/g, '')
+            .replace(/\[GMAIL_AUTH_CODE:[^\]]+\]/g, '')
             .replace(/\[CHECK_GMAIL\]/g, '')
             .replace(/\[READ_EMAIL:[^\]]+\]/g, '')
             .trim();
@@ -393,59 +403,77 @@ botManager.onPmMessage = async (pmId, type, data) => {
 
             // ── Gmail Commands ──
 
-            // CONNECT_GMAIL
+            // CONNECT_GMAIL — start OAuth2 flow
             if (connectGmail) {
-              const [, gmailEmail, gmailAppPassword] = connectGmail;
-              try {
-                await botManager.sendMessage(pmId, `📧 Connecting to ${gmailEmail.trim()}...`);
+              if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+                await botManager.sendMessage(pmId, `⚠️ Gmail integration isn't configured yet. The Host4Me admin needs to set up Google OAuth credentials (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env).`);
+              } else {
+                try {
+                  const service = new GmailService({
+                    clientId: GOOGLE_CLIENT_ID,
+                    clientSecret: GOOGLE_CLIENT_SECRET,
+                    redirectUri: GOOGLE_REDIRECT_URI,
+                    dataDir: process.env.HOST4ME_DATA_DIR || '/opt/host4me/data',
+                  });
+                  const authUrl = service.getAuthUrl();
+                  pendingGmailAuth.set(pmId, service);
 
-                // Disconnect existing monitor if any
-                if (gmailMonitors.has(pmId)) {
-                  await gmailMonitors.get(pmId).disconnect();
+                  await botManager.sendMessage(pmId,
+                    `📧 Click this link to connect your Gmail:\n\n${authUrl}\n\n` +
+                    `After you grant access, Google will give you a code. Send that code back to me.`
+                  );
+                  history.push({ role: 'model', parts: [{ text: `[SYSTEM] Gmail OAuth link sent. Waiting for auth code.` }] });
+                } catch (err) {
+                  await botManager.sendMessage(pmId, `⚠️ Could not start Gmail connection: ${err.message}`);
                 }
+              }
+            }
 
-                const monitor = new GmailMonitor({
-                  email: gmailEmail.trim(),
-                  appPassword: gmailAppPassword.trim(),
-                  pmId,
-                  onNewEmail: async (pmId, email) => {
-                    // Notify PM via Telegram when a new booking email arrives
-                    const msg = `${email.typeLabel} from ${email.platform.toUpperCase()}\n📩 ${email.subject}\n📅 ${email.date ? new Date(email.date).toLocaleString() : 'just now'}`;
+            // GMAIL_AUTH_CODE — complete OAuth2 flow
+            if (gmailAuthCode) {
+              const code = gmailAuthCode[1].trim();
+              const service = pendingGmailAuth.get(pmId);
+              if (!service) {
+                await botManager.sendMessage(pmId, `⚠️ No pending Gmail connection. Use [CONNECT_GMAIL] first.`);
+              } else {
+                try {
+                  await botManager.sendMessage(pmId, `📧 Connecting...`);
+                  const { email } = await service.authorize(code, pmId);
+                  pendingGmailAuth.delete(pmId);
+
+                  // Start polling
+                  service.startPolling(GMAIL_POLL_INTERVAL, async (pmId, email) => {
+                    const msg = `${email.typeLabel} from ${email.platform.toUpperCase()}\n📩 ${email.subject}\n📅 ${new Date(email.date).toLocaleString()}`;
                     await botManager.sendMessage(pmId, msg);
 
-                    // Inject into conversation for Gemini to reason about
                     const hist = conversations.get(pmId) || [];
-                    hist.push({ role: 'user', parts: [{ text: `[EMAIL_NOTIFICATION] ${email.typeLabel} | Platform: ${email.platform} | Subject: ${email.subject} | From: ${email.from} | Date: ${email.date}` }] });
+                    hist.push({ role: 'user', parts: [{ text: `[EMAIL_NOTIFICATION] ${email.typeLabel} | Platform: ${email.platform} | Subject: ${email.subject} | From: ${email.from}` }] });
                     conversations.set(pmId, hist);
-                  },
-                });
+                  });
+                  gmailServices.set(pmId, service);
 
-                await monitor.connect();
-                monitor.startPolling(GMAIL_POLL_INTERVAL);
-                gmailMonitors.set(pmId, monitor);
-
-                await botManager.sendMessage(pmId, `✅ Gmail connected! I'm now monitoring ${gmailEmail.trim()} for booking emails from Airbnb, VRBO, and Booking.com. I'll notify you the moment anything comes in.`);
-                history.push({ role: 'model', parts: [{ text: `[SYSTEM] Gmail connected: ${gmailEmail.trim()}. Monitoring active.` }] });
-              } catch (err) {
-                console.error(`[Gmail] Connection error for ${pmId}:`, err.message);
-                let errorMsg = `⚠️ Could not connect to Gmail: ${err.message}`;
-                if (err.message.includes('Invalid credentials') || err.message.includes('AUTHENTICATIONFAILED')) {
-                  errorMsg = `⚠️ Gmail authentication failed. Please check:\n1. The email address is correct\n2. The App Password is the 16-character code from Google (not your regular password)\n3. 2-Step Verification is enabled on the Google account`;
+                  await botManager.sendMessage(pmId,
+                    `✅ Gmail connected! Monitoring ${email} for booking emails from Airbnb, VRBO, and Booking.com.\n\n` +
+                    `I'll notify you the moment anything comes in. What's next?`
+                  );
+                  history.push({ role: 'model', parts: [{ text: `[SYSTEM] Gmail connected: ${email}. Monitoring active.` }] });
+                } catch (err) {
+                  console.error(`[Gmail] Auth error for ${pmId}:`, err.message);
+                  await botManager.sendMessage(pmId, `⚠️ Could not connect Gmail: ${err.message}\n\nPlease try again — use [CONNECT_GMAIL] to get a new link.`);
                 }
-                await botManager.sendMessage(pmId, errorMsg);
-                history.push({ role: 'model', parts: [{ text: `[SYSTEM] Gmail connection failed: ${err.message}` }] });
               }
             }
 
             // CHECK_GMAIL
             if (checkGmail) {
-              const monitor = gmailMonitors.get(pmId);
-              if (!monitor) {
-                await botManager.sendMessage(pmId, `📧 Gmail is not connected yet. Please provide your Gmail address and App Password first.`);
+              const service = gmailServices.get(pmId);
+              if (!service) {
+                await botManager.sendMessage(pmId, `📧 Gmail is not connected yet. Let's connect it first.`);
+                history.push({ role: 'model', parts: [{ text: `[SYSTEM] Gmail not connected. Need to run onboarding.` }] });
               } else {
                 try {
                   await botManager.sendMessage(pmId, `📧 Checking recent platform emails...`);
-                  const emails = await monitor.fetchRecentPlatformEmails(10);
+                  const emails = await service.fetchRecentEmails(10);
                   if (emails.length > 0) {
                     const summary = emails.map(e =>
                       `${e.typeLabel} | ${e.platform.toUpperCase()} | ${e.subject}`
@@ -463,13 +491,13 @@ botManager.onPmMessage = async (pmId, type, data) => {
 
             // READ_EMAIL
             if (readEmail) {
-              const monitor = gmailMonitors.get(pmId);
-              if (!monitor) {
+              const service = gmailServices.get(pmId);
+              if (!service) {
                 await botManager.sendMessage(pmId, `📧 Gmail is not connected.`);
               } else {
                 try {
-                  const emailContent = await monitor.readEmail(readEmail[1].trim());
-                  const preview = (emailContent.text || '').slice(0, 1000);
+                  const emailContent = await service.readEmail(readEmail[1].trim());
+                  const preview = (emailContent.body || emailContent.snippet || '').slice(0, 1000);
                   await botManager.sendMessage(pmId, `📧 *${emailContent.subject}*\nFrom: ${emailContent.from}\nDate: ${emailContent.date}\n\n${preview}`);
                   history.push({ role: 'user', parts: [{ text: `[EMAIL_DATA] Full email: Subject: ${emailContent.subject}. Content: ${preview}` }] });
                 } catch (err) {
@@ -806,6 +834,38 @@ app.listen(PORT, async () => {
   console.log(`ADK Runner: ${ADK_RUNNER_URL}`);
   console.log(`Browser Agents: ${BROWSER_AGENT_URL}`);
   console.log(`Poll interval: ${POLL_INTERVAL / 1000}s`);
+  console.log(`Gmail poll interval: ${GMAIL_POLL_INTERVAL / 1000}s`);
+  console.log(`Google OAuth: ${GOOGLE_CLIENT_ID ? 'configured' : 'NOT configured'}`);
+
+  // Restore saved Gmail connections
+  if (GOOGLE_CLIENT_ID) {
+    const dataDir = process.env.HOST4ME_DATA_DIR || '/opt/host4me/data';
+    const gmailDir = path.join(dataDir, 'gmail');
+    if (fs.existsSync(gmailDir)) {
+      const pmDirs = fs.readdirSync(gmailDir);
+      for (const pmId of pmDirs) {
+        try {
+          const service = new GmailService({
+            clientId: GOOGLE_CLIENT_ID,
+            clientSecret: GOOGLE_CLIENT_SECRET,
+            redirectUri: GOOGLE_REDIRECT_URI,
+            dataDir,
+          });
+          const loaded = await service.loadSavedTokens(pmId);
+          if (loaded) {
+            service.startPolling(GMAIL_POLL_INTERVAL, async (pmId, email) => {
+              const msg = `${email.typeLabel} from ${email.platform.toUpperCase()}\n📩 ${email.subject}\n📅 ${new Date(email.date).toLocaleString()}`;
+              await botManager.sendMessage(pmId, msg);
+            });
+            gmailServices.set(pmId, service);
+            console.log(`[Gmail] Restored monitoring for PM ${pmId}`);
+          }
+        } catch (err) {
+          console.error(`[Gmail] Failed to restore PM ${pmId}: ${err.message}`);
+        }
+      }
+    }
+  }
 
   // Start all assigned Telegram bots
   await botManager.startAll();
