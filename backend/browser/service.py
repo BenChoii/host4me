@@ -269,17 +269,36 @@ async def handle_inbox(request):
     page = s["page"]
 
     try:
-        await page.goto("https://www.airbnb.com/hosting/inbox", wait_until="domcontentloaded", timeout=30000)
+        await page.goto("https://www.airbnb.com/hosting/inbox", wait_until="networkidle", timeout=45000)
         await page.wait_for_timeout(5000)
 
         if "/login" in page.url:
             return web.json_response({"status": "auth_required"})
 
+        # Wait for inbox content to load — look for conversation elements
+        try:
+            await page.wait_for_selector('[data-testid="thread-card"], [role="listbox"], [class*="inbox"], [class*="thread"], [class*="conversation"]', timeout=10000)
+        except Exception:
+            # If no conversation elements appear, wait a bit more and try anyway
+            await page.wait_for_timeout(3000)
+
+        # Scroll the sidebar to trigger lazy loading
+        try:
+            sidebar = await page.query_selector('[role="listbox"], [class*="inbox-sidebar"], nav')
+            if sidebar:
+                await sidebar.evaluate("el => el.scrollTop = el.scrollHeight")
+                await page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
         result = await take_screenshot_and_analyze(pm_id,
-            "This is an Airbnb hosting inbox. List ALL conversations in the sidebar. "
-            "For each: guest name, message preview, unread status, date. "
+            "This is an Airbnb hosting inbox page. Look at the ENTIRE screenshot carefully. "
+            "Do you see a list of conversations on the left sidebar? "
+            "If YES: List ALL conversations you see. For each provide guest name, message preview, unread status, date. "
             "Format as JSON array: [{\"guest_name\": \"\", \"preview\": \"\", \"is_unread\": true, \"date\": \"\"}]. "
-            "Only report what you actually see.")
+            "If NO conversations exist: Reply exactly 'NO_CONVERSATIONS'. "
+            "If the page shows something unexpected (error, loading, different page): Describe what you see. "
+            "Only report what you ACTUALLY see. NEVER invent data.")
 
         await save_session(pm_id)
 
