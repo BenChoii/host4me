@@ -376,6 +376,18 @@ async def handle_action(request):
         return web.json_response({"status": "error", "message": str(e)})
 
 
+async def handle_debug_screenshot(request):
+    """Return the latest screenshot as a PNG image for debugging."""
+    pm_id = request.query.get("pm", "default")
+    s = sessions.get(pm_id)
+    if not s:
+        return web.json_response({"error": "no session"}, status=404)
+
+    # Take a fresh screenshot
+    ss = await s["page"].screenshot(full_page=False)
+    return web.Response(body=ss, content_type="image/png")
+
+
 async def handle_health(request):
     return web.json_response({
         "status": "ok",
@@ -393,6 +405,7 @@ app.router.add_post("/screenshot", handle_screenshot)
 app.router.add_post("/inbox", handle_inbox)
 app.router.add_post("/navigate", handle_navigate)
 app.router.add_post("/action", handle_action)
+app.router.add_get("/debug/screenshot", handle_debug_screenshot)
 app.router.add_get("/health", handle_health)
 
 if __name__ == "__main__":

@@ -608,6 +608,22 @@ function stopPolling(pmId) {
 }
 
 // ==========================================================================
+// Debug — see what the browser actually shows
+// ==========================================================================
+
+app.get('/api/debug/screenshot', async (req, res) => {
+  try {
+    const resp = await fetch(`${BROWSER_AGENT_URL}/debug/screenshot?pm=default`);
+    if (!resp.ok) return res.status(resp.status).json({ error: 'no screenshot' });
+    const buffer = await resp.arrayBuffer();
+    res.set('Content-Type', 'image/png');
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================================================
 // Health & Status
 // ==========================================================================
 
