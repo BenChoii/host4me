@@ -59,37 +59,70 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
             await page.goto("https://www.airbnb.com/login", wait_until="domcontentloaded", timeout=30000)
             await page.wait_for_timeout(3000)
 
-            # Screenshot and ask Gemini what we see
+            # Screenshot and ask Gemini what to click
             ss = await page.screenshot()
-            analysis = await ask_gemini_vision(ss, "What do you see on this page? Is this a login page? Is there an email input field? Describe the page briefly.")
-            print(f"[Vision] Page analysis: {analysis[:200]}", file=sys.stderr)
+            plan = await ask_gemini_vision(ss,
+                "This is an Airbnb login page. I need to log in with email and password. "
+                "What should I click first to get to an email input? Look for buttons like "
+                "'Continue with email', 'Log in with email', or 'Email'. "
+                "Tell me the EXACT text of the button I should click. "
+                "If there's already an email input visible, say 'EMAIL_INPUT_VISIBLE'. "
+                "Respond with just the button text or EMAIL_INPUT_VISIBLE, nothing else.")
 
-            # Try to find and fill email
-            email_selectors = ['input[type="email"]', 'input[name="email"]', '#email-login-email', 'input[data-testid="email-login-email"]']
+            print(f"[Vision] Login plan: {plan[:200]}", file=sys.stderr)
+
             email_filled = False
-            for sel in email_selectors:
-                el = await page.query_selector(sel)
-                if el:
-                    await el.fill(email)
-                    email_filled = True
-                    break
+
+            # If Gemini says email input is already visible, try to fill it
+            if "EMAIL_INPUT_VISIBLE" in plan.upper():
+                for sel in ['input[type="email"]', 'input[name="email"]', '#email-login-email', 'input[data-testid="email-login-email"]', 'input[type="text"]']:
+                    el = await page.query_selector(sel)
+                    if el:
+                        await el.fill(email)
+                        email_filled = True
+                        break
+            else:
+                # Click the button Gemini identified
+                clean_plan = plan.strip().strip('"').strip("'")
+                try:
+                    # Try exact text match
+                    await page.get_by_text(clean_plan, exact=False).first.click(timeout=5000)
+                    await page.wait_for_timeout(3000)
+                except Exception:
+                    # Try clicking any visible button/link with "email" in it
+                    try:
+                        await page.get_by_text("email", exact=False).first.click(timeout=5000)
+                        await page.wait_for_timeout(3000)
+                    except Exception:
+                        # Try clicking phone/email toggle or any login option
+                        try:
+                            await page.get_by_role("button").filter(has_text="email").first.click(timeout=3000)
+                            await page.wait_for_timeout(3000)
+                        except Exception:
+                            pass
+
+                # Now try to find email input
+                for sel in ['input[type="email"]', 'input[name="email"]', '#email-login-email', 'input[data-testid="email-login-email"]', 'input[type="text"]', 'input[inputmode="email"]']:
+                    el = await page.query_selector(sel)
+                    if el:
+                        await el.fill(email)
+                        email_filled = True
+                        break
 
             if not email_filled:
-                # Try clicking "Continue with email" first
-                for btn_text in ["Continue with email", "Email", "Log in with email"]:
-                    try:
-                        await page.get_by_text(btn_text, exact=False).first.click(timeout=3000)
-                        await page.wait_for_timeout(2000)
-                        for sel in email_selectors:
-                            el = await page.query_selector(sel)
-                            if el:
-                                await el.fill(email)
-                                email_filled = True
-                                break
-                        if email_filled:
-                            break
-                    except Exception:
-                        continue
+                # Last resort: ask Gemini to identify the input
+                ss2 = await page.screenshot()
+                hint = await ask_gemini_vision(ss2, "I need to type an email address. Is there any text input field on this page? Describe where it is.")
+                print(f"[Vision] Input search: {hint[:200]}", file=sys.stderr)
+
+                # Try any visible input
+                all_inputs = await page.query_selector_all("input:visible")
+                for inp in all_inputs:
+                    inp_type = await inp.get_attribute("type")
+                    if inp_type in ["email", "text", None, ""]:
+                        await inp.fill(email)
+                        email_filled = True
+                        break
 
             if not email_filled:
                 ss = await page.screenshot(path=str(session_dir / "login-fail.png"))
