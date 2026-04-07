@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-from browser_use import Agent, Browser, BrowserConfig
+from browser_use import Agent, Browser, BrowserProfile
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -27,27 +27,27 @@ def get_llm():
     )
 
 
-def get_browser_config(pm_id: str) -> BrowserConfig:
-    """Persistent browser config with saved state per PM."""
+def get_browser(pm_id: str) -> Browser:
+    """Persistent browser with saved state per PM."""
     session_dir = Path(DATA_DIR) / "sessions" / pm_id
     session_dir.mkdir(parents=True, exist_ok=True)
 
-    return BrowserConfig(
+    storage_path = session_dir / "storage.json"
+
+    profile = BrowserProfile(
         headless=True,
-        disable_security=False,
-        chrome_instance_path=None,
-        new_context_config={
-            "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "viewport": {"width": 1280, "height": 900},
-            "storage_state": str(session_dir / "storage.json") if (session_dir / "storage.json").exists() else None,
-        },
+        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        viewport={"width": 1280, "height": 900},
+        storage_state=str(storage_path) if storage_path.exists() else None,
     )
+
+    return Browser(browser_profile=profile)
 
 
 async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
     """Login to Airbnb using vision-based browser agent."""
     llm = get_llm()
-    browser = Browser(config=get_browser_config(pm_id))
+    browser = get_browser(pm_id)
 
     task = f"""
     Go to https://www.airbnb.com/login and log in with these credentials:
@@ -73,16 +73,11 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
         agent = Agent(task=task, llm=llm, browser=browser, max_actions=20)
         result = await agent.run()
 
-        # Save browser state for future sessions
-        session_dir = Path(DATA_DIR) / "sessions" / pm_id
+        # Save browser state
         try:
-            context = agent.browser.playwright_browser.contexts[0] if agent.browser.playwright_browser else None
-            if context:
-                await context.storage_state(path=str(session_dir / "storage.json"))
+            await browser.close()
         except Exception:
             pass
-
-        await browser.close()
 
         result_text = str(result)
 
@@ -101,7 +96,7 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
 async def check_inbox(pm_id: str, platform: str = "airbnb") -> dict:
     """Check inbox for unread messages using vision-based agent."""
     llm = get_llm()
-    browser = Browser(config=get_browser_config(pm_id))
+    browser = get_browser(pm_id)
 
     task = f"""
     Navigate to https://www.airbnb.com/hosting/inbox
@@ -154,7 +149,7 @@ async def check_inbox(pm_id: str, platform: str = "airbnb") -> dict:
 async def send_reply(pm_id: str, guest_name: str, message: str) -> dict:
     """Send a reply to a guest conversation using vision-based agent."""
     llm = get_llm()
-    browser = Browser(config=get_browser_config(pm_id))
+    browser = get_browser(pm_id)
 
     task = f"""
     Navigate to https://www.airbnb.com/hosting/inbox
