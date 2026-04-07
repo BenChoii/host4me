@@ -1,4 +1,17 @@
+import { motion } from 'motion/react';
 import { MessageSquare, Building2, AlertTriangle, Zap, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2, Bot } from 'lucide-react';
+
+const MotionCard = ({ children, delay = 0, ...props }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 12 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.4, delay, ease: [0.16, 1, 0.3, 1] }}
+    whileHover={{ y: -2, transition: { duration: 0.15 } }}
+    {...props}
+  >
+    {children}
+  </motion.div>
+);
 
 const MOCK_ACTIVITY = [
   { icon: '📨', iconBg: 'var(--dash-info-subtle)', title: 'Alfred checked Airbnb inbox', time: '2 min ago', type: 'inbox_check' },
@@ -12,7 +25,11 @@ export default function Overview() {
   return (
     <div>
       {/* Alfred status bar */}
-      <div className="dash-card dash-card-glow dash-animate-in" style={{
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="dash-card dash-card-glow" style={{
         marginBottom: 24,
         display: 'flex',
         alignItems: 'center',
@@ -43,7 +60,7 @@ export default function Overview() {
           <span className="dash-status-dot" />
           Running
         </span>
-      </div>
+      </motion.div>
 
       {/* Metrics */}
       <div className="dash-metrics" style={{ marginBottom: 24 }}>
@@ -53,7 +70,7 @@ export default function Overview() {
           { icon: Building2, label: 'Properties', value: '0', change: null, color: 'var(--dash-success)' },
           { icon: Zap, label: 'Actions Used', value: '0 / 100', change: null, color: 'var(--dash-warning)' },
         ].map(({ icon: Icon, label, value, change, color }, i) => (
-          <div key={label} className="dash-metric dash-animate-in" style={{ animationDelay: `${(i + 1) * 50}ms` }}>
+          <MotionCard key={label} delay={0.1 + i * 0.06} className="dash-metric">
             <div className="dash-metric-label">
               <Icon size={13} style={{ color }} />
               {label}
@@ -65,7 +82,7 @@ export default function Overview() {
                 {Math.abs(change)}% vs last week
               </div>
             )}
-          </div>
+          </MotionCard>
         ))}
       </div>
 
@@ -82,7 +99,13 @@ export default function Overview() {
 
         <div className="dash-feed">
           {MOCK_ACTIVITY.map((item, i) => (
-            <div key={i} className="dash-feed-item">
+            <motion.div
+              key={i}
+              className="dash-feed-item"
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3, delay: 0.3 + i * 0.06, ease: [0.16, 1, 0.3, 1] }}
+            >
               <div className="dash-feed-icon" style={{ background: item.iconBg, fontSize: 16 }}>
                 {item.icon}
               </div>
@@ -90,7 +113,7 @@ export default function Overview() {
                 <div className="dash-feed-title">{item.title}</div>
                 <div className="dash-feed-time">{item.time}</div>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
 

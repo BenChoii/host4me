@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   LayoutDashboard,
   Building2,
@@ -106,7 +107,17 @@ export default function DashboardLayout() {
         </header>
 
         <div className="dash-content">
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </div>

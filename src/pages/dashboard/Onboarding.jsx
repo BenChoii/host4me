@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'motion/react';
 import { useAction, useMutation } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
 import {
@@ -37,9 +38,16 @@ export default function Onboarding() {
         ))}
       </div>
 
-      {/* ─── Welcome ─── */}
+      {/* Step content with animated transitions */}
+      <AnimatePresence mode="wait">
       {STEPS[step].id === 'welcome' && (
-        <div className="dash-animate-in">
+        <motion.div
+          key="welcome"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
           <div style={{
             width: 56,
             height: 56,
@@ -63,15 +71,26 @@ export default function Onboarding() {
             properties, guests, and communication style. He starts in <strong style={{ color: 'var(--dash-text-secondary)' }}>shadow mode</strong> —
             drafting replies for your approval before sending anything.
           </p>
-          <button className="dash-btn dash-btn-primary" onClick={() => setStep(1)}>
+          <motion.button
+            className="dash-btn dash-btn-primary"
+            onClick={() => setStep(1)}
+            whileHover={{ scale: 1.03, boxShadow: '0 0 20px rgba(198, 125, 59, 0.25)' }}
+            whileTap={{ scale: 0.97 }}
+          >
             Let's Go <ArrowRight size={14} />
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
       )}
 
       {/* ─── Airbnb ─── */}
       {STEPS[step].id === 'airbnb' && (
-        <div className="dash-animate-in">
+        <motion.div
+          key="airbnb"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
           <div style={{
             width: 56,
             height: 56,
@@ -182,12 +201,18 @@ export default function Onboarding() {
               Skip
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* ─── Gmail ─── */}
       {STEPS[step].id === 'gmail' && (
-        <div className="dash-animate-in">
+        <motion.div
+          key="gmail"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
           <div style={{
             width: 56,
             height: 56,
@@ -229,12 +254,19 @@ export default function Onboarding() {
               Skip for now
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* ─── Done ─── */}
       {STEPS[step].id === 'done' && (
-        <div className="dash-animate-in" style={{ textAlign: 'center' }}>
+        <motion.div
+          key="done"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          style={{ textAlign: 'center' }}
+        >
           <div style={{
             width: 72,
             height: 72,
@@ -276,8 +308,9 @@ export default function Onboarding() {
               Go to Dashboard
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       <style>{`
         @keyframes spin {
