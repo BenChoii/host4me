@@ -1,91 +1,11 @@
 version: '3.8'
 
+# Worker VPS Docker Compose — runs browser agent + ADK runner
+# Data and auth handled by Convex (cloud). This just runs the heavy stuff.
+
 services:
   # ==========================================================================
-  # Ollama — Local LLM server (Gemma 4)
-  # ==========================================================================
-  ollama:
-    image: ollama/ollama:latest
-    container_name: host4me-ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # ==========================================================================
-  # PostgreSQL — Session store, credentials, analytics
-  # ==========================================================================
-  postgres:
-    image: postgres:16-alpine
-    container_name: host4me-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-host4me}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_DB: ${POSTGRES_DB:-host4me}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U host4me"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ==========================================================================
-  # Redis — Task queues, pub/sub for agent coordination
-  # ==========================================================================
-  redis:
-    image: redis:7-alpine
-    container_name: host4me-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  # ==========================================================================
-  # Host4Me Backend — Express server + Telegram bots
-  # ==========================================================================
-  backend:
-    build:
-      context: ../
-      dockerfile: deploy/Dockerfile.backend
-    container_name: host4me-backend
-    restart: unless-stopped
-    env_file:
-      - ../.env
-    environment:
-      ADK_RUNNER_URL: http://adk-runner:3200
-      BROWSER_AGENT_URL: http://browser-agents:8100
-    ports:
-      - "3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      adk-runner:
-        condition: service_started
-
-  # ==========================================================================
-  # ADK Agent Runner — Google ADK with Alfred + sub-agents (replaces Paperclip)
+  # ADK Agent Runner — Alfred + sub-agents via OpenRouter
   # ==========================================================================
   adk-runner:
     build:
@@ -93,46 +13,36 @@ services:
       dockerfile: Dockerfile
     container_name: host4me-adk-runner
     restart: unless-stopped
-    env_file:
-      - ../.env
     environment:
-      OLLAMA_BASE_URL: http://ollama:11434
-      BACKEND_INTERNAL_URL: http://backend:3000
-      BROWSER_AGENT_URL: http://browser-agents:8100
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      AGENT_MODEL_PRIMARY: ${AGENT_MODEL_PRIMARY:-google/gemma-4-26b-a4b-it}
+      AGENT_MODEL_FAST: ${AGENT_MODEL_FAST:-google/gemma-4-26b-a4b-it}
+      WORKER_API_SECRET: ${WORKER_API_SECRET}
       HOST4ME_DATA_DIR: /data
     ports:
       - "3200:3200"
     volumes:
-      - adk_data:/data
-    depends_on:
-      ollama:
-        condition: service_healthy
+      - worker_data:/data
 
   # ==========================================================================
-  # Browser Agents — Python Browser Use service
+  # Browser Agent — Playwright + Gemma 4 vision via OpenRouter
   # ==========================================================================
-  browser-agents:
+  browser-agent:
     build:
-      context: ../backend/browser-agents
+      context: ../backend/browser
       dockerfile: Dockerfile
-    container_name: host4me-browser-agents
+    container_name: host4me-browser-agent
     restart: unless-stopped
-    env_file:
-      - ../.env
     environment:
-      OLLAMA_BASE_URL: http://ollama:11434
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      VISION_MODEL: ${VISION_MODEL:-google/gemma-4-26b-a4b-it}
+      HOST4ME_DATA_DIR: /data
     ports:
       - "8100:8100"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      ollama:
-        condition: service_healthy
-    # Browser Use needs more shared memory for Playwright
+    volumes:
+      - worker_data:/data
+    # Playwright needs more shared memory
     shm_size: '2gb'
 
 volumes:
-  ollama_data:
-  postgres_data:
-  redis_data:
-  adk_data:
+  worker_data:

@@ -1,34 +1,46 @@
 """
 ADK Agent Runner — FastAPI service that runs the Host4Me agent team.
 
-Replaces Paperclip as the agent orchestration layer. Exposes endpoints for:
-- Sending messages to Alfred (from Telegram bot or inbox polling)
-- Running the agent team on a task
-- Checking agent health/status
+Multi-tenant SaaS architecture:
+- Each tenant gets their own session (keyed by tenant_id)
+- All LLM calls go through OpenRouter (Gemma 4 26B MoE)
+- Convex manages data; this service handles agent execution
+- Secured by WORKER_API_SECRET bearer token
 
-Uses Google ADK's Runner with InMemorySessionService for session management.
+Endpoints:
+- POST /agent/chat     — Send a message to Alfred (from Telegram or web)
+- POST /agent/briefing — Generate a daily/weekly briefing
+- POST /browser/login  — Login to Airbnb via browser agent
+- POST /browser/inbox  — Check Airbnb inbox
+- POST /browser/submit-2fa — Submit 2FA code
+- POST /gmail/sync     — Sync Gmail and extract property details
+- GET  /health         — Health check
 """
 
 import asyncio
+import json
 import logging
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from pydantic import BaseModel
+from typing import Optional
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 
 from . import alfred
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("adk-runner")
+logger = logging.getLogger("worker")
 
-app = FastAPI(title="Host4Me ADK Agent Runner", version="1.0.0")
+app = FastAPI(title="Host4Me Worker", version="2.0.0")
 
-# Session service — stores conversation history per PM
+WORKER_API_SECRET = os.environ.get("WORKER_API_SECRET", "")
+
+# Session service — stores conversation history per tenant
 session_service = InMemorySessionService()
 
-# The runner executes Alfred (who delegates to sub-agents)
+# Alfred runner
 runner = Runner(
     agent=alfred,
     app_name="host4me",
@@ -36,51 +48,73 @@ runner = Runner(
 )
 
 
-class MessageRequest(BaseModel):
-    pm_id: str
+# --- Auth ---
+
+async def verify_secret(authorization: str = Header(default="")):
+    """Verify the shared API secret from Convex."""
+    if not WORKER_API_SECRET:
+        return  # No secret configured, allow all (dev mode)
+    expected = f"Bearer {WORKER_API_SECRET}"
+    if authorization != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+# --- Models ---
+
+class ChatRequest(BaseModel):
+    tenant_id: str
     message: str
-    source: str = "telegram"  # telegram, inbox_poll, system
+    source: str = "telegram"
+
+class ChatResponse(BaseModel):
+    tenant_id: str
+    reply: str
+    metadata: dict = {}
+
+class BriefingRequest(BaseModel):
+    tenant_id: str
+    type: str = "daily"  # daily, weekly, monthly
+
+class BrowserLoginRequest(BaseModel):
+    tenant_id: str
+    platform: str = "airbnb"
+    email: str
+    password: str
+
+class BrowserInboxRequest(BaseModel):
+    tenant_id: str
+    platform: str = "airbnb"
+
+class Submit2FARequest(BaseModel):
+    tenant_id: str
+    platform: str
+    code: str
+
+class GmailSyncRequest(BaseModel):
+    tenant_id: str
 
 
-class TaskRequest(BaseModel):
-    pm_id: str
-    agent: str = "alfred"  # alfred, guest_comms, escalation, reporting
-    task: str
-    context: dict = {}
+# --- Agent Chat ---
 
-
-class AgentResponse(BaseModel):
-    pm_id: str
-    agent: str
-    response: str
-    actions: list[dict] = []
-
-
-@app.post("/message", response_model=AgentResponse)
-async def handle_message(req: MessageRequest):
-    """Send a message to Alfred from the PM (via Telegram) or from a system event.
-
-    Alfred will process it and either handle it directly or delegate to a sub-agent.
-    """
+@app.post("/agent/chat", response_model=ChatResponse, dependencies=[Depends(verify_secret)])
+async def chat_with_alfred(req: ChatRequest):
+    """Send a message to Alfred and get a response."""
     try:
-        # Get or create session for this PM
         session = await session_service.get_session(
             app_name="host4me",
-            user_id=req.pm_id,
-            session_id=req.pm_id,
+            user_id=req.tenant_id,
+            session_id=req.tenant_id,
         )
         if not session:
             session = await session_service.create_session(
                 app_name="host4me",
-                user_id=req.pm_id,
-                session_id=req.pm_id,
+                user_id=req.tenant_id,
+                session_id=req.tenant_id,
             )
 
-        # Inject PM context into the message
-        context_prefix = f"[PM: {req.pm_id}, Source: {req.source}]\n"
+        context_prefix = f"[Tenant: {req.tenant_id}, Source: {req.source}]\n"
         full_message = context_prefix + req.message
 
-        # Run the agent
         from google.adk.agents import types
         content = types.Content(
             role="user",
@@ -88,66 +122,9 @@ async def handle_message(req: MessageRequest):
         )
 
         response_text = ""
-        actions = []
-
         async for event in runner.run_async(
-            user_id=req.pm_id,
-            session_id=req.pm_id,
-            new_message=content,
-        ):
-            if hasattr(event, "content") and event.content:
-                for part in event.content.parts:
-                    if hasattr(part, "text") and part.text:
-                        response_text += part.text
-            if hasattr(event, "actions"):
-                actions.extend(event.actions)
-
-        return AgentResponse(
-            pm_id=req.pm_id,
-            agent="alfred",
-            response=response_text,
-            actions=[],
-        )
-
-    except Exception as e:
-        logger.error(f"Agent error for PM {req.pm_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/task", response_model=AgentResponse)
-async def handle_task(req: TaskRequest):
-    """Run a specific task on an agent (e.g., inbox poll triggers guest_comms).
-
-    Used by the polling scheduler to route new guest messages to the right agent.
-    """
-    try:
-        session = await session_service.get_session(
-            app_name="host4me",
-            user_id=req.pm_id,
-            session_id=f"{req.pm_id}_{req.agent}",
-        )
-        if not session:
-            session = await session_service.create_session(
-                app_name="host4me",
-                user_id=req.pm_id,
-                session_id=f"{req.pm_id}_{req.agent}",
-            )
-
-        task_message = f"[Task for {req.agent}]\n{req.task}"
-        if req.context:
-            import json
-            task_message += f"\n\nContext: {json.dumps(req.context)}"
-
-        from google.adk.agents import types
-        content = types.Content(
-            role="user",
-            parts=[types.Part(text=task_message)],
-        )
-
-        response_text = ""
-        async for event in runner.run_async(
-            user_id=req.pm_id,
-            session_id=f"{req.pm_id}_{req.agent}",
+            user_id=req.tenant_id,
+            session_id=req.tenant_id,
             new_message=content,
         ):
             if hasattr(event, "content") and event.content:
@@ -155,42 +132,90 @@ async def handle_task(req: TaskRequest):
                     if hasattr(part, "text") and part.text:
                         response_text += part.text
 
-        return AgentResponse(
-            pm_id=req.pm_id,
-            agent=req.agent,
-            response=response_text,
+        return ChatResponse(
+            tenant_id=req.tenant_id,
+            reply=response_text,
         )
 
     except Exception as e:
-        logger.error(f"Task error for PM {req.pm_id}: {e}", exc_info=True)
+        logger.error(f"Chat error for tenant {req.tenant_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/health")
-async def health():
-    """Health check for the agent runner."""
+@app.post("/agent/briefing", response_model=ChatResponse, dependencies=[Depends(verify_secret)])
+async def generate_briefing(req: BriefingRequest):
+    """Generate a daily/weekly/monthly briefing via Alfred."""
+    prompts = {
+        "daily": "Generate today's daily briefing. Summarize messages, bookings, escalations, and any insights.",
+        "weekly": "Generate the weekly report. Include trends, performance metrics, and strategic recommendations.",
+        "monthly": "Generate the monthly analytics report. Revenue trends, occupancy rates, and optimization suggestions.",
+    }
+    message = prompts.get(req.type, prompts["daily"])
+
+    return await chat_with_alfred(ChatRequest(
+        tenant_id=req.tenant_id,
+        message=f"[SYSTEM] {message}",
+        source="cron",
+    ))
+
+
+# --- Browser Agent ---
+
+@app.post("/browser/login", dependencies=[Depends(verify_secret)])
+async def browser_login(req: BrowserLoginRequest):
+    """Login to a platform via the browser agent."""
+    from .browser_bridge import run_browser_agent
+    result = await run_browser_agent("login", req.tenant_id, req.email, req.password)
+    return result
+
+
+@app.post("/browser/inbox", dependencies=[Depends(verify_secret)])
+async def browser_inbox(req: BrowserInboxRequest):
+    """Check platform inbox via browser agent."""
+    from .browser_bridge import run_browser_agent
+    result = await run_browser_agent("inbox", req.tenant_id, req.platform)
+    return result
+
+
+@app.post("/browser/submit-2fa", dependencies=[Depends(verify_secret)])
+async def browser_submit_2fa(req: Submit2FARequest):
+    """Submit 2FA code to browser agent."""
+    from .browser_bridge import run_browser_agent
+    result = await run_browser_agent("submit_2fa", req.tenant_id, req.platform, req.code)
+    return result
+
+
+# --- Gmail ---
+
+@app.post("/gmail/sync", dependencies=[Depends(verify_secret)])
+async def gmail_sync(req: GmailSyncRequest):
+    """Sync Gmail and extract property details."""
+    # TODO: Implement Gmail sync with OAuth tokens from Convex
     return {
-        "status": "ok",
-        "agent": "alfred",
-        "sub_agents": ["guest_comms", "escalation", "reporting"],
-        "model": os.environ.get("OLLAMA_MODEL_PRIMARY", "gemma4:26b"),
+        "tenant_id": req.tenant_id,
+        "emails_processed": 0,
+        "memories": [],
+        "status": "not_implemented",
     }
 
 
-@app.get("/sessions/{pm_id}")
-async def get_session_info(pm_id: str):
-    """Get session info for a PM (for debugging)."""
-    session = await session_service.get_session(
-        app_name="host4me",
-        user_id=pm_id,
-        session_id=pm_id,
-    )
-    if not session:
-        return {"pm_id": pm_id, "status": "no_session"}
+@app.post("/gmail/exchange-token", dependencies=[Depends(verify_secret)])
+async def gmail_exchange_token(code: str):
+    """Exchange Gmail OAuth code for access/refresh tokens."""
+    # TODO: Implement OAuth token exchange
+    return {"error": "not_implemented"}
+
+
+# --- Health ---
+
+@app.get("/health")
+async def health():
     return {
-        "pm_id": pm_id,
-        "status": "active",
-        "message_count": len(session.events) if hasattr(session, "events") else 0,
+        "status": "ok",
+        "agent": "alfred",
+        "sub_agents": ["guest_comms", "escalation", "reporting", "market_research", "profile_optimizer"],
+        "model": os.environ.get("AGENT_MODEL_PRIMARY", "google/gemma-4-26b-a4b-it"),
+        "provider": "openrouter",
     }
 
 
