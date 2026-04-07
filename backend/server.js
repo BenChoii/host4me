@@ -175,8 +175,11 @@ botManager.onPmMessage = async (pmId, type, data) => {
                   await botManager.sendMessage(pmId, `⚠️ Connected but couldn't read inbox: ${inbox.message || inbox.status}`);
                 }
               } else if (result.status === '2fa_required') {
-                await botManager.sendMessage(pmId, `🔐 ${platform} is asking for a verification code. Check your email/phone and send me the code.`);
-                history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login requires 2FA verification code.` }] });
+                const method = result.method || 'unknown';
+                const methodText = method === 'email' ? 'Check your email' : method === 'phone' ? 'Check your phone/SMS' : 'Check your email or phone';
+                const detail = result.analysis ? `\n\nAirbnb says: "${result.analysis.split('\n').slice(1).join(' ').trim().slice(0, 200)}"` : '';
+                await botManager.sendMessage(pmId, `🔐 ${platform} needs a verification code. ${methodText} and send me the code.${detail}`);
+                history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login requires 2FA via ${method}. ${result.analysis || ''}` }] });
               } else {
                 await botManager.sendMessage(pmId, `⚠️ Could not log in to ${platform}: ${result.message || result.status}. This might be due to Airbnb blocking automated browsers. Let me know if you want to try again.`);
                 history.push({ role: 'model', parts: [{ text: `[BROWSER_DATA] Login failed: ${result.message || result.status}` }] });

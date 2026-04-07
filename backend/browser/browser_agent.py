@@ -182,7 +182,10 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
             analysis = await ask_gemini_vision(ss,
                 "Analyze this page. Is the user logged in? Is there a 2FA/verification code prompt? "
                 "Is there a CAPTCHA? Is there an error message? What page is this? "
-                "Respond with exactly one of: LOGGED_IN, 2FA_REQUIRED, CAPTCHA, LOGIN_ERROR, UNKNOWN")
+                "If there's a verification code prompt, tell me: is it asking for a code sent via EMAIL or PHONE/SMS? "
+                "What exact text does it show about where the code was sent? "
+                "Respond starting with one of: LOGGED_IN, 2FA_EMAIL, 2FA_PHONE, 2FA_UNKNOWN, CAPTCHA, LOGIN_ERROR, UNKNOWN. "
+                "Then on a new line, describe what you see.")
 
             print(f"[Vision] Login result: {analysis[:200]}", file=sys.stderr)
 
@@ -193,7 +196,8 @@ async def login_airbnb(pm_id: str, email: str, password: str) -> dict:
             if "LOGGED_IN" in analysis_upper or "/hosting" in current_url:
                 return {"status": "logged_in", "url": current_url, "analysis": analysis}
             elif "2FA" in analysis_upper:
-                return {"status": "2fa_required", "analysis": analysis}
+                method = "email" if "EMAIL" in analysis_upper else "phone" if "PHONE" in analysis_upper else "unknown"
+                return {"status": "2fa_required", "method": method, "analysis": analysis}
             elif "CAPTCHA" in analysis_upper:
                 return {"status": "captcha", "analysis": analysis}
             elif "ERROR" in analysis_upper:
