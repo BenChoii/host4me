@@ -1,69 +1,114 @@
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { BarChart3, Home as HomeIcon, Settings, Building2 } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Building2,
+  Settings,
+  Sparkles,
+  MessageSquare,
+  Bell,
+  Shield,
+} from 'lucide-react';
+import '../../dashboard.css';
 
 const NAV_ITEMS = [
-  { to: '/dashboard', icon: HomeIcon, label: 'Overview', end: true },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Overview', end: true },
   { to: '/dashboard/properties', icon: Building2, label: 'Properties' },
   { to: '/dashboard/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function DashboardLayout() {
+  const location = useLocation();
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#0a0a0a', color: '#e0e0e0' }}>
+    <div className="dash">
       {/* Sidebar */}
-      <aside style={{
-        width: 240,
-        borderRight: '1px solid rgba(255,255,255,0.08)',
-        padding: '24px 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32, padding: '0 8px' }}>
-          <BarChart3 size={22} color="#c67d3b" />
-          <span style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>Host4Me</span>
+      <aside className="dash-sidebar">
+        <div className="dash-sidebar-header">
+          <div className="dash-logo">
+            <div className="dash-logo-icon">H</div>
+            Host4Me
+          </div>
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+        <nav className="dash-nav">
+          <div className="dash-nav-section">Main</div>
           {NAV_ITEMS.map(({ to, icon: Icon, label, end }) => (
             <NavLink
               key={to}
               to={to}
               end={end}
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '10px 12px',
-                borderRadius: 8,
-                textDecoration: 'none',
-                color: isActive ? '#fff' : '#999',
-                background: isActive ? 'rgba(198, 125, 59, 0.15)' : 'transparent',
-                fontSize: 14,
-                fontWeight: isActive ? 600 : 400,
-                transition: 'all 0.15s',
-              })}
+              className={({ isActive }) =>
+                `dash-nav-item${isActive ? ' active' : ''}`
+              }
             >
-              <Icon size={18} />
+              <Icon size={16} />
               {label}
             </NavLink>
           ))}
+
+          <div className="dash-nav-section">Alfred</div>
+          <a
+            href="https://t.me/Host4Me_bot"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="dash-nav-item"
+          >
+            <MessageSquare size={16} />
+            Chat in Telegram
+            <svg width="10" height="10" viewBox="0 0 10 10" style={{ marginLeft: 'auto', opacity: 0.4 }}>
+              <path d="M1 9L9 1M9 1H3M9 1V7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            </svg>
+          </a>
+          <NavLink to="/dashboard/settings" className="dash-nav-item">
+            <Shield size={16} />
+            Shadow Mode
+            <span className="dash-status active" style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 11 }}>
+              <span className="dash-status-dot" />
+              ON
+            </span>
+          </NavLink>
         </nav>
 
-        <div style={{ padding: '12px 8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="dash-sidebar-footer">
           <UserButton
             appearance={{
-              elements: { avatarBox: { width: 32, height: 32 } },
+              elements: { avatarBox: { width: 30, height: 30 } },
             }}
           />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 550, color: 'var(--dash-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              My Account
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--dash-text-muted)' }}>Free Plan</div>
+          </div>
         </div>
       </aside>
 
       {/* Main content */}
-      <main style={{ flex: 1, padding: 32, overflowY: 'auto' }}>
-        <Outlet />
-      </main>
+      <div className="dash-main">
+        <header className="dash-header">
+          <h1>
+            {location.pathname === '/dashboard' && 'Overview'}
+            {location.pathname === '/dashboard/properties' && 'Properties'}
+            {location.pathname === '/dashboard/settings' && 'Settings'}
+            {location.pathname === '/dashboard/onboarding' && 'Get Started'}
+          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="dash-btn dash-btn-ghost" style={{ position: 'relative' }}>
+              <Bell size={16} />
+            </button>
+            <button className="dash-btn dash-btn-primary">
+              <Sparkles size={14} />
+              Upgrade
+            </button>
+          </div>
+        </header>
+
+        <div className="dash-content">
+          <Outlet />
+        </div>
+      </div>
     </div>
   );
 }

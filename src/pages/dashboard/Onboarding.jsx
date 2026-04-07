@@ -2,143 +2,156 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAction, useMutation } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
-import { Building2, Mail, MessageSquare, Check, ArrowRight, ArrowLeft } from 'lucide-react';
+import {
+  Building2, Mail, MessageSquare, Check, ArrowRight, ArrowLeft,
+  Shield, Lock, Eye, EyeOff, Loader2, ExternalLink, Sparkles,
+} from 'lucide-react';
 
 const STEPS = [
-  { id: 'welcome', title: 'Welcome', icon: MessageSquare },
-  { id: 'airbnb', title: 'Connect Airbnb', icon: Building2 },
-  { id: 'gmail', title: 'Connect Gmail', icon: Mail },
-  { id: 'done', title: 'Meet Alfred', icon: Check },
+  { id: 'welcome', title: 'Welcome' },
+  { id: 'airbnb', title: 'Airbnb' },
+  { id: 'gmail', title: 'Gmail' },
+  { id: 'done', title: 'Ready' },
 ];
 
 export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [airbnbEmail, setAirbnbEmail] = useState('');
   const [airbnbPassword, setAirbnbPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [loginResult, setLoginResult] = useState(null);
   const navigate = useNavigate();
   const connectAirbnb = useAction(api.onboarding.connectAirbnb);
   const completeOnboarding = useMutation(api.tenants.completeOnboarding);
 
-  const currentStep = STEPS[step];
-
-  const inputStyle = {
-    width: '100%',
-    padding: '12px 16px',
-    borderRadius: 8,
-    border: '1px solid rgba(255,255,255,0.15)',
-    background: 'rgba(255,255,255,0.05)',
-    color: '#fff',
-    fontSize: 14,
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
-
-  const btnPrimary = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '12px 24px',
-    borderRadius: 8,
-    border: 'none',
-    background: '#c67d3b',
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-  };
-
-  const btnSecondary = {
-    ...btnPrimary,
-    background: 'rgba(255,255,255,0.08)',
-    color: '#999',
-  };
-
   return (
-    <div style={{ maxWidth: 560, margin: '0 auto' }}>
+    <div className="dash-onboarding">
       {/* Progress */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 48 }}>
+      <div className="dash-progress dash-animate-in">
         {STEPS.map((s, i) => (
-          <div key={s.id} style={{ flex: 1 }}>
-            <div style={{
-              height: 4,
-              borderRadius: 2,
-              background: i <= step ? '#c67d3b' : 'rgba(255,255,255,0.1)',
-              transition: 'background 0.3s',
-            }} />
-            <div style={{
-              fontSize: 11,
-              color: i <= step ? '#c67d3b' : '#666',
-              marginTop: 6,
-              textAlign: 'center',
-            }}>
-              {s.title}
-            </div>
+          <div key={s.id} className={`dash-progress-step ${i < step ? 'complete' : ''} ${i === step ? 'active' : ''}`}>
+            <div className={`dash-progress-bar ${i < step ? 'complete' : ''} ${i === step ? 'active' : ''}`} />
+            <div className="dash-progress-label">{s.title}</div>
           </div>
         ))}
       </div>
 
-      {/* Step content */}
-      {currentStep.id === 'welcome' && (
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 12 }}>
+      {/* ─── Welcome ─── */}
+      {STEPS[step].id === 'welcome' && (
+        <div className="dash-animate-in">
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: 'var(--dash-radius-lg)',
+            background: 'var(--dash-accent-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 24,
+          }}>
+            <Sparkles size={26} color="var(--dash-accent)" />
+          </div>
+          <h2 style={{ fontSize: 26, fontWeight: 700, color: 'var(--dash-text)', marginBottom: 8, fontFamily: 'inherit', letterSpacing: '-0.02em' }}>
             Welcome to Host4Me
-          </h1>
-          <p style={{ color: '#999', lineHeight: 1.7, marginBottom: 32 }}>
-            Let's get Alfred set up to manage your properties. This takes about 3 minutes.
-            Alfred will connect to your Airbnb and Gmail to start learning about your
-            properties, guests, and communication style.
+          </h2>
+          <p style={{ color: 'var(--dash-text-secondary)', lineHeight: 1.7, marginBottom: 8, fontSize: 14.5 }}>
+            Let's get Alfred set up. This takes about 3 minutes.
           </p>
-          <button style={btnPrimary} onClick={() => setStep(1)}>
-            Let's Go <ArrowRight size={16} />
+          <p style={{ color: 'var(--dash-text-muted)', lineHeight: 1.7, marginBottom: 32, fontSize: 13 }}>
+            Alfred will connect to your Airbnb and Gmail to start learning about your
+            properties, guests, and communication style. He starts in <strong style={{ color: 'var(--dash-text-secondary)' }}>shadow mode</strong> —
+            drafting replies for your approval before sending anything.
+          </p>
+          <button className="dash-btn dash-btn-primary" onClick={() => setStep(1)}>
+            Let's Go <ArrowRight size={14} />
           </button>
         </div>
       )}
 
-      {currentStep.id === 'airbnb' && (
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 12 }}>
+      {/* ─── Airbnb ─── */}
+      {STEPS[step].id === 'airbnb' && (
+        <div className="dash-animate-in">
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: 'var(--dash-radius-lg)',
+            background: 'var(--dash-danger-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 24,
+          }}>
+            <Building2 size={26} color="var(--dash-danger)" />
+          </div>
+          <h2 style={{ fontSize: 26, fontWeight: 700, color: 'var(--dash-text)', marginBottom: 8, fontFamily: 'inherit', letterSpacing: '-0.02em' }}>
             Connect Airbnb
-          </h1>
-          <p style={{ color: '#999', lineHeight: 1.7, marginBottom: 24 }}>
-            Alfred needs access to your Airbnb account to monitor guest messages,
-            check bookings, and reply on your behalf. Your credentials are encrypted
-            and never stored in plain text.
+          </h2>
+          <p style={{ color: 'var(--dash-text-secondary)', lineHeight: 1.7, marginBottom: 24, fontSize: 14.5 }}>
+            Alfred needs access to monitor guest messages and respond on your behalf.
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 32 }}>
+
+          {/* Trust signals */}
+          <div className="dash-card" style={{ marginBottom: 24, padding: 16 }}>
+            <div style={{ display: 'flex', gap: 12, fontSize: 12.5, color: 'var(--dash-text-muted)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Lock size={12} color="var(--dash-success)" />
+                AES-256 encrypted
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Shield size={12} color="var(--dash-success)" />
+                Never stored in plain text
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Eye size={12} color="var(--dash-success)" />
+                Shadow mode by default
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 28 }}>
             <div>
-              <label style={{ fontSize: 13, color: '#888', display: 'block', marginBottom: 6 }}>
-                Airbnb Email
-              </label>
+              <label className="dash-label">Airbnb Email</label>
               <input
                 type="email"
-                style={inputStyle}
+                className="dash-input"
                 value={airbnbEmail}
                 onChange={(e) => setAirbnbEmail(e.target.value)}
                 placeholder="your@email.com"
+                autoFocus
               />
             </div>
             <div>
-              <label style={{ fontSize: 13, color: '#888', display: 'block', marginBottom: 6 }}>
-                Airbnb Password
-              </label>
-              <input
-                type="password"
-                style={inputStyle}
-                value={airbnbPassword}
-                onChange={(e) => setAirbnbPassword(e.target.value)}
-                placeholder="••••••••"
-              />
+              <label className="dash-label">Airbnb Password</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="dash-input"
+                  style={{ paddingRight: 44 }}
+                  value={airbnbPassword}
+                  onChange={(e) => setAirbnbPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+                <button
+                  type="button"
+                  className="dash-btn dash-btn-ghost"
+                  style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', padding: 6 }}
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button style={btnSecondary} onClick={() => setStep(0)}>
-              <ArrowLeft size={16} /> Back
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="dash-btn dash-btn-secondary" onClick={() => setStep(0)}>
+              <ArrowLeft size={14} /> Back
             </button>
             <button
-              style={{ ...btnPrimary, opacity: (!airbnbEmail || !airbnbPassword) ? 0.5 : 1 }}
+              className="dash-btn dash-btn-primary"
               disabled={!airbnbEmail || !airbnbPassword || connecting}
+              style={{ opacity: (!airbnbEmail || !airbnbPassword || connecting) ? 0.5 : 1 }}
               onClick={async () => {
                 setConnecting(true);
                 try {
@@ -147,7 +160,7 @@ export default function Onboarding() {
                   if (result.status === 'logged_in') {
                     setStep(2);
                   } else if (result.status === '2fa_required') {
-                    alert('Airbnb requires a verification code. Check your email/phone and enter it in Telegram via /auth airbnb YOUR_CODE');
+                    alert('Airbnb requires a verification code. Check your email/phone and send it to Alfred in Telegram via /auth airbnb YOUR_CODE');
                     setStep(2);
                   } else {
                     alert(`Login issue: ${result.message || result.status}. You can retry or skip for now.`);
@@ -157,84 +170,104 @@ export default function Onboarding() {
                 } finally {
                   setConnecting(false);
                 }
-              }
+              }}
             >
-              {connecting ? 'Connecting...' : 'Connect Airbnb'} <ArrowRight size={16} />
+              {connecting ? (
+                <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Connecting...</>
+              ) : (
+                <>Connect Airbnb <ArrowRight size={14} /></>
+              )}
+            </button>
+            <button className="dash-btn dash-btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep(2)}>
+              Skip
             </button>
           </div>
         </div>
       )}
 
-      {currentStep.id === 'gmail' && (
-        <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 12 }}>
+      {/* ─── Gmail ─── */}
+      {STEPS[step].id === 'gmail' && (
+        <div className="dash-animate-in">
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: 'var(--dash-radius-lg)',
+            background: 'var(--dash-info-subtle)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 24,
+          }}>
+            <Mail size={26} color="var(--dash-info)" />
+          </div>
+          <h2 style={{ fontSize: 26, fontWeight: 700, color: 'var(--dash-text)', marginBottom: 8, fontFamily: 'inherit', letterSpacing: '-0.02em' }}>
             Connect Gmail
-          </h1>
-          <p style={{ color: '#999', lineHeight: 1.7, marginBottom: 24 }}>
-            Alfred monitors your Gmail for booking confirmations, guest inquiries, and
-            property details like wifi passwords and check-in instructions. We only
-            request read access — Alfred never sends emails.
+          </h2>
+          <p style={{ color: 'var(--dash-text-secondary)', lineHeight: 1.7, marginBottom: 12, fontSize: 14.5 }}>
+            Alfred reads your Gmail to automatically learn property details.
           </p>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button style={btnSecondary} onClick={() => setStep(1)}>
-              <ArrowLeft size={16} /> Back
+          <p style={{ color: 'var(--dash-text-muted)', lineHeight: 1.7, marginBottom: 28, fontSize: 13 }}>
+            WiFi passwords, gate codes, check-in instructions, parking details — Alfred extracts
+            these from your booking confirmation emails so you never have to type them in manually.
+            <strong style={{ color: 'var(--dash-text-secondary)' }}> Read-only access</strong> — Alfred never sends emails.
+          </p>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="dash-btn dash-btn-secondary" onClick={() => setStep(1)}>
+              <ArrowLeft size={14} /> Back
             </button>
             <button
-              style={btnPrimary}
+              className="dash-btn dash-btn-primary"
               onClick={() => {
                 // TODO: Redirect to Gmail OAuth consent screen
-                // window.location.href = `${CONVEX_HTTP_URL}/auth/gmail/start?state=${clerkUserId}`;
                 setStep(3);
               }}
             >
-              Connect Gmail <Mail size={16} />
+              Connect Gmail <Mail size={14} />
             </button>
-            <button
-              style={{ ...btnSecondary, fontSize: 13 }}
-              onClick={() => setStep(3)}
-            >
+            <button className="dash-btn dash-btn-ghost" style={{ fontSize: 12 }} onClick={() => setStep(3)}>
               Skip for now
             </button>
           </div>
         </div>
       )}
 
-      {currentStep.id === 'done' && (
-        <div style={{ textAlign: 'center' }}>
+      {/* ─── Done ─── */}
+      {STEPS[step].id === 'done' && (
+        <div className="dash-animate-in" style={{ textAlign: 'center' }}>
           <div style={{
-            width: 80,
-            height: 80,
+            width: 72,
+            height: 72,
             borderRadius: '50%',
-            background: 'rgba(198, 125, 59, 0.15)',
+            background: 'var(--dash-success-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             margin: '0 auto 24px',
           }}>
-            <Check size={36} color="#c67d3b" />
+            <Check size={32} color="var(--dash-success)" />
           </div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 12 }}>
+          <h2 style={{ fontSize: 26, fontWeight: 700, color: 'var(--dash-text)', marginBottom: 8, fontFamily: 'inherit', letterSpacing: '-0.02em' }}>
             Alfred is Ready
-          </h1>
-          <p style={{ color: '#999', lineHeight: 1.7, marginBottom: 12 }}>
-            Your AI property manager is set up and monitoring your accounts.
-            Open Telegram to start chatting with Alfred.
+          </h2>
+          <p style={{ color: 'var(--dash-text-secondary)', lineHeight: 1.7, marginBottom: 8, fontSize: 14.5 }}>
+            Open Telegram to meet Alfred and start managing your properties.
           </p>
-          <p style={{ color: '#666', fontSize: 13, marginBottom: 32 }}>
-            Alfred will send you a daily briefing at 8am and alert you immediately
-            for anything urgent.
+          <p style={{ color: 'var(--dash-text-muted)', fontSize: 13, marginBottom: 32, lineHeight: 1.6 }}>
+            Alfred will send you a daily briefing at 8am and alert you immediately for anything urgent. He's in shadow mode — every guest reply draft needs your OK first.
           </p>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
             <a
               href="https://t.me/Host4Me_bot"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ ...btnPrimary, textDecoration: 'none' }}
+              className="dash-btn dash-btn-primary"
+              style={{ textDecoration: 'none' }}
             >
-              <MessageSquare size={16} /> Open Telegram
+              <MessageSquare size={14} /> Open Telegram <ExternalLink size={11} />
             </a>
             <button
-              style={btnSecondary}
+              className="dash-btn dash-btn-secondary"
               onClick={async () => {
                 await completeOnboarding();
                 navigate('/dashboard');
@@ -245,6 +278,13 @@ export default function Onboarding() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
