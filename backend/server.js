@@ -19,6 +19,7 @@ const { formatSessionExpired } = require('./telegram/notifications');
 const { encryptCredentials } = require('./onboarding/credential-vault');
 const { analyzeStyle, generateStyleGuide, STYLE_PRESETS } = require('./onboarding/style-learner');
 const ollamaConfig = require('./config/ollama');
+const { GmailMonitor } = require('./gmail/monitor');
 
 const app = express();
 app.use(express.json());
@@ -27,6 +28,7 @@ const PORT = process.env.PORT || 3000;
 const BROWSER_AGENT_URL = process.env.BROWSER_AGENT_URL || 'http://localhost:8100';
 const ADK_RUNNER_URL = process.env.ADK_RUNNER_URL || 'http://localhost:3200';
 const POLL_INTERVAL = parseInt(process.env.BROWSER_POLL_INTERVAL_MS || '180000', 10);
+const GMAIL_POLL_INTERVAL = parseInt(process.env.GMAIL_POLL_INTERVAL_MS || '60000', 10);
 
 // ==========================================================================
 // Telegram Bot Manager
@@ -36,6 +38,9 @@ const botManager = new BotManager();
 
 // Conversation history per PM (in-memory for now, move to DB later)
 const conversations = new Map();
+
+// Gmail monitors per PM
+const gmailMonitors = new Map();
 
 const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You are a premium, full-service AI property manager. You handle EVERYTHING so the PM can focus on growth.
 
@@ -55,8 +60,15 @@ const ALFRED_SYSTEM_PROMPT = `You are Alfred, the AI concierge for Host4Me. You 
 10. REMEMBER credentials. If the PM already gave you their email and password in this conversation, REUSE them. NEVER ask for credentials you already have. If a login fails and you need to retry, use the SAME credentials from earlier in the chat.
 10. Be concise but thorough. Anticipate what the PM needs.
 
-═══ BROWSER COMMANDS ═══
+═══ COMMANDS ═══
 Include these tags to trigger actions:
+
+GMAIL (Primary — connect this FIRST):
+- [CONNECT_GMAIL: email=X, app_password=Y] — Connect PM's Gmail to monitor booking emails
+- [CHECK_GMAIL] — Check for recent platform emails
+- [READ_EMAIL: uid=123] — Read a specific email in full
+
+BROWSER (Secondary — for actions on platforms):
 - [LOGIN_REQUEST: platform=airbnb, email=X, password=Y]
 - [CHECK_BROWSER] — Fresh screenshot of current page
 - [CHECK_INBOX] — List all inbox conversations
@@ -116,12 +128,23 @@ Include these tags to trigger actions:
 🟡 ACTION REQUIRED (need PM decision): money requests, refunds, maintenance, conflicts
 🟢 INFORMATIONAL (daily briefing): routine messages handled, bookings confirmed, cleaning scheduled
 
-═══ ONBOARDING ═══
-1. Ask platform + credentials → [LOGIN_REQUEST]
-2. If 2FA → ask for code → [SUBMIT_2FA: code=X]
-3. After login → [CHECK_INBOX]
-4. Ask about their properties, cleaning crew contacts, and preferences
-5. Ask about other platforms they're listed on (for calendar sync)
+═══ ONBOARDING (follow this order) ═══
+1. GMAIL FIRST: Ask for the Gmail address attached to their booking platforms.
+   Then explain how to create an App Password:
+   "Go to myaccount.google.com → Security → 2-Step Verification → App Passwords.
+   Create one for 'Mail' and send me the 16-character code."
+   → [CONNECT_GMAIL: email=X, app_password=Y]
+
+2. Once Gmail is connected, I'll automatically monitor for new booking emails from Airbnb, VRBO, Booking.com, etc.
+
+3. Ask which platforms they use (Airbnb, VRBO, Booking.com, etc.)
+
+4. Ask about their properties: names, addresses, cleaning crew contacts, check-in/out times.
+
+5. Ask about preferences: cleaning buffer days, auto-reply style, escalation preferences.
+
+6. OPTIONAL: Offer to log into platforms for direct actions → [LOGIN_REQUEST]
+   (Gmail monitoring handles most notifications — platform login is for taking actions like replying to guests, updating calendars, etc.)
 
 ═══ GOLDEN RULE ═══
 Act like you're the PM's most trusted employee. Be proactive, thorough, and never let anything slip through the cracks. If something feels wrong, flag it. If you're unsure, ask. The PM should feel like they can sleep peacefully knowing you're handling everything.`;
@@ -203,6 +226,9 @@ botManager.onPmMessage = async (pmId, type, data) => {
           const checkInbox = reply.includes('[CHECK_INBOX]');
           const submit2fa = reply.match(/\[SUBMIT_2FA:\s*code=([^\]]+)\]/);
           const browserAction = reply.match(/\[BROWSER_ACTION:\s*([^\]]+)\]/);
+          const connectGmail = reply.match(/\[CONNECT_GMAIL:\s*email=([^,]+),\s*app_password=([^\]]+)\]/);
+          const checkGmail = reply.includes('[CHECK_GMAIL]');
+          const readEmail = reply.match(/\[READ_EMAIL:\s*uid=([^\]]+)\]/);
 
           // Clean all tags from reply
           let cleanReply = reply
@@ -211,6 +237,9 @@ botManager.onPmMessage = async (pmId, type, data) => {
             .replace(/\[CHECK_INBOX\]/g, '')
             .replace(/\[SUBMIT_2FA:[^\]]+\]/g, '')
             .replace(/\[BROWSER_ACTION:[^\]]+\]/g, '')
+            .replace(/\[CONNECT_GMAIL:[^\]]+\]/g, '')
+            .replace(/\[CHECK_GMAIL\]/g, '')
+            .replace(/\[READ_EMAIL:[^\]]+\]/g, '')
             .trim();
 
           // Strip hallucinated BROWSER_DATA — the model should never produce this
@@ -359,6 +388,93 @@ botManager.onPmMessage = async (pmId, type, data) => {
                 await botManager.sendMessage(pmId, `${result.analysis || result.message || 'Action completed'}`);
               } catch (err) {
                 await botManager.sendMessage(pmId, `⚠️ Could not perform action: ${err.message}`);
+              }
+            }
+
+            // ── Gmail Commands ──
+
+            // CONNECT_GMAIL
+            if (connectGmail) {
+              const [, gmailEmail, gmailAppPassword] = connectGmail;
+              try {
+                await botManager.sendMessage(pmId, `📧 Connecting to ${gmailEmail.trim()}...`);
+
+                // Disconnect existing monitor if any
+                if (gmailMonitors.has(pmId)) {
+                  await gmailMonitors.get(pmId).disconnect();
+                }
+
+                const monitor = new GmailMonitor({
+                  email: gmailEmail.trim(),
+                  appPassword: gmailAppPassword.trim(),
+                  pmId,
+                  onNewEmail: async (pmId, email) => {
+                    // Notify PM via Telegram when a new booking email arrives
+                    const msg = `${email.typeLabel} from ${email.platform.toUpperCase()}\n📩 ${email.subject}\n📅 ${email.date ? new Date(email.date).toLocaleString() : 'just now'}`;
+                    await botManager.sendMessage(pmId, msg);
+
+                    // Inject into conversation for Gemini to reason about
+                    const hist = conversations.get(pmId) || [];
+                    hist.push({ role: 'user', parts: [{ text: `[EMAIL_NOTIFICATION] ${email.typeLabel} | Platform: ${email.platform} | Subject: ${email.subject} | From: ${email.from} | Date: ${email.date}` }] });
+                    conversations.set(pmId, hist);
+                  },
+                });
+
+                await monitor.connect();
+                monitor.startPolling(GMAIL_POLL_INTERVAL);
+                gmailMonitors.set(pmId, monitor);
+
+                await botManager.sendMessage(pmId, `✅ Gmail connected! I'm now monitoring ${gmailEmail.trim()} for booking emails from Airbnb, VRBO, and Booking.com. I'll notify you the moment anything comes in.`);
+                history.push({ role: 'model', parts: [{ text: `[SYSTEM] Gmail connected: ${gmailEmail.trim()}. Monitoring active.` }] });
+              } catch (err) {
+                console.error(`[Gmail] Connection error for ${pmId}:`, err.message);
+                let errorMsg = `⚠️ Could not connect to Gmail: ${err.message}`;
+                if (err.message.includes('Invalid credentials') || err.message.includes('AUTHENTICATIONFAILED')) {
+                  errorMsg = `⚠️ Gmail authentication failed. Please check:\n1. The email address is correct\n2. The App Password is the 16-character code from Google (not your regular password)\n3. 2-Step Verification is enabled on the Google account`;
+                }
+                await botManager.sendMessage(pmId, errorMsg);
+                history.push({ role: 'model', parts: [{ text: `[SYSTEM] Gmail connection failed: ${err.message}` }] });
+              }
+            }
+
+            // CHECK_GMAIL
+            if (checkGmail) {
+              const monitor = gmailMonitors.get(pmId);
+              if (!monitor) {
+                await botManager.sendMessage(pmId, `📧 Gmail is not connected yet. Please provide your Gmail address and App Password first.`);
+              } else {
+                try {
+                  await botManager.sendMessage(pmId, `📧 Checking recent platform emails...`);
+                  const emails = await monitor.fetchRecentPlatformEmails(10);
+                  if (emails.length > 0) {
+                    const summary = emails.map(e =>
+                      `${e.typeLabel} | ${e.platform.toUpperCase()} | ${e.subject}`
+                    ).join('\n');
+                    await botManager.sendMessage(pmId, `📬 Recent platform emails:\n\n${summary}`);
+                    history.push({ role: 'user', parts: [{ text: `[EMAIL_DATA] Recent emails:\n${summary}` }] });
+                  } else {
+                    await botManager.sendMessage(pmId, `📭 No recent emails from booking platforms found.`);
+                  }
+                } catch (err) {
+                  await botManager.sendMessage(pmId, `⚠️ Could not check Gmail: ${err.message}`);
+                }
+              }
+            }
+
+            // READ_EMAIL
+            if (readEmail) {
+              const monitor = gmailMonitors.get(pmId);
+              if (!monitor) {
+                await botManager.sendMessage(pmId, `📧 Gmail is not connected.`);
+              } else {
+                try {
+                  const emailContent = await monitor.readEmail(readEmail[1].trim());
+                  const preview = (emailContent.text || '').slice(0, 1000);
+                  await botManager.sendMessage(pmId, `📧 *${emailContent.subject}*\nFrom: ${emailContent.from}\nDate: ${emailContent.date}\n\n${preview}`);
+                  history.push({ role: 'user', parts: [{ text: `[EMAIL_DATA] Full email: Subject: ${emailContent.subject}. Content: ${preview}` }] });
+                } catch (err) {
+                  await botManager.sendMessage(pmId, `⚠️ Could not read email: ${err.message}`);
+                }
               }
             }
           }
