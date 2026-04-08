@@ -768,23 +768,24 @@ export default function LandingPage() {
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Getting Started</span>
           <h2 className="section-heading">Three Steps to Effortless Guest Management</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, maxWidth: 900, margin: '48px auto 0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, maxWidth: 900, margin: '48px auto 0', textAlign: 'left' }}>
             {STEPS.map((step, i) => (
               <div key={i} className="reveal" style={{
-                background: 'var(--bg-alt)',
+                background: 'white',
                 borderRadius: 16,
                 padding: '32px 24px',
                 border: '1px solid var(--border)',
                 position: 'relative',
+                overflow: 'hidden',
               }}>
                 <div style={{
                   fontSize: 48,
                   fontWeight: 800,
                   color: 'var(--primary)',
-                  opacity: 0.15,
+                  opacity: 0.1,
                   position: 'absolute',
-                  top: 16,
-                  right: 20,
+                  top: 12,
+                  right: 16,
                   lineHeight: 1,
                 }}>{step.num}</div>
                 <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>{step.title}</h3>
