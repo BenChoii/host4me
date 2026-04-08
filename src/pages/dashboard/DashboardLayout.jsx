@@ -12,6 +12,7 @@ import {
   Shield,
   Menu,
   X,
+  Zap,
 } from 'lucide-react';
 import '../../dashboard.css';
 
@@ -48,8 +49,10 @@ export default function DashboardLayout() {
       <aside className={`dash-sidebar ${mobileMenuOpen ? 'open' : ''}`}>
         <div className="dash-sidebar-header">
           <div className="dash-logo">
-            <div className="dash-logo-icon">H</div>
-            Host4Me
+            <div className="dash-logo-icon">
+              <Zap size={14} />
+            </div>
+            HOST<span style={{ color: 'var(--dash-accent)' }}>4</span>ME
           </div>
           <button
             className="dash-mobile-close dash-btn dash-btn-ghost"
