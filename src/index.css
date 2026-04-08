@@ -1771,6 +1771,7 @@ p {
     justify-content: center;
   }
   .chat-mockup { margin: 30px -10px 0; }
+  .hero-tab-label { display: none; }
 
   /* Social proof */
   .stats-grid {

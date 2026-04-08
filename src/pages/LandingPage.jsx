@@ -252,6 +252,179 @@ function KineticMarquee() {
 }
 
 /* ═══════════════════════════════════════════
+   ALFRED IN ACTION — ANIMATED DEMO SHOWCASE
+   ═══════════════════════════════════════════ */
+const DEMO_SCENARIOS = [
+  {
+    id: 'messaging', label: 'Guest Messaging', icon: '💬', time: '2:47 AM',
+    content: (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '14px 14px 14px 4px', padding: '10px 14px', maxWidth: '85%', fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
+          Hi! We're arriving late, around 11 PM. Is self check-in available? Also what's the WiFi?
+        </div>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginBottom: 2 }}>Alfred is typing...</div>
+        <div style={{ background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '14px 14px 4px 14px', padding: '10px 14px', maxWidth: '85%', alignSelf: 'flex-end', fontSize: 13, color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
+          Absolutely! Self check-in is 24/7 — the lockbox code is in your confirmation. WiFi: <strong>BeachLife2024</strong>. See you tomorrow! 🏡
+        </div>
+        <div style={{ fontSize: 10, color: 'rgba(99,102,241,0.6)', textAlign: 'right' }}>✓ Replied in 23 seconds</div>
+      </div>
+    ),
+  },
+  {
+    id: 'pricing', label: 'Smart Pricing', icon: '📊', time: 'Monday 8 AM',
+    content: (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 10, padding: 12 }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>PRICING INSIGHT</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5, marginBottom: 8 }}>
+            🎯 <strong>3-night gap</strong> this Fri–Sun at Sunset Villa. Competitors 80% booked.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <span style={{ color: 'rgba(255,255,255,0.4)', textDecoration: 'line-through' }}>$220</span>
+            <span style={{ color: 'rgba(255,255,255,0.3)' }}>→</span>
+            <span style={{ color: '#22c55e', fontWeight: 700 }}>$179/night</span>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>87%</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Market occupancy</div>
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#22c55e' }}>+$537</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Potential revenue</div>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: 'turnover', label: 'Turnovers', icon: '🏠', time: 'Today 11 AM',
+    content: (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {[
+          { done: true, text: 'Checkout confirmed — Sarah K. (Beach House)', t: '10:02 AM' },
+          { done: true, text: 'Cleaning crew notified — Maria (ETA 11:30)', t: '10:03 AM' },
+          { done: true, text: 'Check-in instructions sent to next guest', t: '10:05 AM' },
+          { done: false, text: 'Monitoring cleaning completion...', t: 'Now' },
+          { done: null, text: 'Send "all ready" to next guest', t: 'Pending' },
+        ].map((item, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '5px 0' }}>
+            <div style={{
+              width: 16, height: 16, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+              background: item.done === true ? 'rgba(34,197,94,0.2)' : item.done === false ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.05)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 9, color: item.done === true ? '#22c55e' : item.done === false ? '#818cf8' : 'rgba(255,255,255,0.15)',
+            }}>
+              {item.done === true ? '✓' : item.done === false ? '◉' : '○'}
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: item.done === null ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.75)', lineHeight: 1.4 }}>{item.text}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>{item.t}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: 'briefing', label: 'Daily Briefing', icon: '☀️', time: '8:00 AM',
+    content: (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
+          Good morning! Here's your briefing:
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {[
+            { v: '12', l: 'Messages handled', c: '#818cf8' },
+            { v: '34s', l: 'Avg response', c: '#22c55e' },
+            { v: '2', l: 'New bookings', c: '#fbbf24' },
+            { v: '0', l: 'Escalations', c: '#22c55e' },
+          ].map((s, i) => (
+            <div key={i} style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 8, padding: '8px', textAlign: 'center' }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: s.c }}>{s.v}</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)' }}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', background: 'rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: 8, lineHeight: 1.5 }}>
+          💡 Beach House has a 4-night gap next week. Consider a 10% discount to fill it.
+        </div>
+      </div>
+    ),
+  },
+];
+
+function AlfredShowcase() {
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setActive(p => (p + 1) % DEMO_SCENARIOS.length), 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const s = DEMO_SCENARIOS[active];
+
+  return (
+    <div style={{ marginTop: 56, maxWidth: 500, margin: '56px auto 0' }}>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 3, background: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: 3, marginBottom: 14 }}>
+        {DEMO_SCENARIOS.map((d, i) => (
+          <button key={d.id} onClick={() => setActive(i)} style={{
+            flex: 1, padding: '7px 4px', borderRadius: 8, border: 'none',
+            background: active === i ? 'rgba(99,102,241,0.2)' : 'transparent',
+            color: active === i ? 'white' : 'rgba(255,255,255,0.35)',
+            fontSize: 11, fontWeight: active === i ? 600 : 400, cursor: 'pointer',
+            transition: 'all 0.2s', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+          }}>
+            <span style={{ fontSize: 12 }}>{d.icon}</span>
+            <span className="hero-tab-label">{d.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Card */}
+      <AnimatePresence mode="wait">
+        <motion.div key={s.id}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>{s.icon}</div>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>{s.label}</span>
+            </div>
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>{s.time}</span>
+          </div>
+          <div style={{ padding: 14, minHeight: 200 }}>{s.content}</div>
+          <div style={{ height: 2, background: 'rgba(255,255,255,0.03)' }}>
+            <motion.div key={`p-${active}`} initial={{ width: '0%' }} animate={{ width: '100%' }}
+              transition={{ duration: 5, ease: 'linear' }}
+              style={{ height: '100%', background: 'rgba(99,102,241,0.4)', borderRadius: 1 }}
+            />
+          </div>
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Dots */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+        {DEMO_SCENARIOS.map((_, i) => (
+          <div key={i} onClick={() => setActive(i)} style={{
+            width: active === i ? 18 : 6, height: 6, borderRadius: 3,
+            background: active === i ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.12)',
+            cursor: 'pointer', transition: 'all 0.3s',
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
    APP COMPONENT
    ═══════════════════════════════════════════ */
 export default function LandingPage() {
@@ -556,19 +729,8 @@ export default function LandingPage() {
             </motion.button>
           </div>
 
-          {/* Chat Mockup — Remotion Player */}
-          <div className="chat-mockup remotion-player-wrap">
-            <SafePlayer
-              component={HeroChat}
-              durationInFrames={320}
-              fps={30}
-              compositionWidth={480}
-              compositionHeight={520}
-              loop
-              autoPlay
-              style={{ width: '100%', height: 'auto' }}
-            />
-          </div>
+          {/* Alfred In Action — Animated Demo Showcase */}
+          <AlfredShowcase />
         </div>
       </section>
 
