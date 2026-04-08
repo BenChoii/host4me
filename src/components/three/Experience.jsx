@@ -5,6 +5,66 @@ import * as THREE from "three";
 import { motion } from "motion/react";
 import { SignedIn, SignedOut, SignInButton } from '@clerk/clerk-react';
 
+function AnimatedHeading({ children, className, delay = 0 }) {
+  const letters = [];
+  const processNode = (node, color) => {
+    if (typeof node === 'string') {
+      node.split('').forEach((char) => {
+        letters.push({ char, color });
+      });
+    } else if (node?.type === 'br') {
+      letters.push({ char: '\n', color: null });
+    } else if (node?.type === 'span' || node?.props?.children) {
+      const spanColor = node?.props?.className?.includes('#f27d26') ? '#f27d26' : color;
+      const kids = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
+      kids.forEach((kid) => processNode(kid, spanColor));
+    }
+  };
+  const kids = Array.isArray(children) ? children : [children];
+  kids.forEach((child) => processNode(child, null));
+
+  const lines = [[]];
+  letters.forEach((l) => {
+    if (l.char === '\n') lines.push([]);
+    else lines[lines.length - 1].push(l);
+  });
+
+  let globalIndex = 0;
+  return (
+    <motion.h2
+      className={className}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.3 }}
+    >
+      {lines.map((line, li) => (
+        <span key={li} style={{ display: li > 0 ? 'block' : undefined }}>
+          {line.map((l, i) => {
+            const idx = globalIndex++;
+            return (
+              <motion.span
+                key={`${li}-${i}`}
+                style={{ display: 'inline-block', color: l.color || undefined, whiteSpace: l.char === ' ' ? 'pre' : undefined }}
+                variants={{
+                  hidden: { opacity: 0, y: 40, filter: 'blur(4px)' },
+                  visible: { opacity: 1, y: 0, filter: 'blur(0px)' },
+                }}
+                transition={{
+                  duration: 0.5,
+                  delay: delay + idx * 0.03,
+                  ease: [0.25, 0.1, 0.25, 1],
+                }}
+              >
+                {l.char}
+              </motion.span>
+            );
+          })}
+        </span>
+      ))}
+    </motion.h2>
+  );
+}
+
 function Scene() {
   const groupRef = useRef(null);
   const houseRef = useRef(null);
@@ -130,9 +190,9 @@ export function Overlay() {
             <span className="w-1.5 h-1.5 rounded-full bg-[#f27d26] animate-pulse" />
             AI Property Management
           </div>
-          <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-display font-extrabold tracking-[-0.05em] mb-8 leading-[0.9]">
+          <AnimatedHeading className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-display font-extrabold tracking-[-0.05em] mb-8 leading-[0.9]" delay={0.3}>
             MEET <span className="text-[#f27d26]">ALFRED</span>
-          </h1>
+          </AnimatedHeading>
           <p className="text-lg md:text-xl text-white/50 max-w-2xl mx-auto mb-12 font-light leading-relaxed tracking-wide">
             The first AI property manager that learns how you talk, then handles your guests <span className="text-white/80 font-normal">24/7</span> with your unique voice.
           </p>
@@ -160,9 +220,9 @@ export function Overlay() {
       <section className="h-screen flex items-end justify-start pb-32">
         <motion.div initial={{ opacity: 0, x: -80 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.9, ease: "easeOut" }} className="max-w-xl" style={{ marginLeft: '10vw' }}>
           <div className="text-[#f27d26] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Personalization</div>
-          <h2 className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]">
+          <AnimatedHeading className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]" delay={0.2}>
             Your Voice,<br /><span className="text-[#f27d26]">Automated.</span>
-          </h2>
+          </AnimatedHeading>
           <p className="text-base md:text-lg text-white/50 font-light leading-relaxed mb-10 tracking-wide">
             Alfred analyzes your past guest communications to mirror your hospitality style. Whether you're formal, friendly, or funny — Alfred keeps it consistent.
           </p>
@@ -181,9 +241,9 @@ export function Overlay() {
       <section className="h-screen flex items-center justify-end">
         <motion.div initial={{ opacity: 0, x: 80 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.9, ease: "easeOut" }} className="max-w-xl text-right" style={{ marginRight: '10vw' }}>
           <div className="text-[#f27d26] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Availability</div>
-          <h2 className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]">
+          <AnimatedHeading className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]" delay={0.2}>
             Always On.<br /><span className="text-[#f27d26]">Always Ready.</span>
-          </h2>
+          </AnimatedHeading>
           <p className="text-base md:text-lg text-white/50 font-light leading-relaxed mb-10 tracking-wide">
             While you sleep, Alfred is working. From check-in instructions at 3 AM to troubleshooting Wi-Fi at noon — your guests are always taken care of.
           </p>
