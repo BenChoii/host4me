@@ -161,7 +161,7 @@ export default function LandingPage() {
         <MobileAtmosphere />
       ) : (
         <div className="fixed inset-0 z-0">
-          <Canvas shadows camera={{ position: [0, 0, 6], fov: 40 }} dpr={[1, 1.5]}>
+          <Canvas camera={{ position: [0, 0, 8], fov: 45 }} dpr={[1, 1.5]}>
             <Suspense fallback={null}>
               <Experience />
             </Suspense>

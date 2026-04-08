@@ -1,5 +1,5 @@
 import {
-  Float, MeshTransmissionMaterial, Sparkles, Environment,
+  Float, Sparkles, Environment,
   Scroll, ScrollControls, useScroll
 } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
@@ -15,30 +15,39 @@ import { useMouseParallax } from "./useMouseParallax";
    ═══════════════════════════════════════════ */
 function GlassOrb({ position = [0, 0, 0], scale = 1, emissiveIntensity = 2 }) {
   return (
-    <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.3}>
+    <Float speed={1.5} rotationIntensity={0.15} floatIntensity={0.3}>
       <group position={position} scale={scale}>
-        {/* Outer glass shell */}
+        {/* Outer glass shell — subtle, dark, not dominant */}
         <mesh>
           <sphereGeometry args={[1, 64, 64]} />
-          <MeshTransmissionMaterial
-            backside
-            thickness={0.3}
-            chromaticAberration={0.2}
-            anisotropy={0.1}
-            color="#1e1b4b"
-            transmission={0.85}
+          <meshStandardMaterial
+            color="#0a0a1a"
+            metalness={0.9}
             roughness={0.15}
-            envMapIntensity={0.3}
-            ior={1.3}
+            envMapIntensity={0.4}
+            transparent
+            opacity={0.6}
           />
         </mesh>
-        {/* Inner emissive core — the glow source */}
-        <mesh scale={0.35}>
+        {/* Inner emissive core — the main visual */}
+        <mesh scale={0.3}>
           <sphereGeometry args={[1, 32, 32]} />
           <meshStandardMaterial
             color="#818cf8"
             emissive="#6366f1"
             emissiveIntensity={emissiveIntensity}
+            toneMapped={false}
+          />
+        </mesh>
+        {/* Glow halo ring */}
+        <mesh rotation={[Math.PI / 2, 0, 0]} scale={1.1}>
+          <torusGeometry args={[1, 0.01, 16, 64]} />
+          <meshStandardMaterial
+            color="#6366f1"
+            emissive="#6366f1"
+            emissiveIntensity={1}
+            transparent
+            opacity={0.3}
             toneMapped={false}
           />
         </mesh>
@@ -141,27 +150,27 @@ function Scene() {
     const act = offset < 0.25 ? 1 : offset < 0.5 ? 2 : offset < 0.75 ? 3 : 4;
     const actProgress = (offset % 0.25) / 0.25;
 
-    // === CAMERA PATH ===
+    // === CAMERA PATH — gentle movement, orb stays background ===
     let targetPos;
     if (act === 1) {
-      targetPos = new THREE.Vector3(0, 0, 5);
+      targetPos = new THREE.Vector3(0, 0, 8);
     } else if (act === 2) {
       targetPos = new THREE.Vector3(
-        THREE.MathUtils.lerp(0, -2, actProgress),
-        THREE.MathUtils.lerp(0, 0.5, actProgress),
-        5
+        THREE.MathUtils.lerp(0, -1.5, actProgress),
+        THREE.MathUtils.lerp(0, 0.3, actProgress),
+        8
       );
     } else if (act === 3) {
       targetPos = new THREE.Vector3(
-        THREE.MathUtils.lerp(-2, 2, actProgress),
-        THREE.MathUtils.lerp(0.5, 0.3, actProgress),
-        5
+        THREE.MathUtils.lerp(-1.5, 1.5, actProgress),
+        THREE.MathUtils.lerp(0.3, 0.2, actProgress),
+        8
       );
     } else {
       targetPos = new THREE.Vector3(
-        THREE.MathUtils.lerp(2, 0, actProgress),
-        THREE.MathUtils.lerp(0.3, 0, actProgress),
-        THREE.MathUtils.lerp(5, 7, actProgress)
+        THREE.MathUtils.lerp(1.5, 0, actProgress),
+        THREE.MathUtils.lerp(0.2, 0, actProgress),
+        THREE.MathUtils.lerp(8, 10, actProgress)
       );
     }
     state.camera.position.lerp(targetPos, 0.04);
@@ -213,9 +222,9 @@ function Scene() {
 
       <Environment preset="warehouse" environmentIntensity={0.1} />
 
-      {/* Main glass orb */}
-      <group ref={mainOrbRef}>
-        <GlassOrb emissiveIntensity={act === 4 ? 3 + actProgress * 2 : 2} />
+      {/* Main orb — pushed back so text is readable */}
+      <group ref={mainOrbRef} position={[0, -0.5, -2]}>
+        <GlassOrb scale={0.8} emissiveIntensity={act === 4 ? 3 + actProgress * 2 : 2} />
       </group>
 
       {/* Sound rings — Act 2 */}
