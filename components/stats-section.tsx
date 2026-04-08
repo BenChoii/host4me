@@ -1,10 +1,10 @@
 'use client'
 
 const stats = [
-  { label: 'Active Properties', value: '10,000+' },
-  { label: 'Total Revenue Managed', value: '$500M+' },
-  { label: 'Happy Users', value: '50,000+' },
-  { label: 'Years in Business', value: '10+' },
+  { label: 'Properties Managed', value: '500+' },
+  { label: 'Guest Messages Handled', value: '50,000+' },
+  { label: 'Avg Response Time', value: '<30s' },
+  { label: 'Host Satisfaction', value: '99%' },
 ]
 
 export function StatsSection() {

@@ -10,14 +10,14 @@ export function HeroSection() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
           <AnimatedText
-            text="Simplify Your Property Management"
+            text="Meet Alfred, Your AI Property Manager"
             className="text-4xl md:text-6xl font-bold text-zinc-900 mb-6"
           />
           <p className="text-xl text-zinc-600 mb-8 max-w-2xl mx-auto">
-            host4me streamlines tenant management, rent collection, and property maintenance all in one intuitive platform.
+            Host4Me automates guest communication, learns your hosting style, and manages your Airbnb & VRBO listings 24/7 — so you can relax.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg">Get Started Free</Button>
+            <Button size="lg" className="bg-[#f27d26] hover:bg-[#d96a1d]">Get Started Free</Button>
             <Button size="lg" variant="outline">
               Watch Demo
               <ArrowRight className="ml-2 h-4 w-4" />

@@ -8,8 +8,8 @@ import { Toaster } from '@/components/ui/toaster'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'host4me - Property Management Made Simple',
-  description: 'Streamline your rental property management with host4me. Manage tenants, collect rent, track maintenance, and grow your business.',
+  title: 'Host4Me - AI-Powered Property Management',
+  description: 'Meet Alfred, your AI property manager. Host4Me automates guest communication, learns your hosting style, and manages your Airbnb & VRBO listings 24/7.',
 }
 
 export default function RootLayout({

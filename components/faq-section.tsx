@@ -9,38 +9,38 @@ import {
 
 const faqs = [
   {
-    question: 'How do I get started?',
-    answer: 'Simply sign up for an account, add your properties, and start managing them through our platform. Our onboarding process takes just a few minutes.',
+    question: 'How does Alfred learn my hosting style?',
+    answer: 'When you connect your Airbnb or VRBO account, Alfred analyzes your past guest conversations to learn your tone, vocabulary, and communication patterns. Whether you\'re formal, friendly, or casual — Alfred mirrors it.',
   },
   {
-    question: 'What features are included?',
-    answer: 'host4me includes tenant management, rent collection, maintenance tracking, financial reporting, and much more. Check our pricing page for detailed feature lists.',
+    question: 'What platforms does Host4Me support?',
+    answer: 'Host4Me currently supports Airbnb and VRBO, with Booking.com coming soon. Alfred manages guest communication across all connected platforms from a single interface.',
   },
   {
     question: 'Is my data secure?',
-    answer: 'Yes, we use enterprise-grade encryption and security measures to protect your data. All information is stored securely and backed up regularly.',
+    answer: 'Yes. All platform credentials are encrypted with AES-256-GCM. We use enterprise-grade security measures and never store plaintext passwords.',
   },
   {
-    question: 'Can I integrate with other tools?',
-    answer: 'Yes, host4me integrates with popular accounting software, payment processors, and other property management tools.',
+    question: 'When does Alfred escalate to me?',
+    answer: 'Alfred handles routine messages autonomously. Financial requests (refunds, price changes), emergencies, and anything outside your defined comfort zone gets escalated to you instantly via Telegram.',
   },
   {
-    question: 'Do you offer customer support?',
-    answer: 'We provide 24/7 customer support via email, chat, and phone. Our team is ready to help you with any questions.',
+    question: 'Can I review what Alfred sends before it goes out?',
+    answer: 'Yes! You can start in Shadow Mode where Alfred drafts replies for your approval. Once you\'re confident, switch to autonomous mode and Alfred handles everything.',
   },
   {
-    question: 'What is your pricing model?',
-    answer: 'We offer flexible pricing plans based on the number of properties you manage. There are no hidden fees or long-term contracts required.',
+    question: 'How fast does Alfred respond to guests?',
+    answer: 'Alfred responds to guest messages in under 30 seconds, 24/7. This dramatically improves your response rate metrics on Airbnb and VRBO.',
   },
 ]
 
 export function FAQSection() {
   return (
-    <section className="py-20 bg-white">
+    <section id="faq" className="py-20 bg-white">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <h2 className="text-4xl font-bold text-zinc-900 mb-4">Frequently Asked Questions</h2>
-          <p className="text-xl text-zinc-600">Find answers to common questions about host4me</p>
+          <p className="text-xl text-zinc-600">Everything you need to know about Host4Me and Alfred</p>
         </div>
 
         <Accordion type="single" collapsible className="w-full">
