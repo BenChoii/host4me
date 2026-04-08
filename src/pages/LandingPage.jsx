@@ -495,11 +495,7 @@ export default function LandingPage() {
       { y: 0, opacity: 1, duration: 0.6, ease: 'power2.out', delay: 1.1, clearProps: 'all' }
     );
 
-    /* Hero chat mockup */
-    gsap.fromTo('.chat-mockup',
-      { y: 60, opacity: 0, scale: 0.95 },
-      { y: 0, opacity: 1, scale: 1, duration: 1, ease: 'power3.out', delay: 1.3, clearProps: 'all' }
-    );
+    /* Hero chat mockup — removed (replaced with AlfredShowcase React component) */
 
     /* ─── Text Scramble Stats ─── */
     document.querySelectorAll('.stat-number-scramble').forEach((el) => {
@@ -591,12 +587,15 @@ export default function LandingPage() {
     });
 
     /* Pricing cards staggered */
-    gsap.fromTo('.pricing-card',
-      { y: 40, opacity: 0, scale: 0.96 },
-      { y: 0, opacity: 1, scale: 1, stagger: 0.15, duration: 0.8, ease: 'power2.out', clearProps: 'all',
-        scrollTrigger: { trigger: '.pricing-grid', start: 'top 85%', toggleActions: 'play none none none' },
-      }
-    );
+    const pricingSection = document.querySelector('.pricing-section');
+    if (pricingSection) {
+      gsap.fromTo('.pricing-card',
+        { y: 40, opacity: 0, scale: 0.96 },
+        { y: 0, opacity: 1, scale: 1, stagger: 0.15, duration: 0.8, ease: 'power2.out', clearProps: 'all',
+          scrollTrigger: { trigger: pricingSection, start: 'top 85%', toggleActions: 'play none none none' },
+        }
+      );
+    }
 
     /* FAQ items staggered */
     gsap.fromTo('.faq-item',
@@ -638,13 +637,13 @@ export default function LandingPage() {
 
     colorSections.forEach(({ trigger, bg }) => {
       const el = document.querySelector(trigger);
-      if (el) {
+      if (el && document.body) {
         ScrollTrigger.create({
           trigger: el,
           start: 'top 80%',
           end: 'bottom 20%',
-          onEnter: () => gsap.to('body', { backgroundColor: bg, duration: 0.6, ease: 'power2.out' }),
-          onEnterBack: () => gsap.to('body', { backgroundColor: bg, duration: 0.6, ease: 'power2.out' }),
+          onEnter: () => gsap.to(document.body, { backgroundColor: bg, duration: 0.6, ease: 'power2.out' }),
+          onEnterBack: () => gsap.to(document.body, { backgroundColor: bg, duration: 0.6, ease: 'power2.out' }),
         });
       }
     });
