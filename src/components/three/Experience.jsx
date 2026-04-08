@@ -157,8 +157,8 @@ export function Overlay() {
       </section>
 
       {/* Voice */}
-      <section className="h-screen flex items-end justify-start px-16 md:px-40 lg:px-48 pb-32">
-        <motion.div initial={{ opacity: 0, x: -80 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.9, ease: "easeOut" }} className="max-w-xl">
+      <section className="h-screen flex items-end justify-start pb-32">
+        <motion.div initial={{ opacity: 0, x: -80 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.9, ease: "easeOut" }} className="max-w-xl ml-[8vw] md:ml-[12vw]">
           <div className="text-[#f27d26] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Personalization</div>
           <h2 className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]">
             Your Voice,<br /><span className="text-[#f27d26]">Automated.</span>
@@ -178,8 +178,8 @@ export function Overlay() {
       </section>
 
       {/* 24/7 */}
-      <section className="h-screen flex items-center justify-end px-16 md:px-40 lg:px-48">
-        <motion.div initial={{ opacity: 0, x: 80 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.9, ease: "easeOut" }} className="max-w-xl text-right">
+      <section className="h-screen flex items-center justify-end">
+        <motion.div initial={{ opacity: 0, x: 80 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.9, ease: "easeOut" }} className="max-w-xl text-right mr-[8vw] md:mr-[12vw]">
           <div className="text-[#f27d26] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Availability</div>
           <h2 className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]">
             Always On.<br /><span className="text-[#f27d26]">Always Ready.</span>
