@@ -587,16 +587,7 @@ export default function LandingPage() {
       );
     });
 
-    /* Pricing cards staggered */
-    const pricingSection = document.querySelector('.pricing-section');
-    if (pricingSection) {
-      gsap.fromTo('.pricing-card',
-        { y: 40, opacity: 0, scale: 0.96 },
-        { y: 0, opacity: 1, scale: 1, stagger: 0.15, duration: 0.8, ease: 'power2.out', clearProps: 'all',
-          scrollTrigger: { trigger: pricingSection, start: 'top 85%', toggleActions: 'play none none none' },
-        }
-      );
-    }
+    /* Pricing cards — handled by .reveal on the grid container now */
 
     /* FAQ items staggered */
     gsap.fromTo('.faq-item',
@@ -962,9 +953,9 @@ export default function LandingPage() {
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Getting Started</span>
           <h2 className="section-heading">Three Steps to Effortless Guest Management</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, maxWidth: 900, margin: '48px auto 0', textAlign: 'left' }}>
+          <div className="reveal" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, maxWidth: 900, margin: '48px auto 0', textAlign: 'left' }}>
             {STEPS.map((step, i) => (
-              <div key={i} className="reveal" style={{
+              <div key={i} style={{
                 background: 'white',
                 borderRadius: 16,
                 padding: '32px 24px',
@@ -976,11 +967,12 @@ export default function LandingPage() {
                   fontSize: 48,
                   fontWeight: 800,
                   color: 'var(--primary)',
-                  opacity: 0.1,
+                  opacity: 0.08,
                   position: 'absolute',
                   top: 12,
                   right: 16,
                   lineHeight: 1,
+                  pointerEvents: 'none',
                 }}>{step.num}</div>
                 <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>{step.title}</h3>
                 <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.7 }}>{step.desc}</p>
@@ -1032,7 +1024,7 @@ export default function LandingPage() {
           </div>
 
           {/* 3-column pricing grid */}
-          <div style={{
+          <div className="reveal" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, 1fr)',
             gap: 20,
@@ -1060,18 +1052,16 @@ export default function LandingPage() {
               >
                 {p.badge && (
                   <div style={{
-                    position: 'absolute',
-                    top: -12,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
                     background: 'var(--primary)',
                     color: 'white',
-                    padding: '4px 14px',
-                    borderRadius: 20,
-                    fontSize: 11,
+                    padding: '4px 12px',
+                    borderRadius: 6,
+                    fontSize: 10,
                     fontWeight: 700,
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
+                    display: 'inline-block',
+                    marginBottom: 16,
                   }}>
                     {p.badge}
                   </div>
