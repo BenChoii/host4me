@@ -23,7 +23,7 @@ export function AnimatedText({ text, className }: AnimatedTextProps) {
       opacity: 1,
       x: 0,
       transition: {
-        type: 'spring',
+        type: 'spring' as const,
         damping: 12,
         stiffness: 200,
       },
@@ -32,7 +32,7 @@ export function AnimatedText({ text, className }: AnimatedTextProps) {
       opacity: 0,
       x: 10,
       transition: {
-        type: 'spring',
+        type: 'spring' as const,
         damping: 12,
         stiffness: 200,
       },
