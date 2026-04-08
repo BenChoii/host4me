@@ -702,7 +702,7 @@ export default function LandingPage() {
       <section className="hero">
         <div className="hero-grid-bg" />
         <div className="hero-content">
-          <h1 className="hero-headline"><span className="gradient-text-warm">Meet Alfred.</span> Your AI Property Manager.</h1>
+          <h1 className="hero-headline">Meet Alfred. Your AI Property Manager.</h1>
           <p className="hero-subhead">
             Alfred lives in your Telegram. He replies to guests in your voice, learns your properties from Gmail, and sends you a daily briefing every morning. <strong style={{ color: 'rgba(255,255,255,0.9)' }}>Set up in 60 seconds.</strong>
           </p>
