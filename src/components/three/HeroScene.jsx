@@ -3,8 +3,8 @@ import { useFrame } from '@react-three/fiber';
 import { Float, MeshTransmissionMaterial, Sparkles, Environment } from '@react-three/drei';
 import { useMouseParallax } from './useMouseParallax';
 
-const COPPER = '#C67D3B';
-const COPPER_LIGHT = '#E8B9A0';
+const PRIMARY = '#6366f1';
+const PRIMARY_LIGHT = '#a5b4fc';
 
 function GlassShape({ geometry, position, scale = 1, floatSpeed = 2, floatIntensity = 0.5, rotationIntensity = 0.3 }) {
   return (
@@ -16,7 +16,7 @@ function GlassShape({ geometry, position, scale = 1, floatSpeed = 2, floatIntens
           thickness={0.5}
           chromaticAberration={0.3}
           anisotropy={0.3}
-          color={COPPER}
+          color={PRIMARY}
           transmission={0.92}
           roughness={0.1}
           envMapIntensity={1.5}
@@ -100,7 +100,7 @@ export default function HeroScene({ scrollProgress }) {
         scale={14}
         size={2.5}
         speed={0.3}
-        color={COPPER}
+        color={PRIMARY}
         opacity={0.5}
       />
 
@@ -110,12 +110,12 @@ export default function HeroScene({ scrollProgress }) {
         scale={16}
         size={1.5}
         speed={0.2}
-        color={COPPER_LIGHT}
+        color={PRIMARY_LIGHT}
         opacity={0.25}
       />
 
       {/* Copper point light — top right, matching CSS radial glow */}
-      <pointLight position={[5, 4, 3]} color={COPPER} intensity={3} distance={20} />
+      <pointLight position={[5, 4, 3]} color={PRIMARY} intensity={3} distance={20} />
 
       {/* Subtle fill light */}
       <ambientLight intensity={0.08} />

@@ -1,8 +1,10 @@
-import { useRef, useState, useEffect, useCallback, Component } from 'react';
+import { useRef, useState, useEffect, useCallback, Component, lazy, Suspense } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { SplitText } from 'gsap/SplitText';
 import { useGSAP } from '@gsap/react';
+
+const SceneCanvas = lazy(() => import('../components/three/SceneCanvas'));
 import Lenis from 'lenis';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, RefreshCw, Zap, BarChart3, Moon, CalendarX, MessageSquareOff, Check } from 'lucide-react';
@@ -433,6 +435,8 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState(null);
   const [activeFeature, setActiveFeature] = useState(1);
   const containerRef = useRef(null);
+  const scrollProgress = useRef({ global: 0, hero: 0 });
+  const invalidateScene = useRef(null);
 
   /* ─── Lenis Smooth Scroll ─── */
   useEffect(() => {
@@ -465,9 +469,15 @@ export default function LandingPage() {
     };
   }, []);
 
-  /* ─── Nav scroll detection ─── */
+  /* ─── Nav scroll detection + 3D scene progress ─── */
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 60);
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 60);
+      const maxScroll = document.body.scrollHeight - window.innerHeight;
+      scrollProgress.current.global = Math.min(1, window.scrollY / maxScroll);
+      scrollProgress.current.hero = Math.min(1, window.scrollY / (window.innerHeight * 0.8));
+      if (invalidateScene.current) invalidateScene.current();
+    };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -650,6 +660,14 @@ export default function LandingPage() {
 
   return (
     <div ref={containerRef}>
+      {/* ════════ 3D SCENE — Fixed canvas behind everything ════════ */}
+      <Suspense fallback={null}>
+        <SceneCanvas
+          scrollProgress={scrollProgress}
+          onInvalidateReady={(fn) => { invalidateScene.current = fn; }}
+        />
+      </Suspense>
+
       {/* ════════ NAVIGATION ════════ */}
       <nav className={`nav ${isScrolled ? 'scrolled' : ''}`}>
         <div className="nav-logo">Host4Me</div>
@@ -684,9 +702,9 @@ export default function LandingPage() {
       <section className="hero">
         <div className="hero-grid-bg" />
         <div className="hero-content">
-          <h1 className="hero-headline">Meet Alfred. Your AI Property Manager.</h1>
+          <h1 className="hero-headline"><span className="gradient-text-warm">Meet Alfred.</span> Your AI Property Manager.</h1>
           <p className="hero-subhead">
-            Alfred lives in your Telegram. He replies to guests in your voice, learns your properties from Gmail, and sends you a daily briefing every morning. Set up in 60 seconds.
+            Alfred lives in your Telegram. He replies to guests in your voice, learns your properties from Gmail, and sends you a daily briefing every morning. <strong style={{ color: 'rgba(255,255,255,0.9)' }}>Set up in 60 seconds.</strong>
           </p>
           <div className="hero-buttons">
             <SignedOut>
