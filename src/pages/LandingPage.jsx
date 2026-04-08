@@ -156,14 +156,9 @@ export default function LandingPage() {
     <div className="relative w-full min-h-screen bg-[#050505] text-white">
       <Navbar />
 
-      {/* 3D scene on desktop, CSS fallback + static overlay on mobile */}
+      {/* Background: 3D scene on desktop, CSS fallback on mobile */}
       {isMobile ? (
-        <>
-          <MobileAtmosphere />
-          <div className="relative z-10">
-            <Overlay />
-          </div>
-        </>
+        <MobileAtmosphere />
       ) : (
         <div className="fixed inset-0 z-0">
           <Canvas shadows camera={{ position: [0, 0, 5], fov: 35 }}>
@@ -173,6 +168,11 @@ export default function LandingPage() {
           </Canvas>
         </div>
       )}
+
+      {/* Scrollable content overlay */}
+      <div className="relative z-10">
+        <Overlay />
+      </div>
 
       {/* Alfred status badge — desktop only */}
       <div className="fixed bottom-8 left-8 z-50 pointer-events-none hidden md:block">

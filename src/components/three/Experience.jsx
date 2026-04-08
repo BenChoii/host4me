@@ -1,19 +1,29 @@
-import { Float, MeshDistortMaterial, Scroll, ScrollControls, useScroll } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { Float, MeshDistortMaterial } from "@react-three/drei";
+import { useFrame, useThree } from "@react-three/fiber";
+import { useRef, useEffect, useState } from "react";
 import * as THREE from "three";
 import { motion } from "motion/react";
 import { SignedIn, SignedOut, SignInButton } from '@clerk/clerk-react';
 
 function Scene() {
-  const scroll = useScroll();
   const groupRef = useRef(null);
   const houseRef = useRef(null);
   const dataNodesRef = useRef(null);
   const waveformRef = useRef(null);
+  const scrollRef = useRef(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      scrollRef.current = maxScroll > 0 ? window.scrollY / maxScroll : 0;
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useFrame((state) => {
-    const offset = scroll.offset;
+    const offset = scrollRef.current;
 
     const targetZ = 5 + offset * 15;
     const targetY = 1 - offset * 4;
@@ -107,14 +117,7 @@ function Scene() {
 }
 
 export default function Experience() {
-  return (
-    <ScrollControls pages={4} damping={0.1}>
-      <Scene />
-      <Scroll html>
-        <Overlay />
-      </Scroll>
-    </ScrollControls>
-  );
+  return <Scene />;
 }
 
 export function Overlay() {
