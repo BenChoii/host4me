@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { Suspense, useState, useEffect } from "react";
-import Experience from "../components/three/Experience";
+import Experience, { Overlay } from "../components/three/Experience";
 import { Menu, X, Zap, MessageSquare, Shield, Home } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
@@ -153,12 +153,17 @@ export default function LandingPage() {
   const isMobile = useIsMobile();
 
   return (
-    <div className="relative w-full h-screen bg-[#050505] text-white">
+    <div className="relative w-full min-h-screen bg-[#050505] text-white">
       <Navbar />
 
-      {/* 3D scene on desktop, CSS fallback on mobile */}
+      {/* 3D scene on desktop, CSS fallback + static overlay on mobile */}
       {isMobile ? (
-        <MobileAtmosphere />
+        <>
+          <MobileAtmosphere />
+          <div className="relative z-10">
+            <Overlay />
+          </div>
+        </>
       ) : (
         <div className="fixed inset-0 z-0">
           <Canvas camera={{ position: [0, 0, 8], fov: 45 }} dpr={[1, 1.5]}>

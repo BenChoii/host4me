@@ -283,7 +283,7 @@ export default function Experience() {
 /* ═══════════════════════════════════════════
    OVERLAY — HTML content over 3D
    ═══════════════════════════════════════════ */
-function Overlay() {
+export function Overlay() {
   return (
     <div className="w-screen font-sans">
       {/* Act 1: Hero */}
