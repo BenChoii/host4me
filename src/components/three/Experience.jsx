@@ -7,21 +7,22 @@ import { SignedIn, SignedOut, SignInButton } from '@clerk/clerk-react';
 
 function AnimatedHeading({ children, className, delay = 0 }) {
   const letters = [];
-  const processNode = (node, color) => {
+  const processNode = (node, color, italic) => {
     if (typeof node === 'string') {
       node.split('').forEach((char) => {
-        letters.push({ char, color });
+        letters.push({ char, color, italic });
       });
     } else if (node?.type === 'br') {
-      letters.push({ char: '\n', color: null });
+      letters.push({ char: '\n', color: null, italic: false });
     } else if (node?.type === 'span' || node?.props?.children) {
       const spanColor = node?.props?.className?.includes('#f27d26') ? '#f27d26' : color;
+      const spanItalic = node?.props?.style?.fontStyle === 'italic' ? true : italic;
       const kids = Array.isArray(node.props.children) ? node.props.children : [node.props.children];
-      kids.forEach((kid) => processNode(kid, spanColor));
+      kids.forEach((kid) => processNode(kid, spanColor, spanItalic));
     }
   };
   const kids = Array.isArray(children) ? children : [children];
-  kids.forEach((child) => processNode(child, null));
+  kids.forEach((child) => processNode(child, null, false));
 
   const lines = [[]];
   letters.forEach((l) => {
@@ -44,7 +45,7 @@ function AnimatedHeading({ children, className, delay = 0 }) {
             return (
               <motion.span
                 key={`${li}-${i}`}
-                style={{ display: 'inline-block', color: l.color || undefined, whiteSpace: l.char === ' ' ? 'pre' : undefined }}
+                style={{ display: 'inline-block', color: l.color || undefined, fontStyle: l.italic ? 'italic' : undefined, whiteSpace: l.char === ' ' ? 'pre' : undefined }}
                 variants={{
                   hidden: { opacity: 0, y: 40, filter: 'blur(4px)' },
                   visible: { opacity: 1, y: 0, filter: 'blur(0px)' },
