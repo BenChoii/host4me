@@ -149,7 +149,7 @@ function Overlay() {
   return (
     <div className="w-screen font-sans">
       {/* Hero Section */}
-      <section className="h-screen flex flex-col items-center justify-center px-6 text-center">
+      <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12 text-center">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -162,11 +162,11 @@ function Overlay() {
           <h1 className="text-6xl md:text-9xl font-display font-extrabold tracking-tighter mb-6 leading-none">
             MEET <span className="text-[#6366f1]">ALFRED</span>
           </h1>
-          <p className="text-xl md:text-2xl text-gray-400 max-w-2xl mx-auto mb-10 font-light leading-relaxed">
+          <p className="text-xl md:text-2xl text-gray-300 max-w-2xl mx-auto mb-10 font-light leading-relaxed">
             The first AI Property Manager that learns how you talk, then handles your guests 24/7 with your unique voice.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-10 py-5 rounded-full text-lg font-bold transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(242,125,38,0.3)]">
+            <button className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-10 py-5 rounded-full text-lg font-bold transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(99,102,241,0.3)]">
               Start Free Trial
             </button>
             <button className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-10 py-5 rounded-full text-lg font-bold transition-all">
@@ -177,7 +177,7 @@ function Overlay() {
       </section>
 
       {/* Feature 1: Voice */}
-      <section className="h-screen flex items-center justify-start px-12 md:px-24">
+      <section className="h-screen flex items-center justify-start px-8 md:px-24">
         <motion.div 
           initial={{ opacity: 0, x: -50 }}
           whileInView={{ opacity: 1, x: 0 }}
@@ -189,7 +189,7 @@ function Overlay() {
             Your Voice, <br />
             <span className="text-[#6366f1]">Automated.</span>
           </h2>
-          <p className="text-xl text-gray-400 font-light leading-relaxed mb-8">
+          <p className="text-xl text-gray-300 font-light leading-relaxed mb-8">
             Alfred analyzes your past guest communications to mirror your hospitality style. Whether you're formal, friendly, or funny, Alfred keeps it consistent.
           </p>
           <ul className="space-y-4">
@@ -204,7 +204,7 @@ function Overlay() {
       </section>
 
       {/* Feature 2: 24/7 */}
-      <section className="h-screen flex items-center justify-end px-12 md:px-24">
+      <section className="h-screen flex items-center justify-end px-8 md:px-24">
         <motion.div 
           initial={{ opacity: 0, x: 50 }}
           whileInView={{ opacity: 1, x: 0 }}
@@ -216,24 +216,24 @@ function Overlay() {
             Always On. <br />
             <span className="text-[#6366f1]">Always Ready.</span>
           </h2>
-          <p className="text-xl text-gray-400 font-light leading-relaxed mb-8">
+          <p className="text-xl text-gray-300 font-light leading-relaxed mb-8">
             While you sleep, Alfred is working. From check-in instructions at 3 AM to troubleshooting Wi-Fi at noon, your guests are always taken care of.
           </p>
           <div className="flex gap-4 justify-end">
             <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
               <div className="text-2xl font-bold text-white">0s</div>
-              <div className="text-xs text-gray-500 uppercase tracking-widest">Response Time</div>
+              <div className="text-xs text-gray-400 uppercase tracking-widest">Response Time</div>
             </div>
             <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
               <div className="text-2xl font-bold text-white">100%</div>
-              <div className="text-xs text-gray-500 uppercase tracking-widest">Guest Satisfaction</div>
+              <div className="text-xs text-gray-400 uppercase tracking-widest">Guest Satisfaction</div>
             </div>
           </div>
         </motion.div>
       </section>
 
       {/* How it Works */}
-      <section className="h-screen flex flex-col items-center justify-center px-6">
+      <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12">
         <h2 className="text-4xl md:text-6xl font-display font-bold mb-16 text-center">
           Three Steps to <span className="text-[#6366f1]">Freedom</span>
         </h2>
@@ -252,14 +252,14 @@ function Overlay() {
             >
               <div className="text-5xl font-display font-black text-white/10 group-hover:text-[#6366f1]/20 transition-colors mb-4">{item.step}</div>
               <h3 className="text-2xl font-bold mb-4">{item.title}</h3>
-              <p className="text-gray-400 font-light">{item.desc}</p>
+              <p className="text-gray-300 font-light">{item.desc}</p>
             </motion.div>
           ))}
         </div>
       </section>
 
       {/* CTA Section */}
-      <section className="h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
+      <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12 text-center relative overflow-hidden">
         <div className="absolute inset-0 bg-[#6366f1]/5 radial-gradient" />
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
@@ -270,11 +270,11 @@ function Overlay() {
             READY TO <br />
             <span className="text-[#6366f1]">AUTOMATE?</span>
           </h2>
-          <p className="text-xl text-gray-400 mb-12 font-light max-w-xl mx-auto">
+          <p className="text-xl text-gray-300 mb-12 font-light max-w-xl mx-auto">
             Join hosts across British Columbia who have reclaimed their time with Alfred.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-[#6366f1] text-white px-12 py-5 rounded-full text-xl font-bold hover:bg-[#4f46e5] transition-all shadow-[0_0_50px_rgba(242,125,38,0.2)]">
+            <button className="bg-[#6366f1] text-white px-12 py-5 rounded-full text-xl font-bold hover:bg-[#4f46e5] transition-all shadow-[0_0_50px_rgba(99,102,241,0.2)]">
               Get Started Now
             </button>
             <button className="bg-white text-black px-12 py-5 rounded-full text-xl font-bold hover:bg-gray-200 transition-all">
@@ -291,7 +291,7 @@ function Overlay() {
         </motion.div>
       </section>
       
-      <footer className="py-12 px-6 border-t border-white/10 text-center text-gray-500 text-sm">
+      <footer className="py-12 px-8 border-t border-white/10 text-center text-gray-400 text-sm">
         <p>© 2026 Host4Me.ca — Built for Hosts in British Columbia</p>
       </footer>
     </div>
