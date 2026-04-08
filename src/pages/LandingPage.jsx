@@ -7,6 +7,7 @@ import Lenis from 'lenis';
 import { motion, AnimatePresence } from 'motion/react';
 import { Brain, RefreshCw, Zap, BarChart3, Moon, CalendarX, MessageSquareOff, Check } from 'lucide-react';
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+import AlfredIcon from '../components/agents/AlfredIcon';
 
 import HeroChat from '../compositions/HeroChat';
 import Comparison from '../compositions/Comparison';
@@ -394,9 +395,9 @@ function AlfredShowcase() {
           style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 14, overflow: 'hidden' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11 }}>{s.icon}</div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>{s.label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlfredIcon size={28} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>Alfred — {s.label}</span>
             </div>
             <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>{s.time}</span>
           </div>

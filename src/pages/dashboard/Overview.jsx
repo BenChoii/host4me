@@ -4,6 +4,7 @@ import {
   MessageSquare, Building2, Zap, Clock, Bot, ArrowRight,
   CheckCircle2, Mail, Shield, ExternalLink, TrendingUp,
 } from 'lucide-react';
+import AlfredIcon from '../../components/agents/AlfredIcon';
 
 const MotionCard = ({ children, delay = 0, className = '', ...props }) => (
   <motion.div
@@ -45,15 +46,10 @@ function WelcomeView() {
             width: 64,
             height: 64,
             borderRadius: 16,
-            background: 'linear-gradient(135deg, var(--dash-accent), #e8a665)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
             margin: '0 auto 16px',
-            boxShadow: '0 8px 32px rgba(99, 102, 241, 0.3)',
           }}
         >
-          <Bot size={32} color="white" />
+          <AlfredIcon size={64} />
         </motion.div>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--dash-text)', marginBottom: 6, fontFamily: 'inherit' }}>
           Your AI Company
@@ -166,13 +162,7 @@ function ActiveDashboard() {
           background: 'linear-gradient(135deg, var(--dash-surface), rgba(99, 102, 241, 0.04))',
         }}
       >
-        <div style={{
-          width: 40, height: 40, borderRadius: 'var(--dash-radius)',
-          background: 'var(--dash-accent-subtle)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Bot size={20} color="var(--dash-accent)" />
-        </div>
+        <AlfredIcon size={40} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--dash-text)', marginBottom: 2 }}>Alfred is active</div>
           <div style={{ fontSize: 12.5, color: 'var(--dash-text-muted)' }}>

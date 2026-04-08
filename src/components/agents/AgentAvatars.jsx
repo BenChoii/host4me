@@ -9,11 +9,11 @@
 /* ─── Shared palette for agent avatars ─── */
 const AGENT_COLORS = {
   alfred: {
-    primary: '#C8B6E2',    // Lavender
-    secondary: '#E8DFF5',  // Light lavender
-    accent: '#9B8BBF',     // Deep lavender
+    primary: '#818cf8',    // Indigo light
+    secondary: '#e0e7ff',  // Indigo 100
+    accent: '#4f46e5',     // Indigo deep
     skin: '#F5E6D3',       // Warm skin
-    glow: 'rgba(200, 182, 226, 0.3)',
+    glow: 'rgba(99, 102, 241, 0.2)',
   },
   comms: {
     primary: '#A3C4E4',    // Sky blue

@@ -5,6 +5,7 @@ import {
   Bot, MessageSquare, Mail, Building2, Shield, Zap,
   ArrowRight, ExternalLink, Lock, Eye, EyeOff, Loader2, Check,
 } from 'lucide-react';
+import AlfredIcon from '../../components/agents/AlfredIcon';
 
 export default function Onboarding() {
   const [airbnbEmail, setAirbnbEmail] = useState('');
@@ -39,15 +40,10 @@ export default function Onboarding() {
                 width: 80,
                 height: 80,
                 borderRadius: 20,
-                background: 'linear-gradient(135deg, var(--dash-accent), #e8a665)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
                 margin: '0 auto 20px',
-                boxShadow: '0 8px 32px rgba(99, 102, 241, 0.3)',
               }}
             >
-              <Bot size={40} color="white" />
+              <AlfredIcon size={80} />
             </motion.div>
 
             <h2 style={{ fontSize: 26, fontWeight: 700, color: 'var(--dash-text)', marginBottom: 8, fontFamily: 'inherit', letterSpacing: '-0.02em' }}>
