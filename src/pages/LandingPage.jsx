@@ -166,7 +166,7 @@ export default function LandingPage() {
         </>
       ) : (
         <div className="fixed inset-0 z-0">
-          <Canvas camera={{ position: [0, 0, 8], fov: 45 }} dpr={[1, 1.5]}>
+          <Canvas shadows camera={{ position: [0, 0, 5], fov: 35 }}>
             <Suspense fallback={null}>
               <Experience />
             </Suspense>
