@@ -45,7 +45,7 @@ function Navbar() {
       <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <span className="text-xl font-display font-extrabold tracking-tight">
-            host<span className="text-[#6366f1]">4</span>me
+            host<span className="text-[#f27d26]">4</span>me
           </span>
         </div>
 
@@ -58,13 +58,13 @@ function Navbar() {
           ))}
           <SignedOut>
             <SignInButton mode="modal">
-              <button className="bg-white text-black px-6 py-2 rounded-full text-sm font-bold hover:bg-[#6366f1] hover:text-white transition-all cursor-pointer">
+              <button className="bg-white text-black px-6 py-2 rounded-full text-sm font-bold hover:bg-[#f27d26] hover:text-white transition-all cursor-pointer">
                 Get Started
               </button>
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <a href="/dashboard" className="bg-[#6366f1] text-white px-6 py-2 rounded-full text-sm font-bold hover:bg-[#4f46e5] transition-all">Dashboard</a>
+            <a href="/dashboard" className="bg-[#f27d26] text-white px-6 py-2 rounded-full text-sm font-bold hover:bg-[#4f46e5] transition-all">Dashboard</a>
             <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }} />
           </SignedIn>
         </div>
@@ -83,17 +83,17 @@ function Navbar() {
                 <a key={link.name} href={`#${link.name.toLowerCase().replace(/\s+/g, '-')}`}
                   className="flex items-center gap-3 text-lg font-medium text-gray-400"
                   onClick={() => setIsMobileMenuOpen(false)}>
-                  <link.icon className="w-5 h-5 text-[#6366f1]" />
+                  <link.icon className="w-5 h-5 text-[#f27d26]" />
                   {link.name}
                 </a>
               ))}
               <SignedOut>
                 <SignInButton mode="modal">
-                  <button className="bg-[#6366f1] text-white px-6 py-4 rounded-xl text-lg font-bold cursor-pointer">Get Started Free</button>
+                  <button className="bg-[#f27d26] text-white px-6 py-4 rounded-xl text-lg font-bold cursor-pointer">Get Started Free</button>
                 </SignInButton>
               </SignedOut>
               <SignedIn>
-                <a href="/dashboard" className="bg-[#6366f1] text-white px-6 py-4 rounded-xl text-lg font-bold text-center">Go to Dashboard</a>
+                <a href="/dashboard" className="bg-[#f27d26] text-white px-6 py-4 rounded-xl text-lg font-bold text-center">Go to Dashboard</a>
               </SignedIn>
             </div>
           </motion.div>
@@ -110,20 +110,20 @@ function MobileAtmosphere() {
       {/* Main glow orb */}
       <div className="absolute top-[25%] left-1/2 -translate-x-1/2 w-[300px] h-[300px] rounded-full opacity-80"
         style={{
-          background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, rgba(99,102,241,0.05) 40%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(242,125,38,0.2) 0%, rgba(242,125,38,0.05) 40%, transparent 70%)',
           animation: 'mobile-glow 6s ease-in-out infinite',
         }}
       />
       {/* Secondary glow */}
       <div className="absolute top-[60%] left-[30%] w-[200px] h-[200px] rounded-full opacity-50"
         style={{
-          background: 'radial-gradient(circle, rgba(129,140,248,0.1) 0%, transparent 60%)',
+          background: 'radial-gradient(circle, rgba(242,155,80,0.1) 0%, transparent 60%)',
           animation: 'mobile-glow 8s ease-in-out infinite reverse',
         }}
       />
       {/* CSS sparkle dots */}
       {Array.from({ length: 12 }).map((_, i) => (
-        <div key={i} className="absolute rounded-full bg-[#6366f1]"
+        <div key={i} className="absolute rounded-full bg-[#f27d26]"
           style={{
             width: 2 + Math.random() * 3,
             height: 2 + Math.random() * 3,

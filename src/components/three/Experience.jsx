@@ -1,274 +1,111 @@
-import {
-  Float, Sparkles, Environment,
-  Scroll, ScrollControls, useScroll
-} from "@react-three/drei";
+import { Float, MeshDistortMaterial, Scroll, ScrollControls, useScroll } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useRef, useMemo } from "react";
+import { useRef } from "react";
 import * as THREE from "three";
 import { motion } from "motion/react";
-import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
-import PostProcessing from "./PostProcessing";
-import { useMouseParallax } from "./useMouseParallax";
+import { SignedIn, SignedOut, SignInButton } from '@clerk/clerk-react';
 
-/* ═══════════════════════════════════════════
-   GLASS ORB — The core visual element
-   ═══════════════════════════════════════════ */
-function GlassOrb({ position = [0, 0, 0], scale = 1, emissiveIntensity = 2 }) {
-  return (
-    <Float speed={1.5} rotationIntensity={0.15} floatIntensity={0.3}>
-      <group position={position} scale={scale}>
-        {/* Outer glass shell — subtle, dark, not dominant */}
-        <mesh>
-          <sphereGeometry args={[1, 64, 64]} />
-          <meshStandardMaterial
-            color="#0a0a1a"
-            metalness={0.9}
-            roughness={0.15}
-            envMapIntensity={0.4}
-            transparent
-            opacity={0.6}
-          />
-        </mesh>
-        {/* Inner emissive core — the main visual */}
-        <mesh scale={0.3}>
-          <sphereGeometry args={[1, 32, 32]} />
-          <meshStandardMaterial
-            color="#818cf8"
-            emissive="#6366f1"
-            emissiveIntensity={emissiveIntensity}
-            toneMapped={false}
-          />
-        </mesh>
-        {/* Glow halo ring */}
-        <mesh rotation={[Math.PI / 2, 0, 0]} scale={1.1}>
-          <torusGeometry args={[1, 0.01, 16, 64]} />
-          <meshStandardMaterial
-            color="#6366f1"
-            emissive="#6366f1"
-            emissiveIntensity={1}
-            transparent
-            opacity={0.3}
-            toneMapped={false}
-          />
-        </mesh>
-      </group>
-    </Float>
-  );
-}
-
-/* ═══════════════════════════════════════════
-   SOUND RING — Expanding rings for Act 2
-   ═══════════════════════════════════════════ */
-function SoundRings({ active, progress }) {
-  const groupRef = useRef();
-
-  useFrame((state) => {
-    if (!groupRef.current || !active) return;
-    groupRef.current.children.forEach((ring, i) => {
-      const phase = (state.clock.elapsedTime * 0.5 + i * 0.8) % 3;
-      const s = 1 + phase * 1.5;
-      ring.scale.set(s, s, s);
-      ring.material.opacity = Math.max(0, 0.4 - phase * 0.15);
-    });
-  });
-
-  return (
-    <group ref={groupRef}>
-      {[0, 1, 2, 3].map((i) => (
-        <mesh key={i} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[1, 0.02, 16, 64]} />
-          <meshStandardMaterial
-            color="#818cf8"
-            emissive="#6366f1"
-            emissiveIntensity={3}
-            transparent
-            opacity={0}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-/* ═══════════════════════════════════════════
-   NETWORK LINES — Connections for Act 3
-   ═══════════════════════════════════════════ */
-function NetworkLines({ positions, opacity }) {
-  const linesRef = useRef();
-
-  const lineGeometries = useMemo(() => {
-    const geos = [];
-    for (let i = 0; i < positions.length; i++) {
-      for (let j = i + 1; j < positions.length; j++) {
-        const points = [
-          new THREE.Vector3(...positions[i]),
-          new THREE.Vector3(...positions[j]),
-        ];
-        geos.push(new THREE.BufferGeometry().setFromPoints(points));
-      }
-    }
-    return geos;
-  }, [positions]);
-
-  return (
-    <group ref={linesRef}>
-      {lineGeometries.map((geo, i) => (
-        <line key={i} geometry={geo}>
-          <lineBasicMaterial
-            color="#6366f1"
-            transparent
-            opacity={opacity * 0.3}
-            toneMapped={false}
-          />
-        </line>
-      ))}
-    </group>
-  );
-}
-
-/* ═══════════════════════════════════════════
-   MAIN SCENE — 4-act scroll-driven narrative
-   ═══════════════════════════════════════════ */
 function Scene() {
   const scroll = useScroll();
-  const mainOrbRef = useRef();
-  const smallOrbsRef = useRef();
-
-  useMouseParallax(0.15);
-
-  // Positions for Act 3 satellite orbs
-  const satellitePositions = useMemo(() => [
-    [-2.5, 1, -1],
-    [2.5, -0.5, -1],
-    [0, 2.5, -2],
-    [-1.5, -2, -1.5],
-  ], []);
+  const groupRef = useRef(null);
+  const houseRef = useRef(null);
+  const dataNodesRef = useRef(null);
+  const waveformRef = useRef(null);
 
   useFrame((state) => {
     const offset = scroll.offset;
-    const act = offset < 0.25 ? 1 : offset < 0.5 ? 2 : offset < 0.75 ? 3 : 4;
-    const actProgress = (offset % 0.25) / 0.25;
 
-    // === CAMERA PATH — gentle movement, orb stays background ===
-    let targetPos;
-    if (act === 1) {
-      targetPos = new THREE.Vector3(0, 0, 8);
-    } else if (act === 2) {
-      targetPos = new THREE.Vector3(
-        THREE.MathUtils.lerp(0, -1.5, actProgress),
-        THREE.MathUtils.lerp(0, 0.3, actProgress),
-        8
-      );
-    } else if (act === 3) {
-      targetPos = new THREE.Vector3(
-        THREE.MathUtils.lerp(-1.5, 1.5, actProgress),
-        THREE.MathUtils.lerp(0.3, 0.2, actProgress),
-        8
-      );
-    } else {
-      targetPos = new THREE.Vector3(
-        THREE.MathUtils.lerp(1.5, 0, actProgress),
-        THREE.MathUtils.lerp(0.2, 0, actProgress),
-        THREE.MathUtils.lerp(8, 10, actProgress)
-      );
-    }
-    state.camera.position.lerp(targetPos, 0.04);
+    const targetZ = 5 + offset * 15;
+    const targetY = 1 - offset * 4;
+    const targetX = Math.sin(offset * Math.PI) * 2;
+
+    state.camera.position.lerp(new THREE.Vector3(targetX, targetY, targetZ), 0.1);
     state.camera.lookAt(0, 0, 0);
 
-    // === MAIN ORB — breathing + pulse ===
-    if (mainOrbRef.current) {
-      const breathe = 1 + Math.sin(state.clock.elapsedTime * 0.8) * 0.02;
-      const voicePulse = act === 2 ? 1 + Math.sin(state.clock.elapsedTime * 4) * 0.05 * actProgress : 1;
-      // In Act 3, shrink the main orb
-      const networkShrink = act === 3 ? THREE.MathUtils.lerp(1, 0.6, actProgress) : act === 4 ? THREE.MathUtils.lerp(0.6, 1.1, actProgress) : 1;
-      const s = breathe * voicePulse * networkShrink;
-      mainOrbRef.current.scale.set(s, s, s);
+    if (groupRef.current) {
+      groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, offset * Math.PI * 2, 0.1);
     }
 
-    // === SATELLITE ORBS — drift out in Act 3, converge in Act 4 ===
-    if (smallOrbsRef.current) {
-      smallOrbsRef.current.children.forEach((child, i) => {
-        const target = satellitePositions[i];
-        let drift;
-        if (act < 3) {
-          drift = 0;
-        } else if (act === 3) {
-          drift = actProgress;
-        } else {
-          drift = 1 - actProgress;
-        }
-        child.position.x = THREE.MathUtils.lerp(0, target[0], drift);
-        child.position.y = THREE.MathUtils.lerp(0, target[1], drift);
-        child.position.z = THREE.MathUtils.lerp(0, target[2], drift);
-        child.visible = drift > 0.05;
+    if (houseRef.current) {
+      const scale = 1 + offset * 0.5;
+      houseRef.current.scale.setScalar(scale);
+      houseRef.current.rotation.z = offset * 0.2;
+    }
+
+    if (dataNodesRef.current) {
+      dataNodesRef.current.children.forEach((child, i) => {
+        const t = state.clock.elapsedTime + i;
+        child.position.y += Math.sin(t) * 0.002;
+        child.scale.setScalar(0.5 + Math.sin(t * 2) * 0.2);
+        child.position.multiplyScalar(0.99);
       });
     }
-  });
 
-  const offset = scroll?.offset ?? 0;
-  const act = offset < 0.25 ? 1 : offset < 0.5 ? 2 : offset < 0.75 ? 3 : 4;
-  const actProgress = (offset % 0.25) / 0.25;
-  const networkOpacity = act === 3 ? actProgress : act === 4 ? 1 - actProgress : 0;
+    if (waveformRef.current) {
+      waveformRef.current.children.forEach((child, i) => {
+        const scaleY = 0.1 + Math.abs(Math.sin(state.clock.elapsedTime * 5 + i * 0.5)) * (offset * 5);
+        child.scale.y = THREE.MathUtils.lerp(child.scale.y, scaleY, 0.1);
+      });
+      waveformRef.current.position.y = -2 + offset * 2;
+      waveformRef.current.visible = offset > 0.1;
+    }
+  });
 
   return (
     <>
       <color attach="background" args={["#050505"]} />
-      <fog attach="fog" args={["#050505", 5, 20]} />
+      <fog attach="fog" args={["#050505", 5, 25]} />
 
-      <ambientLight intensity={0.08} />
-      <spotLight position={[5, 8, 5]} angle={0.2} penumbra={1} intensity={2} color="#6366f1" />
-      <pointLight position={[0, 0, 0]} intensity={1} color="#818cf8" distance={8} />
+      <ambientLight intensity={0.2} />
+      <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} color="#f27d26" />
+      <pointLight position={[-10, -10, -10]} intensity={1} color="#ffffff" />
 
-      <Environment preset="warehouse" environmentIntensity={0.1} />
+      <group ref={groupRef}>
+        <group ref={houseRef}>
+          <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
+            <mesh position={[0, 0, 0]}>
+              <boxGeometry args={[2, 1.2, 1.5]} />
+              <MeshDistortMaterial color="#111111" speed={1} distort={0.1} roughness={0.1} metalness={0.8} />
+            </mesh>
+            <mesh position={[0, 0.9, 0]} rotation={[0, Math.PI / 4, 0]}>
+              <coneGeometry args={[1.8, 1, 4]} />
+              <meshStandardMaterial color="#f27d26" metalness={0.5} roughness={0.2} />
+            </mesh>
+            <mesh position={[0.6, 0, 0.76]}>
+              <planeGeometry args={[0.4, 0.4]} />
+              <meshStandardMaterial color="#f27d26" emissive="#f27d26" emissiveIntensity={5} />
+            </mesh>
+            <mesh position={[-0.6, 0, 0.76]}>
+              <planeGeometry args={[0.4, 0.4]} />
+              <meshStandardMaterial color="#f27d26" emissive="#f27d26" emissiveIntensity={5} />
+            </mesh>
+          </Float>
+        </group>
 
-      {/* Main orb — pushed back so text is readable */}
-      <group ref={mainOrbRef} position={[0, -0.5, -2]}>
-        <GlassOrb scale={0.8} emissiveIntensity={act === 4 ? 3 + actProgress * 2 : 2} />
+        <group ref={dataNodesRef}>
+          {Array.from({ length: 40 }).map((_, i) => (
+            <mesh key={i} position={[(Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15]}>
+              <sphereGeometry args={[0.08, 16, 16]} />
+              <meshStandardMaterial color={i % 2 === 0 ? "#f27d26" : "#ffffff"} emissive={i % 2 === 0 ? "#f27d26" : "#ffffff"} emissiveIntensity={1} />
+            </mesh>
+          ))}
+        </group>
+
+        <group ref={waveformRef} position={[0, -3, 2]}>
+          {Array.from({ length: 30 }).map((_, i) => (
+            <mesh key={i} position={[(i - 15) * 0.15, 0, 0]}>
+              <boxGeometry args={[0.05, 1, 0.05]} />
+              <meshStandardMaterial color="#f27d26" emissive="#f27d26" emissiveIntensity={2} />
+            </mesh>
+          ))}
+        </group>
       </group>
 
-      {/* Sound rings — Act 2 */}
-      <SoundRings active={act === 2} progress={actProgress} />
-
-      {/* Satellite orbs — Acts 3 & 4 */}
-      <group ref={smallOrbsRef}>
-        {satellitePositions.map((pos, i) => (
-          <GlassOrb key={i} scale={0.35} emissiveIntensity={1.5} />
-        ))}
-      </group>
-
-      {/* Network connection lines — Act 3 */}
-      <NetworkLines
-        positions={[[0, 0, 0], ...satellitePositions]}
-        opacity={networkOpacity}
-      />
-
-      {/* Sparkles — always present, spread in Act 3 */}
-      <Sparkles
-        count={200}
-        scale={act >= 3 ? 16 : 10}
-        size={2.5}
-        speed={0.3}
-        color="#6366f1"
-        opacity={0.5}
-      />
-      <Sparkles
-        count={100}
-        scale={18}
-        size={1.5}
-        speed={0.15}
-        color="#a5b4fc"
-        opacity={0.2}
-      />
-
-      <PostProcessing />
+      <gridHelper args={[50, 50, "#111111", "#111111"]} position={[0, -2, 0]} />
     </>
   );
 }
 
-/* ═══════════════════════════════════════════
-   EXPERIENCE — ScrollControls wrapper
-   ═══════════════════════════════════════════ */
 export default function Experience() {
   return (
     <ScrollControls pages={4} damping={0.1}>
@@ -280,44 +117,32 @@ export default function Experience() {
   );
 }
 
-/* ═══════════════════════════════════════════
-   OVERLAY — HTML content over 3D
-   ═══════════════════════════════════════════ */
 export function Overlay() {
   return (
     <div className="w-screen font-sans">
-      {/* Act 1: Hero */}
+      {/* Hero */}
       <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="max-w-5xl"
-        >
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-8 rounded-full border border-white/10 bg-white/5 text-[10px] font-semibold tracking-[0.2em] uppercase text-white/50">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#6366f1] animate-pulse" />
+        <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }} className="max-w-4xl">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-8 rounded-full border border-[#f27d26]/30 bg-[#f27d26]/10 text-[10px] font-semibold tracking-[0.2em] uppercase text-[#f27d26]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#f27d26] animate-pulse" />
             AI Property Management
           </div>
           <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-display font-extrabold tracking-[-0.05em] mb-8 leading-[0.9]">
-            Meet{' '}
-            <span className="bg-gradient-to-r from-[#a5b4fc] via-[#818cf8] to-[#6366f1] bg-clip-text text-transparent">
-              Alfred
-            </span>
+            MEET <span className="text-[#f27d26]">ALFRED</span>
           </h1>
           <p className="text-lg md:text-xl text-white/50 max-w-2xl mx-auto mb-12 font-light leading-relaxed tracking-wide">
-            The first AI property manager that learns how you talk,
-            then handles your guests <span className="text-white/80 font-normal">24/7</span> with your unique voice.
+            The first AI property manager that learns how you talk, then handles your guests <span className="text-white/80 font-normal">24/7</span> with your unique voice.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <SignedOut>
               <SignInButton mode="modal">
-                <button className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-10 py-4 rounded-full text-sm font-semibold tracking-wide transition-all transform hover:scale-105 shadow-[0_0_40px_rgba(99,102,241,0.25)] cursor-pointer">
+                <button className="bg-[#f27d26] hover:bg-[#d96a1d] text-white px-10 py-4 rounded-full text-sm font-semibold tracking-wide transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(242,125,38,0.3)] cursor-pointer">
                   Start Free Trial
                 </button>
               </SignInButton>
             </SignedOut>
             <SignedIn>
-              <a href="/dashboard" className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-10 py-4 rounded-full text-sm font-semibold tracking-wide transition-all inline-block">
+              <a href="/dashboard" className="bg-[#f27d26] hover:bg-[#d96a1d] text-white px-10 py-4 rounded-full text-sm font-semibold tracking-wide transition-all inline-block">
                 Go to Dashboard
               </a>
             </SignedIn>
@@ -328,26 +153,20 @@ export function Overlay() {
         </motion.div>
       </section>
 
-      {/* Act 2: Voice */}
+      {/* Voice */}
       <section className="h-screen flex items-center justify-start px-8 md:px-24">
-        <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8 }}
-          className="max-w-xl"
-        >
-          <div className="text-[#818cf8] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Personalization</div>
+        <motion.div initial={{ opacity: 0, x: -50 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.8 }} className="max-w-xl">
+          <div className="text-[#f27d26] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Personalization</div>
           <h2 className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]">
-            Your Voice,<br />
-            <span className="bg-gradient-to-r from-[#a5b4fc] to-[#6366f1] bg-clip-text text-transparent">Automated.</span>
+            Your Voice,<br /><span className="text-[#f27d26]">Automated.</span>
           </h2>
-          <p className="text-base md:text-lg text-white/45 font-light leading-relaxed mb-10 tracking-wide">
+          <p className="text-base md:text-lg text-white/50 font-light leading-relaxed mb-10 tracking-wide">
             Alfred analyzes your past guest communications to mirror your hospitality style. Whether you're formal, friendly, or funny — Alfred keeps it consistent.
           </p>
           <ul className="space-y-5">
             {["Tone matching", "Vocabulary learning", "Custom instructions"].map((item, i) => (
               <li key={i} className="flex items-center gap-4 text-white/60 text-sm tracking-wide">
-                <div className="w-5 h-[1px] bg-[#6366f1]" />
+                <div className="w-5 h-[1px] bg-[#f27d26]" />
                 {item}
               </li>
             ))}
@@ -355,20 +174,14 @@ export function Overlay() {
         </motion.div>
       </section>
 
-      {/* Act 3: Network */}
+      {/* 24/7 */}
       <section className="h-screen flex items-center justify-end px-8 md:px-24">
-        <motion.div
-          initial={{ opacity: 0, x: 50 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8 }}
-          className="max-w-xl text-right"
-        >
-          <div className="text-[#818cf8] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Availability</div>
+        <motion.div initial={{ opacity: 0, x: 50 }} whileInView={{ opacity: 1, x: 0 }} transition={{ duration: 0.8 }} className="max-w-xl text-right">
+          <div className="text-[#f27d26] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Availability</div>
           <h2 className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]">
-            Always On.<br />
-            <span className="bg-gradient-to-r from-[#6366f1] to-[#a5b4fc] bg-clip-text text-transparent">Always Ready.</span>
+            Always On.<br /><span className="text-[#f27d26]">Always Ready.</span>
           </h2>
-          <p className="text-base md:text-lg text-white/45 font-light leading-relaxed mb-10 tracking-wide">
+          <p className="text-base md:text-lg text-white/50 font-light leading-relaxed mb-10 tracking-wide">
             While you sleep, Alfred is working. From check-in instructions at 3 AM to troubleshooting Wi-Fi at noon — your guests are always taken care of.
           </p>
           <div className="flex gap-4 justify-end">
@@ -384,19 +197,33 @@ export function Overlay() {
         </motion.div>
       </section>
 
-      {/* Act 4: CTA */}
+      {/* How it Works */}
+      <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12">
+        <h2 className="text-3xl sm:text-4xl md:text-6xl font-display font-extrabold tracking-[-0.04em] mb-16 text-center leading-[1.05]">
+          Three Steps to <span className="text-[#f27d26]">Freedom</span>
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full">
+          {[
+            { step: "01", title: "Connect", desc: "Link your Airbnb or Vrbo account. Takes 30 seconds." },
+            { step: "02", title: "Train", desc: "Alfred reads your message history to learn your voice." },
+            { step: "03", title: "Relax", desc: "Alfred handles the rest. You step in only when needed." }
+          ].map((item, i) => (
+            <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.15 }}
+              className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.06] hover:border-[#f27d26]/30 transition-all group">
+              <div className="text-6xl font-display font-extrabold text-white/[0.04] group-hover:text-[#f27d26]/10 transition-colors mb-6 leading-none">{item.step}</div>
+              <h3 className="text-xl font-display font-bold mb-3 tracking-tight">{item.title}</h3>
+              <p className="text-white/40 text-sm font-light leading-relaxed tracking-wide">{item.desc}</p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA */}
       <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12 text-center relative overflow-hidden">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          className="max-w-3xl relative z-10"
-        >
-          <div className="text-[#818cf8] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Getting Started</div>
-          <h2 className="text-5xl sm:text-6xl md:text-8xl font-display font-extrabold tracking-[-0.05em] mb-6 leading-[0.9]">
-            Ready to{' '}
-            <span className="bg-gradient-to-r from-[#a5b4fc] via-[#818cf8] to-[#6366f1] bg-clip-text text-transparent">
-              automate?
-            </span>
+        <div className="absolute inset-0 bg-[#f27d26]/5" />
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} className="max-w-3xl relative z-10">
+          <h2 className="text-5xl sm:text-6xl md:text-8xl font-display font-extrabold tracking-[-0.05em] mb-8 leading-[0.9]">
+            READY TO<br /><span className="text-[#f27d26]">AUTOMATE?</span>
           </h2>
           <p className="text-lg text-white/40 mb-14 font-light max-w-lg mx-auto leading-relaxed tracking-wide">
             Join hosts across British Columbia who have reclaimed their time with Alfred.
@@ -404,13 +231,13 @@ export function Overlay() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <SignedOut>
               <SignInButton mode="modal">
-                <button className="bg-[#6366f1] text-white px-12 py-4 rounded-full text-sm font-semibold tracking-wide hover:bg-[#4f46e5] transition-all shadow-[0_0_60px_rgba(99,102,241,0.3)] cursor-pointer">
+                <button className="bg-[#f27d26] text-white px-12 py-4 rounded-full text-sm font-semibold tracking-wide hover:bg-[#d96a1d] transition-all shadow-[0_0_50px_rgba(242,125,38,0.2)] cursor-pointer">
                   Get Started Now
                 </button>
               </SignInButton>
             </SignedOut>
             <SignedIn>
-              <a href="/dashboard" className="bg-[#6366f1] text-white px-12 py-4 rounded-full text-sm font-semibold tracking-wide hover:bg-[#4f46e5] transition-all inline-block">
+              <a href="/dashboard" className="bg-[#f27d26] text-white px-12 py-4 rounded-full text-sm font-semibold tracking-wide hover:bg-[#d96a1d] transition-all inline-block">
                 Go to Dashboard
               </a>
             </SignedIn>
