@@ -74,23 +74,55 @@ const STEPS = [
 
 const PRICING = [
   {
-    tier: 'Trial', desc: 'See Alfred in action', price: '$0', period: '14 days free',
-    features: ['1 property', 'Full Alfred access', 'Shadow mode (you approve replies)', 'Daily briefings via Telegram', 'No credit card required'],
-    featured: false, badge: 'Start Here',
-  },
-  {
-    tier: 'Solo', desc: '1–2 listings', price: '$49', period: '/month',
-    features: ['Up to 2 properties', 'Autonomous Alfred', 'Guest messaging + escalations', 'Daily & weekly reports', 'Email support'],
+    tier: 'Solo',
+    audience: 'For hosts with 1–2 properties',
+    price: '$49',
+    period: '/mo',
+    features: [
+      { text: 'Up to 2 properties', included: true },
+      { text: 'Alfred guest messaging (24/7)', included: true },
+      { text: 'Shadow mode + autonomous', included: true },
+      { text: 'Daily & weekly briefings', included: true },
+      { text: 'Smart escalations', included: true },
+      { text: 'Email support', included: true },
+      { text: 'Gmail learning', included: false },
+      { text: 'Pricing insights', included: false },
+    ],
     featured: false,
   },
   {
-    tier: 'Pro', desc: '3–5 listings', price: '$99', period: '/month',
-    features: ['Up to 5 properties', 'Everything in Solo', 'Gmail learning (auto-extracts WiFi, codes)', 'Style customization', 'Priority support', 'Strategic pricing insights'],
-    featured: true, badge: 'Most Popular',
+    tier: 'Pro',
+    audience: 'For growing portfolios',
+    price: '$99',
+    period: '/mo',
+    features: [
+      { text: 'Up to 5 properties', included: true },
+      { text: 'Everything in Solo', included: true },
+      { text: 'Gmail auto-learning', included: true },
+      { text: 'Communication style matching', included: true },
+      { text: 'Strategic pricing insights', included: true },
+      { text: 'Priority support', included: true },
+      { text: 'Market research agent', included: true },
+      { text: 'Listing optimization', included: false },
+    ],
+    featured: true,
+    badge: 'Most Popular',
   },
   {
-    tier: 'Portfolio', desc: '6+ listings', price: '$199', period: '/month + $29/property over 10',
-    features: ['Up to 30 properties', 'Everything in Pro', 'Custom escalation rules', 'Dedicated onboarding', 'API access', 'Multi-platform (Airbnb + VRBO)'],
+    tier: 'Portfolio',
+    audience: 'For professional managers',
+    price: '$199',
+    period: '/mo',
+    features: [
+      { text: 'Up to 30 properties', included: true },
+      { text: 'Everything in Pro', included: true },
+      { text: 'Multi-platform (Airbnb + VRBO)', included: true },
+      { text: 'Listing optimization agent', included: true },
+      { text: 'Custom escalation rules', included: true },
+      { text: 'Dedicated onboarding', included: true },
+      { text: 'API access', included: true },
+      { text: 'White-label reports', included: true },
+    ],
     featured: false,
   },
 ];
@@ -799,42 +831,161 @@ export default function LandingPage() {
       {/* ════════ PRICING ════════ */}
       <section className="section pricing-section" id="pricing">
         <div className="section-wide">
-          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Pricing</span>
-          <h2 className="section-heading">Simple, Transparent Pricing</h2>
-          <p className="pricing-subhead reveal">Try Alfred free for 14 days. No credit card required.</p>
-          <div className="pricing-grid">
+          <span className="section-label reveal">Pricing</span>
+          <h2 className="section-heading">Plans that grow with your portfolio</h2>
+
+          {/* Free trial banner */}
+          <div className="reveal" style={{
+            background: 'var(--primary-subtle)',
+            border: '1px solid rgba(99, 102, 241, 0.15)',
+            borderRadius: 12,
+            padding: '16px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 16,
+            maxWidth: 600,
+            margin: '0 auto 40px',
+          }}>
+            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+              <strong style={{ color: 'var(--primary)' }}>14 days free</strong> on any plan. No credit card required.
+            </span>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button style={{
+                  background: 'var(--primary)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '8px 20px',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}>
+                  Start Free Trial
+                </button>
+              </SignInButton>
+            </SignedOut>
+          </div>
+
+          {/* 3-column pricing grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 20,
+            maxWidth: 960,
+            margin: '0 auto',
+            alignItems: 'stretch',
+            textAlign: 'left',
+          }}>
             {PRICING.map((p, i) => (
               <motion.div
                 key={i}
-                className={`pricing-card ${p.featured ? 'featured' : ''}`}
-                whileHover={p.featured ? { scale: 1.06 } : { y: -6 }}
+                className="pricing-card"
+                style={{
+                  background: 'white',
+                  border: p.featured ? '2px solid var(--primary)' : '1px solid var(--border)',
+                  borderRadius: 16,
+                  padding: '32px 28px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  position: 'relative',
+                  boxShadow: p.featured ? '0 8px 32px var(--primary-glow)' : 'none',
+                }}
+                whileHover={{ y: -4, boxShadow: p.featured ? '0 12px 40px var(--primary-glow)' : '0 8px 24px rgba(0,0,0,0.06)' }}
                 transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               >
-                {p.badge && <div className="pricing-badge">{p.badge}</div>}
-                <h3>{p.tier}</h3>
-                <p className="pricing-tier-desc">{p.desc}</p>
-                <div className="pricing-price">{p.price}</div>
-                <div className="pricing-period">{p.period}</div>
-                <ul className="pricing-features">
-                  {p.features.map((f, j) => <li key={j}><Check size={16} strokeWidth={2.5} className="pricing-check" />{f}</li>)}
+                {p.badge && (
+                  <div style={{
+                    position: 'absolute',
+                    top: -12,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'var(--primary)',
+                    color: 'white',
+                    padding: '4px 14px',
+                    borderRadius: 20,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}>
+                    {p.badge}
+                  </div>
+                )}
+
+                <div style={{ marginBottom: 20 }}>
+                  <h3 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{p.tier}</h3>
+                  <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{p.audience}</p>
+                </div>
+
+                <div style={{ marginBottom: 24 }}>
+                  <span style={{ fontSize: 40, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em' }}>{p.price}</span>
+                  <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{p.period}</span>
+                </div>
+
+                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 28px', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {p.features.map((f, j) => (
+                    <li key={j} style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 8,
+                      fontSize: 13.5,
+                      color: f.included ? 'var(--text-secondary)' : 'var(--text-muted)',
+                      opacity: f.included ? 1 : 0.45,
+                    }}>
+                      <Check size={15} strokeWidth={2.5} style={{
+                        color: f.included ? 'var(--primary)' : 'var(--text-muted)',
+                        flexShrink: 0,
+                        marginTop: 2,
+                      }} />
+                      {f.text}
+                    </li>
+                  ))}
                 </ul>
+
                 <SignedOut>
                   <SignInButton mode="modal">
                     <motion.button
-                      className={`btn ${p.featured ? 'btn-primary' : 'btn-outline'}`}
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
+                      style={{
+                        width: '100%',
+                        padding: '12px 20px',
+                        borderRadius: 10,
+                        border: p.featured ? 'none' : '1px solid var(--border)',
+                        background: p.featured ? 'var(--primary)' : 'white',
+                        color: p.featured ? 'white' : 'var(--text-primary)',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                     >
-                      {p.tier === 'Trial' ? 'Start Free Trial' : 'Get Started'}
+                      Get Started
                     </motion.button>
                   </SignInButton>
                 </SignedOut>
                 <SignedIn>
                   <motion.a
                     href="/dashboard"
-                    className={`btn ${p.featured ? 'btn-primary' : 'btn-outline'}`}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
+                    style={{
+                      width: '100%',
+                      padding: '12px 20px',
+                      borderRadius: 10,
+                      border: p.featured ? 'none' : '1px solid var(--border)',
+                      background: p.featured ? 'var(--primary)' : 'white',
+                      color: p.featured ? 'white' : 'var(--text-primary)',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textDecoration: 'none',
+                      textAlign: 'center',
+                      display: 'block',
+                      boxSizing: 'border-box',
+                    }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     Go to Dashboard
                   </motion.a>
