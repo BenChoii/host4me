@@ -22,14 +22,14 @@ function GlassOrb({ position = [0, 0, 0], scale = 1, emissiveIntensity = 2 }) {
           <sphereGeometry args={[1, 64, 64]} />
           <MeshTransmissionMaterial
             backside
-            thickness={0.5}
-            chromaticAberration={0.3}
-            anisotropy={0.2}
-            color="#6366f1"
-            transmission={0.92}
-            roughness={0.05}
-            envMapIntensity={1.5}
-            ior={1.5}
+            thickness={0.3}
+            chromaticAberration={0.2}
+            anisotropy={0.1}
+            color="#1e1b4b"
+            transmission={0.85}
+            roughness={0.15}
+            envMapIntensity={0.3}
+            ior={1.3}
           />
         </mesh>
         {/* Inner emissive core — the glow source */}
@@ -211,7 +211,7 @@ function Scene() {
       <spotLight position={[5, 8, 5]} angle={0.2} penumbra={1} intensity={2} color="#6366f1" />
       <pointLight position={[0, 0, 0]} intensity={1} color="#818cf8" distance={8} />
 
-      <Environment preset="night" />
+      <Environment preset="warehouse" environmentIntensity={0.1} />
 
       {/* Main glass orb */}
       <group ref={mainOrbRef}>

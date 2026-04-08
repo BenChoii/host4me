@@ -6,9 +6,12 @@ import { motion, AnimatePresence } from "motion/react";
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
 function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth < 1024 || 'ontouchstart' in window;
+  });
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
+    const check = () => setIsMobile(window.innerWidth < 1024 || 'ontouchstart' in window);
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
@@ -158,7 +161,7 @@ export default function LandingPage() {
         <MobileAtmosphere />
       ) : (
         <div className="fixed inset-0 z-0">
-          <Canvas shadows camera={{ position: [0, 0, 5], fov: 35 }}>
+          <Canvas shadows camera={{ position: [0, 0, 6], fov: 40 }} dpr={[1, 1.5]}>
             <Suspense fallback={null}>
               <Experience />
             </Suspense>
