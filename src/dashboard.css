@@ -80,27 +80,11 @@
 }
 
 .dash-logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   font-family: var(--font-display);
   font-size: 18px;
   font-weight: 800;
   color: var(--dash-text);
-  letter-spacing: -0.03em;
-}
-
-.dash-logo-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--dash-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 13px;
-  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .dash-nav {

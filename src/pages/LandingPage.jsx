@@ -30,11 +30,8 @@ function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#6366f1] rounded-lg flex items-center justify-center">
-            <Zap className="text-white w-5 h-5" />
-          </div>
-          <span className="text-2xl font-display font-bold tracking-tighter">
-            HOST<span className="text-[#6366f1]">4</span>ME
+          <span className="text-xl font-display font-extrabold tracking-tight">
+            host<span className="text-[#6366f1]">4</span>me
           </span>
         </div>
 
