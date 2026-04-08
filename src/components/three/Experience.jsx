@@ -135,7 +135,7 @@ function Scene() {
           <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
             <mesh position={[0, 0, 0]}>
               <boxGeometry args={[2, 1.2, 1.5]} />
-              <MeshDistortMaterial color="#111111" speed={1} distort={0.1} roughness={0.1} metalness={0.8} />
+              <MeshDistortMaterial color="#2a2a35" speed={1} distort={0.1} roughness={0.1} metalness={0.8} />
             </mesh>
             <mesh position={[0, 0.9, 0]} rotation={[0, Math.PI / 4, 0]}>
               <coneGeometry args={[1.8, 1, 4]} />
