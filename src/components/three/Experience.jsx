@@ -194,8 +194,8 @@ export function Overlay() {
           <AnimatedHeading className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-display tracking-[-0.02em] mb-8 leading-[0.95]" delay={0.3}>
             Meet<br /><span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/ Alfred</span>
           </AnimatedHeading>
-          <p className="text-lg md:text-xl text-white/50 max-w-2xl mx-auto mb-12 font-light leading-relaxed tracking-wide">
-            The first AI property manager that learns how you talk, then handles your guests <span className="text-white/80 font-normal">24/7</span> with your unique voice.
+          <p className="text-lg md:text-xl text-white/65 max-w-2xl mx-auto mb-12 font-light leading-relaxed">
+            The first AI property manager that learns how you talk, then handles your guests <span className="text-white font-normal">24/7</span> with your unique voice.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <SignedOut>
@@ -224,12 +224,12 @@ export function Overlay() {
           <AnimatedHeading className="text-4xl sm:text-5xl md:text-7xl font-display tracking-[-0.02em] mb-6 leading-[1.05]" delay={0.2}>
             Your Voice,<br /><span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/ Automated.</span>
           </AnimatedHeading>
-          <p className="text-base md:text-lg text-white/50 font-light leading-relaxed mb-10 tracking-wide">
+          <p className="text-base md:text-lg text-white/65 font-light leading-relaxed mb-10">
             Alfred analyzes your past guest communications to mirror your hospitality style. Whether you're formal, friendly, or funny — Alfred keeps it consistent.
           </p>
           <ul className="space-y-5">
             {["Tone matching", "Vocabulary learning", "Custom instructions"].map((item, i) => (
-              <li key={i} className="flex items-center gap-4 text-white/60 text-sm tracking-wide">
+              <li key={i} className="flex items-center gap-4 text-white/65 text-sm">
                 <div className="w-5 h-[1px] bg-[#f27d26]" />
                 {item}
               </li>
@@ -245,7 +245,7 @@ export function Overlay() {
           <AnimatedHeading className="text-4xl sm:text-5xl md:text-7xl font-display tracking-[-0.02em] mb-6 leading-[1.05]" delay={0.2}>
             Always On.<br /><span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/ Always Ready.</span>
           </AnimatedHeading>
-          <p className="text-base md:text-lg text-white/50 font-light leading-relaxed mb-10 tracking-wide">
+          <p className="text-base md:text-lg text-white/65 font-light leading-relaxed mb-10">
             While you sleep, Alfred is working. From check-in instructions at 3 AM to troubleshooting Wi-Fi at noon — your guests are always taken care of.
           </p>
           <div className="flex gap-4 justify-end">
@@ -276,7 +276,7 @@ export function Overlay() {
               className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.06] hover:border-[#f27d26]/30 transition-all group">
               <div className="text-6xl font-display font-extrabold text-white/[0.04] group-hover:text-[#f27d26]/10 transition-colors mb-6 leading-none">{item.step}</div>
               <h3 className="text-xl font-display font-bold mb-3 tracking-tight">{item.title}</h3>
-              <p className="text-white/40 text-sm font-light leading-relaxed tracking-wide">{item.desc}</p>
+              <p className="text-white/60 text-sm font-light leading-relaxed">{item.desc}</p>
             </motion.div>
           ))}
         </div>
@@ -289,7 +289,7 @@ export function Overlay() {
           <h2 className="text-5xl sm:text-6xl md:text-8xl font-display tracking-[-0.02em] mb-8 leading-[0.95]">
             Ready to<br /><span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/ Automate?</span>
           </h2>
-          <p className="text-lg text-white/40 mb-14 font-light max-w-lg mx-auto leading-relaxed tracking-wide">
+          <p className="text-lg text-white/65 mb-14 font-light max-w-lg mx-auto leading-relaxed">
             Join hosts across British Columbia who have reclaimed their time with Alfred.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
