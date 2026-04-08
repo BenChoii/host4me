@@ -190,8 +190,8 @@ export function Overlay() {
             <span className="w-1.5 h-1.5 rounded-full bg-[#f27d26] animate-pulse" />
             AI Property Management
           </div>
-          <AnimatedHeading className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-display font-extrabold tracking-[-0.05em] mb-8 leading-[0.9]" delay={0.3}>
-            MEET <span className="text-[#f27d26]">ALFRED</span>
+          <AnimatedHeading className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-display tracking-[-0.02em] mb-8 leading-[0.95]" delay={0.3}>
+            Meet<br /><span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/ Alfred</span>
           </AnimatedHeading>
           <p className="text-lg md:text-xl text-white/50 max-w-2xl mx-auto mb-12 font-light leading-relaxed tracking-wide">
             The first AI property manager that learns how you talk, then handles your guests <span className="text-white/80 font-normal">24/7</span> with your unique voice.
@@ -220,8 +220,8 @@ export function Overlay() {
       <section className="h-screen flex items-end justify-start pb-32">
         <motion.div initial={{ opacity: 0, x: -80 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.9, ease: "easeOut" }} className="max-w-xl" style={{ marginLeft: '10vw' }}>
           <div className="text-[#f27d26] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Personalization</div>
-          <AnimatedHeading className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]" delay={0.2}>
-            Your Voice,<br /><span className="text-[#f27d26]">Automated.</span>
+          <AnimatedHeading className="text-4xl sm:text-5xl md:text-7xl font-display tracking-[-0.02em] mb-6 leading-[1.05]" delay={0.2}>
+            Your Voice,<br /><span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/ Automated.</span>
           </AnimatedHeading>
           <p className="text-base md:text-lg text-white/50 font-light leading-relaxed mb-10 tracking-wide">
             Alfred analyzes your past guest communications to mirror your hospitality style. Whether you're formal, friendly, or funny — Alfred keeps it consistent.
@@ -241,8 +241,8 @@ export function Overlay() {
       <section className="h-screen flex items-center justify-end">
         <motion.div initial={{ opacity: 0, x: 80 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ duration: 0.9, ease: "easeOut" }} className="max-w-xl text-right" style={{ marginRight: '10vw' }}>
           <div className="text-[#f27d26] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Availability</div>
-          <AnimatedHeading className="text-4xl sm:text-5xl md:text-7xl font-display font-extrabold tracking-[-0.04em] mb-6 leading-[1.05]" delay={0.2}>
-            Always On.<br /><span className="text-[#f27d26]">Always Ready.</span>
+          <AnimatedHeading className="text-4xl sm:text-5xl md:text-7xl font-display tracking-[-0.02em] mb-6 leading-[1.05]" delay={0.2}>
+            Always On.<br /><span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/ Always Ready.</span>
           </AnimatedHeading>
           <p className="text-base md:text-lg text-white/50 font-light leading-relaxed mb-10 tracking-wide">
             While you sleep, Alfred is working. From check-in instructions at 3 AM to troubleshooting Wi-Fi at noon — your guests are always taken care of.
@@ -262,8 +262,8 @@ export function Overlay() {
 
       {/* How it Works */}
       <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12">
-        <h2 className="text-3xl sm:text-4xl md:text-6xl font-display font-extrabold tracking-[-0.04em] mb-16 text-center leading-[1.05]">
-          Three Steps to <span className="text-[#f27d26]">Freedom</span>
+        <h2 className="text-3xl sm:text-4xl md:text-6xl font-display tracking-[-0.02em] mb-16 text-center leading-[1.05]">
+          Three Steps to <span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/ Freedom</span>
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full">
           {[
@@ -285,8 +285,8 @@ export function Overlay() {
       <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12 text-center relative overflow-hidden">
         <div className="absolute inset-0 bg-[#f27d26]/5" />
         <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} className="max-w-3xl relative z-10">
-          <h2 className="text-5xl sm:text-6xl md:text-8xl font-display font-extrabold tracking-[-0.05em] mb-8 leading-[0.9]">
-            READY TO<br /><span className="text-[#f27d26]">AUTOMATE?</span>
+          <h2 className="text-5xl sm:text-6xl md:text-8xl font-display tracking-[-0.02em] mb-8 leading-[0.95]">
+            Ready to<br /><span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/ Automate?</span>
           </h2>
           <p className="text-lg text-white/40 mb-14 font-light max-w-lg mx-auto leading-relaxed tracking-wide">
             Join hosts across British Columbia who have reclaimed their time with Alfred.

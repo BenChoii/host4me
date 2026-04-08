@@ -44,8 +44,8 @@ function Navbar() {
     >
       <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <span className="text-xl font-display font-extrabold tracking-tight">
-            host<span className="text-[#f27d26]">4</span>me
+          <span className="text-2xl font-display tracking-tight" style={{ fontWeight: 500 }}>
+            <span className="text-[#f27d26]" style={{ fontStyle: 'italic' }}>/</span>Host4Me
           </span>
         </div>
 
