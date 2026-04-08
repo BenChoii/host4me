@@ -608,21 +608,26 @@ export default function LandingPage() {
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>The Solution</span>
           <h2 className="section-heading">Meet Alfred. He learns how you talk.</h2>
-          <div className="comparison-grid remotion-player-wrap">
-            <SafePlayer
-              component={Comparison}
-              durationInFrames={360}
-              fps={30}
-              compositionWidth={900}
-              compositionHeight={420}
-              loop
-              autoPlay
-              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 800, margin: '40px auto 0' }}>
+            <div className="reveal" style={{ background: 'var(--bg-alt)', borderRadius: 16, padding: 28, border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Without Alfred</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}><span style={{ color: '#ef4444' }}>✗</span> You reply at 2 AM half-asleep</div>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}><span style={{ color: '#ef4444' }}>✗</span> Inconsistent tone across messages</div>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}><span style={{ color: '#ef4444' }}>✗</span> Forget property details mid-thread</div>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}><span style={{ color: '#ef4444' }}>✗</span> Slow response = lower rankings</div>
+              </div>
+            </div>
+            <div className="reveal" style={{ background: 'var(--bg-alt)', borderRadius: 16, padding: 28, border: '1px solid var(--primary)', boxShadow: '0 0 0 1px var(--primary-subtle)' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--primary)', marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.1em' }}>With Alfred</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}><span style={{ color: '#22c55e' }}>✓</span> Replies in 47 seconds, 24/7</div>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}><span style={{ color: '#22c55e' }}>✓</span> Matches your exact voice and style</div>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}><span style={{ color: '#22c55e' }}>✓</span> Remembers every property detail</div>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)', display: 'flex', gap: 8 }}><span style={{ color: '#22c55e' }}>✓</span> Faster replies = better search ranking</div>
+              </div>
+            </div>
           </div>
-          <p className="comparison-caption reveal">
-            Alfred analyzes your past 100+ messages to replicate your tone, humor, and helpfulness. No training required.
-          </p>
         </div>
       </section>
 
@@ -763,17 +768,29 @@ export default function LandingPage() {
         <div className="section-wide">
           <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Getting Started</span>
           <h2 className="section-heading">Three Steps to Effortless Guest Management</h2>
-          <div className="steps-grid remotion-player-wrap">
-            <SafePlayer
-              component={HowItWorksComp}
-              durationInFrames={300}
-              fps={30}
-              compositionWidth={900}
-              compositionHeight={380}
-              loop
-              autoPlay
-              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24, maxWidth: 900, margin: '48px auto 0' }}>
+            {STEPS.map((step, i) => (
+              <div key={i} className="reveal" style={{
+                background: 'var(--bg-alt)',
+                borderRadius: 16,
+                padding: '32px 24px',
+                border: '1px solid var(--border)',
+                position: 'relative',
+              }}>
+                <div style={{
+                  fontSize: 48,
+                  fontWeight: 800,
+                  color: 'var(--primary)',
+                  opacity: 0.15,
+                  position: 'absolute',
+                  top: 16,
+                  right: 20,
+                  lineHeight: 1,
+                }}>{step.num}</div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10 }}>{step.title}</h3>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.7 }}>{step.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -856,42 +873,30 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ════════ NIGHT SHIFT — REMOTION ════════ */}
+      {/* ════════ NIGHT SHIFT — STATIC ════════ */}
       <section className="section night-shift-section">
-        <div className="section-wide">
-          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block', color: 'rgba(255,255,255,0.4)' }}>See It In Action</span>
-          <h2 className="section-heading" style={{ color: 'white' }}>Alfred Works While You Sleep</h2>
-          <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0', borderRadius: 20, border: '1px solid rgba(255,255,255,0.06)', boxShadow: '0 30px 80px rgba(0,0,0,0.3)' }}>
-            <SafePlayer
-              component={NightShift}
-              durationInFrames={420}
-              fps={30}
-              compositionWidth={900}
-              compositionHeight={520}
-              loop
-              autoPlay
-              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* ════════ ALFRED DASHBOARD — REMOTION ════════ */}
-      <section className="section alfred-work-section">
-        <div className="section-wide">
-          <span className="section-label reveal" style={{ textAlign: 'center', display: 'block' }}>Your Dashboard</span>
-          <h2 className="section-heading">Everything at a Glance</h2>
-          <div className="remotion-player-wrap" style={{ maxWidth: 940, margin: '40px auto 0', borderRadius: 20, border: '1px solid rgba(45,43,61,0.06)', boxShadow: '0 12px 40px rgba(45,43,61,0.06)' }}>
-            <SafePlayer
-              component={AlfredAtWork}
-              durationInFrames={300}
-              fps={30}
-              compositionWidth={900}
-              compositionHeight={480}
-              loop
-              autoPlay
-              style={{ width: '100%', height: 'auto', borderRadius: 20 }}
-            />
+        <div className="section-wide" style={{ textAlign: 'center' }}>
+          <span className="section-label reveal" style={{ color: 'rgba(255,255,255,0.35)' }}>While You Sleep</span>
+          <h2 className="section-heading" style={{ color: 'white' }}>Alfred Never Clocks Out</h2>
+          <p style={{ color: 'rgba(255,255,255,0.5)', maxWidth: 550, margin: '0 auto 40px', fontSize: 16 }}>
+            2 AM guest message? Alfred replies in 47 seconds. Holiday weekend? Alfred handles it. You wake up to a briefing, not a backlog.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, maxWidth: 700, margin: '0 auto' }}>
+            {[
+              { value: '47s', label: 'Average reply time' },
+              { value: '24/7', label: 'Always available' },
+              { value: '8am', label: 'Daily briefing' },
+            ].map((stat, i) => (
+              <div key={i} className="reveal" style={{
+                background: 'rgba(255,255,255,0.04)',
+                borderRadius: 14,
+                padding: '28px 20px',
+                border: '1px solid rgba(255,255,255,0.06)',
+              }}>
+                <div style={{ fontSize: 32, fontWeight: 800, color: 'white', marginBottom: 4, fontFamily: "'JetBrains Mono', monospace" }}>{stat.value}</div>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>{stat.label}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>

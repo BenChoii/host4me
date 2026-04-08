@@ -625,16 +625,22 @@ p {
 .section-wide {
   max-width: 1100px;
   margin: 0 auto;
+  text-align: center;
+}
+
+.section-wide h2 {
+  text-align: center;
 }
 
 .section-label {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: var(--primary);
+  color: var(--text-muted);
   font-weight: 600;
   margin-bottom: 16px;
   display: block;
+  text-align: center;
 }
 
 .section h2 {
@@ -886,9 +892,11 @@ p {
 
 .pricing-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
   align-items: start;
+  max-width: 1100px;
+  margin: 0 auto;
 }
 
 .pricing-card {
@@ -1149,8 +1157,8 @@ p {
   }
 
   .pricing-grid {
-    grid-template-columns: 1fr;
-    max-width: 400px;
+    grid-template-columns: repeat(2, 1fr) !important;
+    max-width: 600px;
     margin: 0 auto;
   }
 
@@ -1788,6 +1796,9 @@ p {
   .pain-points { gap: 20px; }
   .pain-point { flex-direction: column; gap: 12px; }
 
+  /* How it works — comparison grid */
+  .solution-section .section-wide > div { grid-template-columns: 1fr !important; }
+
   /* Comparison */
   .comparison-grid { margin: 24px 0 0; }
 
@@ -1810,10 +1821,16 @@ p {
   /* Pricing */
   .pricing-grid {
     grid-template-columns: 1fr !important;
-    max-width: 400px;
+    max-width: 360px;
     margin: 0 auto;
   }
   .pricing-card.featured { transform: none; }
+
+  /* How it works steps */
+  .how-it-works .section-wide > div { grid-template-columns: 1fr !important; }
+
+  /* Night shift stats */
+  .night-shift-section .section-wide > div:last-child { grid-template-columns: 1fr !important; }
 
   /* FAQ */
   .faq-container { padding: 0; }
