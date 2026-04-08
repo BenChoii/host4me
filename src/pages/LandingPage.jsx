@@ -5,6 +5,17 @@ import { Menu, X, Zap, MessageSquare, Shield, Home } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+  return isMobile;
+}
+
 function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -35,14 +46,10 @@ function Navbar() {
           </span>
         </div>
 
-        {/* Desktop Nav */}
         <div className="hidden md:flex items-center gap-8">
           {navLinks.map((link) => (
-            <a
-              key={link.name}
-              href={`#${link.name.toLowerCase().replace(/\s+/g, '-')}`}
-              className="text-sm font-medium text-gray-400 hover:text-white transition-colors"
-            >
+            <a key={link.name} href={`#${link.name.toLowerCase().replace(/\s+/g, '-')}`}
+              className="text-sm font-medium text-gray-400 hover:text-white transition-colors">
               {link.name}
             </a>
           ))}
@@ -54,54 +61,36 @@ function Navbar() {
             </SignInButton>
           </SignedOut>
           <SignedIn>
-            <a href="/dashboard" className="bg-[#6366f1] text-white px-6 py-2 rounded-full text-sm font-bold hover:bg-[#4f46e5] transition-all">
-              Dashboard
-            </a>
+            <a href="/dashboard" className="bg-[#6366f1] text-white px-6 py-2 rounded-full text-sm font-bold hover:bg-[#4f46e5] transition-all">Dashboard</a>
             <UserButton appearance={{ elements: { avatarBox: { width: 32, height: 32 } } }} />
           </SignedIn>
         </div>
 
-        {/* Mobile Toggle */}
-        <button
-          className="md:hidden text-white"
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        >
+        <button className="md:hidden text-white" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
           {isMobileMenuOpen ? <X /> : <Menu />}
         </button>
       </div>
 
-      {/* Mobile Menu */}
       <AnimatePresence>
         {isMobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="absolute top-full left-0 w-full bg-black border-t border-white/10 p-6 md:hidden"
-          >
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            className="absolute top-full left-0 w-full bg-black border-t border-white/10 p-6 md:hidden">
             <div className="flex flex-col gap-6">
               {navLinks.map((link) => (
-                <a
-                  key={link.name}
-                  href={`#${link.name.toLowerCase().replace(/\s+/g, '-')}`}
+                <a key={link.name} href={`#${link.name.toLowerCase().replace(/\s+/g, '-')}`}
                   className="flex items-center gap-3 text-lg font-medium text-gray-400"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
+                  onClick={() => setIsMobileMenuOpen(false)}>
                   <link.icon className="w-5 h-5 text-[#6366f1]" />
                   {link.name}
                 </a>
               ))}
               <SignedOut>
                 <SignInButton mode="modal">
-                  <button className="bg-[#6366f1] text-white px-6 py-4 rounded-xl text-lg font-bold cursor-pointer">
-                    Get Started Free
-                  </button>
+                  <button className="bg-[#6366f1] text-white px-6 py-4 rounded-xl text-lg font-bold cursor-pointer">Get Started Free</button>
                 </SignInButton>
               </SignedOut>
               <SignedIn>
-                <a href="/dashboard" className="bg-[#6366f1] text-white px-6 py-4 rounded-xl text-lg font-bold text-center">
-                  Go to Dashboard
-                </a>
+                <a href="/dashboard" className="bg-[#6366f1] text-white px-6 py-4 rounded-xl text-lg font-bold text-center">Go to Dashboard</a>
               </SignedIn>
             </div>
           </motion.div>
@@ -111,20 +100,73 @@ function Navbar() {
   );
 }
 
-export default function LandingPage() {
+/* Mobile CSS atmospheric fallback */
+function MobileAtmosphere() {
   return (
-    <div className="relative w-full h-screen bg-black text-white">
+    <div className="fixed inset-0 z-0 bg-[#050505] overflow-hidden">
+      {/* Main glow orb */}
+      <div className="absolute top-[25%] left-1/2 -translate-x-1/2 w-[300px] h-[300px] rounded-full opacity-80"
+        style={{
+          background: 'radial-gradient(circle, rgba(99,102,241,0.2) 0%, rgba(99,102,241,0.05) 40%, transparent 70%)',
+          animation: 'mobile-glow 6s ease-in-out infinite',
+        }}
+      />
+      {/* Secondary glow */}
+      <div className="absolute top-[60%] left-[30%] w-[200px] h-[200px] rounded-full opacity-50"
+        style={{
+          background: 'radial-gradient(circle, rgba(129,140,248,0.1) 0%, transparent 60%)',
+          animation: 'mobile-glow 8s ease-in-out infinite reverse',
+        }}
+      />
+      {/* CSS sparkle dots */}
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i} className="absolute rounded-full bg-[#6366f1]"
+          style={{
+            width: 2 + Math.random() * 3,
+            height: 2 + Math.random() * 3,
+            left: `${10 + Math.random() * 80}%`,
+            top: `${10 + Math.random() * 80}%`,
+            opacity: 0.15 + Math.random() * 0.25,
+            animation: `mobile-sparkle ${3 + Math.random() * 4}s ease-in-out infinite`,
+            animationDelay: `${Math.random() * 3}s`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes mobile-glow {
+          0%, 100% { opacity: 0.8; transform: translate(-50%, 0) scale(1); }
+          50% { opacity: 0.5; transform: translate(-50%, 0) scale(1.15); }
+        }
+        @keyframes mobile-sparkle {
+          0%, 100% { opacity: 0.15; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(1.5); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default function LandingPage() {
+  const isMobile = useIsMobile();
+
+  return (
+    <div className="relative w-full h-screen bg-[#050505] text-white">
       <Navbar />
 
-      <div className="fixed inset-0 z-0">
-        <Canvas shadows camera={{ position: [0, 0, 5], fov: 35 }}>
-          <Suspense fallback={null}>
-            <Experience />
-          </Suspense>
-        </Canvas>
-      </div>
+      {/* 3D scene on desktop, CSS fallback on mobile */}
+      {isMobile ? (
+        <MobileAtmosphere />
+      ) : (
+        <div className="fixed inset-0 z-0">
+          <Canvas shadows camera={{ position: [0, 0, 5], fov: 35 }}>
+            <Suspense fallback={null}>
+              <Experience />
+            </Suspense>
+          </Canvas>
+        </div>
+      )}
 
-      {/* Alfred status badge */}
+      {/* Alfred status badge — desktop only */}
       <div className="fixed bottom-8 left-8 z-50 pointer-events-none hidden md:block">
         <div className="flex items-center gap-3 bg-white/5 backdrop-blur-sm border border-white/10 px-4 py-2 rounded-full">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />

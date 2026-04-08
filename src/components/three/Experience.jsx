@@ -1,139 +1,265 @@
-import { Float, MeshDistortMaterial, Scroll, ScrollControls, useScroll } from "@react-three/drei";
+import {
+  Float, MeshTransmissionMaterial, Sparkles, Environment,
+  Scroll, ScrollControls, useScroll
+} from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import * as THREE from "three";
 import { motion } from "motion/react";
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+import PostProcessing from "./PostProcessing";
+import { useMouseParallax } from "./useMouseParallax";
 
+/* ═══════════════════════════════════════════
+   GLASS ORB — The core visual element
+   ═══════════════════════════════════════════ */
+function GlassOrb({ position = [0, 0, 0], scale = 1, emissiveIntensity = 2 }) {
+  return (
+    <Float speed={1.5} rotationIntensity={0.1} floatIntensity={0.3}>
+      <group position={position} scale={scale}>
+        {/* Outer glass shell */}
+        <mesh>
+          <sphereGeometry args={[1, 64, 64]} />
+          <MeshTransmissionMaterial
+            backside
+            thickness={0.5}
+            chromaticAberration={0.3}
+            anisotropy={0.2}
+            color="#6366f1"
+            transmission={0.92}
+            roughness={0.05}
+            envMapIntensity={1.5}
+            ior={1.5}
+          />
+        </mesh>
+        {/* Inner emissive core — the glow source */}
+        <mesh scale={0.35}>
+          <sphereGeometry args={[1, 32, 32]} />
+          <meshStandardMaterial
+            color="#818cf8"
+            emissive="#6366f1"
+            emissiveIntensity={emissiveIntensity}
+            toneMapped={false}
+          />
+        </mesh>
+      </group>
+    </Float>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   SOUND RING — Expanding rings for Act 2
+   ═══════════════════════════════════════════ */
+function SoundRings({ active, progress }) {
+  const groupRef = useRef();
+
+  useFrame((state) => {
+    if (!groupRef.current || !active) return;
+    groupRef.current.children.forEach((ring, i) => {
+      const phase = (state.clock.elapsedTime * 0.5 + i * 0.8) % 3;
+      const s = 1 + phase * 1.5;
+      ring.scale.set(s, s, s);
+      ring.material.opacity = Math.max(0, 0.4 - phase * 0.15);
+    });
+  });
+
+  return (
+    <group ref={groupRef}>
+      {[0, 1, 2, 3].map((i) => (
+        <mesh key={i} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[1, 0.02, 16, 64]} />
+          <meshStandardMaterial
+            color="#818cf8"
+            emissive="#6366f1"
+            emissiveIntensity={3}
+            transparent
+            opacity={0}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   NETWORK LINES — Connections for Act 3
+   ═══════════════════════════════════════════ */
+function NetworkLines({ positions, opacity }) {
+  const linesRef = useRef();
+
+  const lineGeometries = useMemo(() => {
+    const geos = [];
+    for (let i = 0; i < positions.length; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        const points = [
+          new THREE.Vector3(...positions[i]),
+          new THREE.Vector3(...positions[j]),
+        ];
+        geos.push(new THREE.BufferGeometry().setFromPoints(points));
+      }
+    }
+    return geos;
+  }, [positions]);
+
+  return (
+    <group ref={linesRef}>
+      {lineGeometries.map((geo, i) => (
+        <line key={i} geometry={geo}>
+          <lineBasicMaterial
+            color="#6366f1"
+            transparent
+            opacity={opacity * 0.3}
+            toneMapped={false}
+          />
+        </line>
+      ))}
+    </group>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   MAIN SCENE — 4-act scroll-driven narrative
+   ═══════════════════════════════════════════ */
 function Scene() {
   const scroll = useScroll();
-  const groupRef = useRef(null);
-  const houseRef = useRef(null);
-  const dataNodesRef = useRef(null);
-  const waveformRef = useRef(null);
+  const mainOrbRef = useRef();
+  const smallOrbsRef = useRef();
+
+  useMouseParallax(0.15);
+
+  // Positions for Act 3 satellite orbs
+  const satellitePositions = useMemo(() => [
+    [-2.5, 1, -1],
+    [2.5, -0.5, -1],
+    [0, 2.5, -2],
+    [-1.5, -2, -1.5],
+  ], []);
 
   useFrame((state) => {
     const offset = scroll.offset;
-    
-    // Smooth camera path
-    const targetZ = 5 + offset * 15;
-    const targetY = 1 - offset * 4;
-    const targetX = Math.sin(offset * Math.PI) * 2;
-    
-    state.camera.position.lerp(new THREE.Vector3(targetX, targetY, targetZ), 0.1);
+    const act = offset < 0.25 ? 1 : offset < 0.5 ? 2 : offset < 0.75 ? 3 : 4;
+    const actProgress = (offset % 0.25) / 0.25;
+
+    // === CAMERA PATH ===
+    let targetPos;
+    if (act === 1) {
+      targetPos = new THREE.Vector3(0, 0, 5);
+    } else if (act === 2) {
+      targetPos = new THREE.Vector3(
+        THREE.MathUtils.lerp(0, -2, actProgress),
+        THREE.MathUtils.lerp(0, 0.5, actProgress),
+        5
+      );
+    } else if (act === 3) {
+      targetPos = new THREE.Vector3(
+        THREE.MathUtils.lerp(-2, 2, actProgress),
+        THREE.MathUtils.lerp(0.5, 0.3, actProgress),
+        5
+      );
+    } else {
+      targetPos = new THREE.Vector3(
+        THREE.MathUtils.lerp(2, 0, actProgress),
+        THREE.MathUtils.lerp(0.3, 0, actProgress),
+        THREE.MathUtils.lerp(5, 7, actProgress)
+      );
+    }
+    state.camera.position.lerp(targetPos, 0.04);
     state.camera.lookAt(0, 0, 0);
 
-    if (groupRef.current) {
-      groupRef.current.rotation.y = THREE.MathUtils.lerp(groupRef.current.rotation.y, offset * Math.PI * 2, 0.1);
+    // === MAIN ORB — breathing + pulse ===
+    if (mainOrbRef.current) {
+      const breathe = 1 + Math.sin(state.clock.elapsedTime * 0.8) * 0.02;
+      const voicePulse = act === 2 ? 1 + Math.sin(state.clock.elapsedTime * 4) * 0.05 * actProgress : 1;
+      // In Act 3, shrink the main orb
+      const networkShrink = act === 3 ? THREE.MathUtils.lerp(1, 0.6, actProgress) : act === 4 ? THREE.MathUtils.lerp(0.6, 1.1, actProgress) : 1;
+      const s = breathe * voicePulse * networkShrink;
+      mainOrbRef.current.scale.set(s, s, s);
     }
 
-    if (houseRef.current) {
-      // House "opens up" or transforms
-      const scale = 1 + offset * 0.5;
-      houseRef.current.scale.setScalar(scale);
-      houseRef.current.rotation.z = offset * 0.2;
-    }
-
-    if (dataNodesRef.current) {
-      dataNodesRef.current.children.forEach((child, i) => {
-        const t = state.clock.elapsedTime + i;
-        child.position.y += Math.sin(t) * 0.002;
-        child.scale.setScalar(0.5 + Math.sin(t * 2) * 0.2);
-        
-        // Nodes cluster towards the center as we scroll
-        const dist = 1 - offset;
-        child.position.multiplyScalar(0.99);
+    // === SATELLITE ORBS — drift out in Act 3, converge in Act 4 ===
+    if (smallOrbsRef.current) {
+      smallOrbsRef.current.children.forEach((child, i) => {
+        const target = satellitePositions[i];
+        let drift;
+        if (act < 3) {
+          drift = 0;
+        } else if (act === 3) {
+          drift = actProgress;
+        } else {
+          drift = 1 - actProgress;
+        }
+        child.position.x = THREE.MathUtils.lerp(0, target[0], drift);
+        child.position.y = THREE.MathUtils.lerp(0, target[1], drift);
+        child.position.z = THREE.MathUtils.lerp(0, target[2], drift);
+        child.visible = drift > 0.05;
       });
-    }
-
-    if (waveformRef.current) {
-      waveformRef.current.children.forEach((child, i) => {
-        const scaleY = 0.1 + Math.abs(Math.sin(state.clock.elapsedTime * 5 + i * 0.5)) * (offset * 5);
-        child.scale.y = THREE.MathUtils.lerp(child.scale.y, scaleY, 0.1);
-      });
-      waveformRef.current.position.y = -2 + offset * 2;
-      waveformRef.current.visible = offset > 0.1;
     }
   });
+
+  const offset = scroll?.offset ?? 0;
+  const act = offset < 0.25 ? 1 : offset < 0.5 ? 2 : offset < 0.75 ? 3 : 4;
+  const actProgress = (offset % 0.25) / 0.25;
+  const networkOpacity = act === 3 ? actProgress : act === 4 ? 1 - actProgress : 0;
 
   return (
     <>
       <color attach="background" args={["#050505"]} />
-      <fog attach="fog" args={["#050505", 5, 25]} />
-      
-      <ambientLight intensity={0.2} />
-      <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} color="#6366f1" />
-      <pointLight position={[-10, -10, -10]} intensity={1} color="#ffffff" />
+      <fog attach="fog" args={["#050505", 5, 20]} />
 
-      <group ref={groupRef}>
-        {/* Abstract "House" representation */}
-        <group ref={houseRef}>
-          <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.5}>
-            {/* Main Body */}
-            <mesh position={[0, 0, 0]}>
-              <boxGeometry args={[2, 1.2, 1.5]} />
-              <MeshDistortMaterial 
-                color="#111111" 
-                speed={1} 
-                distort={0.1} 
-                roughness={0.1}
-                metalness={0.8}
-              />
-            </mesh>
-            {/* Roof */}
-            <mesh position={[0, 0.9, 0]} rotation={[0, Math.PI / 4, 0]}>
-              <coneGeometry args={[1.8, 1, 4]} />
-              <meshStandardMaterial color="#6366f1" metalness={0.5} roughness={0.2} />
-            </mesh>
-            {/* Windows (Glow) */}
-            <mesh position={[0.6, 0, 0.76]}>
-              <planeGeometry args={[0.4, 0.4]} />
-              <meshStandardMaterial color="#6366f1" emissive="#6366f1" emissiveIntensity={5} />
-            </mesh>
-            <mesh position={[-0.6, 0, 0.76]}>
-              <planeGeometry args={[0.4, 0.4]} />
-              <meshStandardMaterial color="#6366f1" emissive="#6366f1" emissiveIntensity={5} />
-            </mesh>
-          </Float>
-        </group>
+      <ambientLight intensity={0.08} />
+      <spotLight position={[5, 8, 5]} angle={0.2} penumbra={1} intensity={2} color="#6366f1" />
+      <pointLight position={[0, 0, 0]} intensity={1} color="#818cf8" distance={8} />
 
-        {/* Floating "AI Data" nodes */}
-        <group ref={dataNodesRef}>
-          {Array.from({ length: 40 }).map((_, i) => (
-            <mesh
-              key={i}
-              position={[
-                (Math.random() - 0.5) * 15,
-                (Math.random() - 0.5) * 15,
-                (Math.random() - 0.5) * 15,
-              ]}
-            >
-              <sphereGeometry args={[0.08, 16, 16]} />
-              <meshStandardMaterial 
-                color={i % 2 === 0 ? "#6366f1" : "#ffffff"} 
-                emissive={i % 2 === 0 ? "#6366f1" : "#ffffff"} 
-                emissiveIntensity={1} 
-              />
-            </mesh>
-          ))}
-        </group>
+      <Environment preset="night" />
 
-        {/* Voice Waveform */}
-        <group ref={waveformRef} position={[0, -3, 2]}>
-          {Array.from({ length: 30 }).map((_, i) => (
-            <mesh key={i} position={[(i - 15) * 0.15, 0, 0]}>
-              <boxGeometry args={[0.05, 1, 0.05]} />
-              <meshStandardMaterial color="#6366f1" emissive="#6366f1" emissiveIntensity={2} />
-            </mesh>
-          ))}
-        </group>
+      {/* Main glass orb */}
+      <group ref={mainOrbRef}>
+        <GlassOrb emissiveIntensity={act === 4 ? 3 + actProgress * 2 : 2} />
       </group>
 
-      {/* Grid Floor */}
-      <gridHelper args={[50, 50, "#111111", "#111111"]} position={[0, -2, 0]} />
+      {/* Sound rings — Act 2 */}
+      <SoundRings active={act === 2} progress={actProgress} />
+
+      {/* Satellite orbs — Acts 3 & 4 */}
+      <group ref={smallOrbsRef}>
+        {satellitePositions.map((pos, i) => (
+          <GlassOrb key={i} scale={0.35} emissiveIntensity={1.5} />
+        ))}
+      </group>
+
+      {/* Network connection lines — Act 3 */}
+      <NetworkLines
+        positions={[[0, 0, 0], ...satellitePositions]}
+        opacity={networkOpacity}
+      />
+
+      {/* Sparkles — always present, spread in Act 3 */}
+      <Sparkles
+        count={200}
+        scale={act >= 3 ? 16 : 10}
+        size={2.5}
+        speed={0.3}
+        color="#6366f1"
+        opacity={0.5}
+      />
+      <Sparkles
+        count={100}
+        scale={18}
+        size={1.5}
+        speed={0.15}
+        color="#a5b4fc"
+        opacity={0.2}
+      />
+
+      <PostProcessing />
     </>
   );
 }
 
+/* ═══════════════════════════════════════════
+   EXPERIENCE — ScrollControls wrapper
+   ═══════════════════════════════════════════ */
 export default function Experience() {
   return (
     <ScrollControls pages={4} damping={0.1}>
@@ -145,10 +271,13 @@ export default function Experience() {
   );
 }
 
+/* ═══════════════════════════════════════════
+   OVERLAY — HTML content over 3D
+   ═══════════════════════════════════════════ */
 function Overlay() {
   return (
     <div className="w-screen font-sans">
-      {/* Hero Section */}
+      {/* Act 1: Hero */}
       <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12 text-center">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -171,9 +300,18 @@ function Overlay() {
             then handles your guests <span className="text-white/80 font-normal">24/7</span> with your unique voice.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-10 py-4 rounded-full text-sm font-semibold tracking-wide transition-all transform hover:scale-105 shadow-[0_0_40px_rgba(99,102,241,0.25)]">
-              Start Free Trial
-            </button>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-10 py-4 rounded-full text-sm font-semibold tracking-wide transition-all transform hover:scale-105 shadow-[0_0_40px_rgba(99,102,241,0.25)] cursor-pointer">
+                  Start Free Trial
+                </button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <a href="/dashboard" className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-10 py-4 rounded-full text-sm font-semibold tracking-wide transition-all inline-block">
+                Go to Dashboard
+              </a>
+            </SignedIn>
             <button className="bg-white/[0.03] hover:bg-white/[0.06] text-white/70 hover:text-white border border-white/[0.08] px-10 py-4 rounded-full text-sm font-semibold tracking-wide transition-all">
               Watch Demo
             </button>
@@ -181,7 +319,7 @@ function Overlay() {
         </motion.div>
       </section>
 
-      {/* Feature 1: Voice */}
+      {/* Act 2: Voice */}
       <section className="h-screen flex items-center justify-start px-8 md:px-24">
         <motion.div
           initial={{ opacity: 0, x: -50 }}
@@ -208,7 +346,7 @@ function Overlay() {
         </motion.div>
       </section>
 
-      {/* Feature 2: 24/7 */}
+      {/* Act 3: Network */}
       <section className="h-screen flex items-center justify-end px-8 md:px-24">
         <motion.div
           initial={{ opacity: 0, x: 50 }}
@@ -237,43 +375,15 @@ function Overlay() {
         </motion.div>
       </section>
 
-      {/* How it Works */}
-      <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12">
-        <div className="text-[#818cf8] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase text-center">Getting Started</div>
-        <h2 className="text-3xl sm:text-4xl md:text-6xl font-display font-extrabold tracking-[-0.04em] mb-16 text-center leading-[1.05]">
-          Three Steps to{' '}
-          <span className="bg-gradient-to-r from-[#a5b4fc] to-[#6366f1] bg-clip-text text-transparent">Freedom</span>
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full">
-          {[
-            { step: "01", title: "Connect", desc: "Link your Airbnb or Vrbo account. Takes 30 seconds." },
-            { step: "02", title: "Train", desc: "Alfred reads your message history to learn your voice." },
-            { step: "03", title: "Relax", desc: "Alfred handles the rest. You step in only when needed." }
-          ].map((item, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.15 }}
-              className="p-8 rounded-2xl bg-white/[0.02] border border-white/[0.06] hover:border-white/[0.12] transition-all group"
-            >
-              <div className="text-6xl font-display font-extrabold text-white/[0.04] group-hover:text-[#6366f1]/10 transition-colors mb-6 leading-none">{item.step}</div>
-              <h3 className="text-xl font-display font-bold mb-3 tracking-tight">{item.title}</h3>
-              <p className="text-white/40 text-sm font-light leading-relaxed tracking-wide">{item.desc}</p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* CTA Section */}
+      {/* Act 4: CTA */}
       <section className="h-screen flex flex-col items-center justify-center px-8 md:px-12 text-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#6366f1]/[0.03] to-transparent" />
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           whileInView={{ opacity: 1, scale: 1 }}
           className="max-w-3xl relative z-10"
         >
-          <h2 className="text-5xl sm:text-6xl md:text-8xl font-display font-extrabold tracking-[-0.05em] mb-8 leading-[0.9]">
+          <div className="text-[#818cf8] text-[11px] font-semibold mb-5 tracking-[0.2em] uppercase">Getting Started</div>
+          <h2 className="text-5xl sm:text-6xl md:text-8xl font-display font-extrabold tracking-[-0.05em] mb-6 leading-[0.9]">
             Ready to{' '}
             <span className="bg-gradient-to-r from-[#a5b4fc] via-[#818cf8] to-[#6366f1] bg-clip-text text-transparent">
               automate?
@@ -283,9 +393,18 @@ function Overlay() {
             Join hosts across British Columbia who have reclaimed their time with Alfred.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-[#6366f1] text-white px-12 py-4 rounded-full text-sm font-semibold tracking-wide hover:bg-[#4f46e5] transition-all shadow-[0_0_60px_rgba(99,102,241,0.2)]">
-              Get Started Now
-            </button>
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="bg-[#6366f1] text-white px-12 py-4 rounded-full text-sm font-semibold tracking-wide hover:bg-[#4f46e5] transition-all shadow-[0_0_60px_rgba(99,102,241,0.3)] cursor-pointer">
+                  Get Started Now
+                </button>
+              </SignInButton>
+            </SignedOut>
+            <SignedIn>
+              <a href="/dashboard" className="bg-[#6366f1] text-white px-12 py-4 rounded-full text-sm font-semibold tracking-wide hover:bg-[#4f46e5] transition-all inline-block">
+                Go to Dashboard
+              </a>
+            </SignedIn>
             <button className="bg-white text-black px-12 py-4 rounded-full text-sm font-semibold tracking-wide hover:bg-white/90 transition-all">
               View Pricing
             </button>
