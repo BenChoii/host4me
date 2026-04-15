@@ -1,36 +1,12 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { auth } from "./auth";
 
 const http = httpRouter();
 
-// Clerk webhook — create tenant on user signup
-http.route({
-  path: "/webhooks/clerk",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const body = await request.json();
-
-    if (body.type === "user.created") {
-      const user = body.data;
-      // Check if tenant already exists
-      const existing = await ctx.runQuery(
-        internal.tenants.tenantByClerkId,
-        { clerkUserId: user.id }
-      );
-
-      if (!existing) {
-        await ctx.runMutation(internal.tenants.createFromWebhook, {
-          clerkUserId: user.id,
-          name: `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim(),
-          email: user.email_addresses?.[0]?.email_address ?? "",
-        });
-      }
-    }
-
-    return new Response("OK", { status: 200 });
-  }),
-});
+// Convex Auth routes (handles sign-in, sign-up, sign-out)
+auth.addHttpRoutes(http);
 
 // Gmail OAuth callback
 http.route({
@@ -39,13 +15,12 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state"); // tenant clerk ID
+    const state = url.searchParams.get("state"); // tenant ID
 
     if (!code || !state) {
       return new Response("Missing code or state", { status: 400 });
     }
 
-    // Exchange code for tokens via Worker VPS
     const workerUrl = process.env.WORKER_VPS_URL;
     const workerSecret = process.env.WORKER_API_SECRET;
 
@@ -62,15 +37,14 @@ http.route({
 
     if (tokens.access_token) {
       await ctx.runMutation(internal.onboarding.connectGmailInternal, {
-        clerkUserId: state,
+        tenantId: state,
         email: tokens.email ?? "",
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token ?? "",
       });
     }
 
-    // Redirect back to dashboard onboarding
-    const appUrl = process.env.APP_URL ?? "http://localhost:5173";
+    const appUrl = process.env.SITE_URL ?? "http://localhost:3000";
     return Response.redirect(`${appUrl}/dashboard/onboarding?gmail=connected`);
   }),
 });
@@ -87,25 +61,20 @@ http.route({
 
     const body = await request.json();
 
-    // Handle different event types from Worker VPS
     switch (body.type) {
       case "telegram_message": {
-        // PM sent a message via Telegram → store and route to Alfred
         await ctx.runMutation(internal.chat.addMessage, {
           tenantId: body.tenantId,
           role: "user",
           content: body.message,
         });
-        // Trigger Alfred response
         await ctx.scheduler.runAfter(0, internal.actions.worker.chatWithAlfred, {
           tenantId: body.tenantId,
           message: body.message,
         });
         break;
       }
-
       case "telegram_auth_code": {
-        // PM sent a 2FA code via Telegram
         await ctx.scheduler.runAfter(0, internal.actions.worker.submit2FA, {
           tenantId: body.tenantId,
           platform: body.platform,
@@ -113,9 +82,7 @@ http.route({
         });
         break;
       }
-
       case "browser_session_update": {
-        // Browser agent saved a new session state
         await ctx.runMutation(internal.sessions.upsertBrowserSession, {
           tenantId: body.tenantId,
           platform: body.platform,
@@ -123,7 +90,6 @@ http.route({
         });
         break;
       }
-
       default:
         console.log("Unknown worker event:", body.type);
     }
