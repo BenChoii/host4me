@@ -116,14 +116,14 @@ export const connectAirbnb = action({
       throw new Error("Worker VPS not configured. Set WORKER_VPS_URL and WORKER_API_SECRET env vars.");
     }
 
-    const response = await fetch(`${workerUrl}/browser/login`, {
+    const response = await fetch(`${workerUrl}/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${workerSecret}`,
       },
       body: JSON.stringify({
-        tenant_id: tenant._id,
+        pm_id: String(tenant._id),
         platform: "airbnb",
         email: args.email,
         password: args.password,
