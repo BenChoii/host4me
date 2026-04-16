@@ -46,10 +46,14 @@ export const createLiveSession = action({
       metadata: { platform: args.platform, sessionId: result.session_id },
     });
 
-    // Return session info to frontend (session_id + noVNC URL for iframe)
+    // Construct noVNC URL from ws_port returned by the live browser service
+    // LIVE_BROWSER_URL is like http://187.124.182.236:8101 — extract the host
+    const vpsHost = new URL(liveBrowserUrl).hostname;
+    const vncUrl = `http://${vpsHost}:${result.ws_port}/vnc.html?autoconnect=true&resize=scale`;
+
     return {
       sessionId: result.session_id,
-      vncUrl: result.vnc_url,
+      vncUrl,
       platform: args.platform,
     };
   },
