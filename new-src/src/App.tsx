@@ -21,6 +21,12 @@ function Navbar() {
     { name: "Pricing", icon: Home },
   ];
 
+  const scrollToSection = (name: string) => {
+    const id = name.toLowerCase().replace(/\s+/g, '-');
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
     <nav 
       className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
@@ -43,12 +49,16 @@ function Navbar() {
             <a 
               key={link.name} 
               href={`#${link.name.toLowerCase().replace(/\s+/g, '-')}`}
+              onClick={(e) => { e.preventDefault(); scrollToSection(link.name); }}
               className="text-sm font-medium text-gray-400 hover:text-white transition-colors"
             >
               {link.name}
             </a>
           ))}
-          <button className="bg-white text-black px-6 py-2 rounded-full text-sm font-bold hover:bg-[#f27d26] hover:text-white transition-all">
+          <button 
+            onClick={() => { const el = document.getElementById('cta'); if (el) el.scrollIntoView({ behavior: 'smooth' }); }}
+            className="bg-white text-black px-6 py-2 rounded-full text-sm font-bold hover:bg-[#f27d26] hover:text-white transition-all"
+          >
             Get Started
           </button>
         </div>
@@ -77,13 +87,16 @@ function Navbar() {
                   key={link.name} 
                   href={`#${link.name.toLowerCase().replace(/\s+/g, '-')}`}
                   className="flex items-center gap-3 text-lg font-medium text-gray-400"
-                  onClick={() => setIsMobileMenuOpen(false)}
+                  onClick={() => { setIsMobileMenuOpen(false); scrollToSection(link.name); }}
                 >
                   <link.icon className="w-5 h-5 text-[#f27d26]" />
                   {link.name}
                 </a>
               ))}
-              <button className="bg-[#f27d26] text-white px-6 py-4 rounded-xl text-lg font-bold">
+              <button 
+                onClick={() => { setIsMobileMenuOpen(false); const el = document.getElementById('cta'); if (el) el.scrollIntoView({ behavior: 'smooth' }); }}
+                className="bg-[#f27d26] text-white px-6 py-4 rounded-xl text-lg font-bold"
+              >
                 Get Started Free
               </button>
             </div>

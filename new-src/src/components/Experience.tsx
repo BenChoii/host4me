@@ -145,6 +145,11 @@ export default function Experience() {
   );
 }
 
+function scrollToCta() {
+  const el = document.getElementById('cta');
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+
 function Overlay() {
   return (
     <div className="w-screen font-sans">
@@ -166,10 +171,16 @@ function Overlay() {
             The first AI Property Manager that learns how you talk, then handles your guests 24/7 with your unique voice.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-[#f27d26] hover:bg-[#d96a1d] text-white px-10 py-5 rounded-full text-lg font-bold transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(242,125,38,0.3)]">
+            <button 
+              onClick={scrollToCta}
+              className="bg-[#f27d26] hover:bg-[#d96a1d] text-white px-10 py-5 rounded-full text-lg font-bold transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(242,125,38,0.3)]"
+            >
               Start Free Trial
             </button>
-            <button className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-10 py-5 rounded-full text-lg font-bold transition-all">
+            <button 
+              onClick={() => { const el = document.getElementById('how-it-works'); if (el) el.scrollIntoView({ behavior: 'smooth' }); }}
+              className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-10 py-5 rounded-full text-lg font-bold transition-all"
+            >
               Watch Demo
             </button>
           </div>
@@ -177,7 +188,7 @@ function Overlay() {
       </section>
 
       {/* Feature 1: Voice */}
-      <section className="h-screen flex items-center justify-start px-12 md:px-24">
+      <section id="features" className="h-screen flex items-center justify-start px-12 md:px-24">
         <motion.div 
           initial={{ opacity: 0, x: -50 }}
           whileInView={{ opacity: 1, x: 0 }}
@@ -204,7 +215,7 @@ function Overlay() {
       </section>
 
       {/* Feature 2: 24/7 */}
-      <section className="h-screen flex items-center justify-end px-12 md:px-24">
+      <section id="security" className="h-screen flex items-center justify-end px-12 md:px-24">
         <motion.div 
           initial={{ opacity: 0, x: 50 }}
           whileInView={{ opacity: 1, x: 0 }}
@@ -233,7 +244,7 @@ function Overlay() {
       </section>
 
       {/* How it Works */}
-      <section className="h-screen flex flex-col items-center justify-center px-6">
+      <section id="how-it-works" className="h-screen flex flex-col items-center justify-center px-6">
         <h2 className="text-4xl md:text-6xl font-display font-bold mb-16 text-center">
           Three Steps to <span className="text-[#f27d26]">Freedom</span>
         </h2>
@@ -259,7 +270,7 @@ function Overlay() {
       </section>
 
       {/* CTA Section */}
-      <section className="h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
+      <section id="cta" className="h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
         <div className="absolute inset-0 bg-[#f27d26]/5 radial-gradient" />
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
@@ -274,14 +285,20 @@ function Overlay() {
             Join hosts across British Columbia who have reclaimed their time with Alfred.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="bg-[#f27d26] text-white px-12 py-5 rounded-full text-xl font-bold hover:bg-[#d96a1d] transition-all shadow-[0_0_50px_rgba(242,125,38,0.2)]">
+            <a 
+              href="mailto:ronindtr@gmail.com?subject=Host4Me%20Free%20Trial&body=Hi%2C%20I'm%20interested%20in%20trying%20Alfred%20for%20my%20rental%20property."
+              className="bg-[#f27d26] text-white px-12 py-5 rounded-full text-xl font-bold hover:bg-[#d96a1d] transition-all shadow-[0_0_50px_rgba(242,125,38,0.2)] inline-block"
+            >
               Get Started Now
-            </button>
-            <button className="bg-white text-black px-12 py-5 rounded-full text-xl font-bold hover:bg-gray-200 transition-all">
+            </a>
+            <button 
+              onClick={() => { const el = document.getElementById('how-it-works'); if (el) el.scrollIntoView({ behavior: 'smooth' }); }}
+              className="bg-white text-black px-12 py-5 rounded-full text-xl font-bold hover:bg-gray-200 transition-all"
+            >
               View Pricing
             </button>
           </div>
-          <div className="mt-16 pt-16 border-t border-white/10 flex flex-wrap justify-center gap-8 opacity-50 grayscale">
+          <div id="pricing" className="mt-16 pt-16 border-t border-white/10 flex flex-wrap justify-center gap-8 opacity-50 grayscale">
             {/* Placeholder for partner logos */}
             <div className="text-xl font-bold tracking-tighter">AIRBNB</div>
             <div className="text-xl font-bold tracking-tighter">VRBO</div>
