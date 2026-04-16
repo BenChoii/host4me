@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAction, useMutation } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
 import { motion } from "motion/react";
 import {
   Bot,
   MessageSquare,
   Mail,
-  Building2,
   Shield,
   Zap,
   ArrowRight,
@@ -22,10 +23,26 @@ export default function Onboarding() {
   const [airbnbPassword, setAirbnbPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [step, setStep] = useState<"activate" | "connect" | "ready">(
-    "activate"
-  );
+  const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<"activate" | "connect" | "ready">("activate");
   const navigate = useNavigate();
+
+  const connectAirbnb = useAction(api.onboarding.connectAirbnb);
+  const completeOnboarding = useMutation(api.tenants.completeOnboarding);
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      await connectAirbnb({ email: airbnbEmail, password: airbnbPassword });
+      await completeOnboarding();
+      setStep("ready");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Connection failed");
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", paddingTop: 20 }}>
@@ -36,31 +53,24 @@ export default function Onboarding() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         >
-          {/* Alfred hero card */}
           <div
             className="dash-card dash-card-glow"
             style={{
               textAlign: "center",
               padding: "40px 32px",
-              background:
-                "linear-gradient(135deg, var(--dash-surface), rgba(198, 125, 59, 0.06))",
+              background: "linear-gradient(135deg, var(--dash-surface), rgba(198, 125, 59, 0.06))",
               marginBottom: 24,
             }}
           >
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{
-                delay: 0.2,
-                duration: 0.5,
-                ease: [0.34, 1.56, 0.64, 1],
-              }}
+              transition={{ delay: 0.2, duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
               style={{
                 width: 80,
                 height: 80,
                 borderRadius: 20,
-                background:
-                  "linear-gradient(135deg, var(--dash-accent), #e8a665)",
+                background: "linear-gradient(135deg, var(--dash-accent), #e8a665)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -71,101 +81,39 @@ export default function Onboarding() {
               <Bot size={40} color="white" />
             </motion.div>
 
-            <h2
-              style={{
-                fontSize: 26,
-                fontWeight: 700,
-                color: "var(--dash-text)",
-                marginBottom: 8,
-                fontFamily: "inherit",
-                letterSpacing: "-0.02em",
-              }}
-            >
+            <h2 style={{ fontSize: 26, fontWeight: 700, color: "var(--dash-text)", marginBottom: 8, letterSpacing: "-0.02em" }}>
               Meet Alfred
             </h2>
-            <p
-              style={{
-                color: "var(--dash-text-secondary)",
-                fontSize: 15,
-                lineHeight: 1.7,
-                marginBottom: 0,
-                maxWidth: 420,
-                margin: "0 auto",
-              }}
-            >
-              Your AI property manager. Alfred monitors your Airbnb, replies to
-              guests in your voice, and sends you a daily briefing every
-              morning.
+            <p style={{ color: "var(--dash-text-secondary)", fontSize: 15, lineHeight: 1.7, maxWidth: 420, margin: "0 auto" }}>
+              Your AI property manager. Alfred monitors your Airbnb, replies to guests in your voice, and sends you a daily briefing every morning.
             </p>
           </div>
 
-          {/* What Alfred does */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 28 }}>
             {[
-              {
-                icon: MessageSquare,
-                label: "Replies to guests",
-                desc: "In your tone and style",
-                color: "var(--dash-accent)",
-              },
-              {
-                icon: Shield,
-                label: "Shadow mode",
-                desc: "You approve every draft first",
-                color: "var(--dash-success)",
-              },
-              {
-                icon: Mail,
-                label: "Learns from Gmail",
-                desc: "WiFi, codes, check-in details",
-                color: "var(--dash-info)",
-              },
-              {
-                icon: Zap,
-                label: "Daily briefings",
-                desc: "Every morning at 8am",
-                color: "var(--dash-warning)",
-              },
+              { icon: MessageSquare, label: "Replies to guests", desc: "In your tone and style", color: "var(--dash-accent)" },
+              { icon: Shield, label: "Shadow mode", desc: "You approve every draft first", color: "var(--dash-success)" },
+              { icon: Mail, label: "Learns from Gmail", desc: "WiFi, codes, check-in details", color: "var(--dash-info)" },
+              { icon: Zap, label: "Daily briefings", desc: "Every morning at 8am", color: "var(--dash-warning)" },
             ].map(({ icon: Icon, label, desc, color }, i) => (
               <motion.div
                 key={label}
                 className="dash-card"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  delay: 0.3 + i * 0.08,
-                  duration: 0.4,
-                  ease: [0.16, 1, 0.3, 1],
-                }}
+                transition={{ delay: 0.3 + i * 0.08, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
                 style={{ padding: 16 }}
               >
                 <Icon size={18} style={{ color, marginBottom: 8 }} />
-                <div
-                  style={{
-                    fontSize: 13.5,
-                    fontWeight: 600,
-                    color: "var(--dash-text)",
-                    marginBottom: 2,
-                  }}
-                >
-                  {label}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>
-                  {desc}
-                </div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--dash-text)", marginBottom: 2 }}>{label}</div>
+                <div style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>{desc}</div>
               </motion.div>
             ))}
           </div>
 
-          {/* CTA */}
           <motion.button
             className="dash-btn dash-btn-primary"
-            style={{
-              width: "100%",
-              justifyContent: "center",
-              padding: "14px 24px",
-              fontSize: 15,
-            }}
+            style={{ width: "100%", justifyContent: "center", padding: "14px 24px", fontSize: 15 }}
             whileHover={{ scale: 1.02, boxShadow: "0 0 24px rgba(198, 125, 59, 0.3)" }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setStep("connect")}
@@ -173,14 +121,7 @@ export default function Onboarding() {
             Activate Alfred <ArrowRight size={16} />
           </motion.button>
 
-          <p
-            style={{
-              textAlign: "center",
-              fontSize: 12,
-              color: "var(--dash-text-muted)",
-              marginTop: 12,
-            }}
-          >
+          <p style={{ textAlign: "center", fontSize: 12, color: "var(--dash-text-muted)", marginTop: 12 }}>
             Takes about 2 minutes. You can skip any step and do it later.
           </p>
         </motion.div>
@@ -193,41 +134,14 @@ export default function Onboarding() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <h2
-            style={{
-              fontSize: 22,
-              fontWeight: 700,
-              color: "var(--dash-text)",
-              marginBottom: 6,
-              fontFamily: "inherit",
-              letterSpacing: "-0.02em",
-            }}
-          >
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: "var(--dash-text)", marginBottom: 6, letterSpacing: "-0.02em" }}>
             Connect Airbnb
           </h2>
-          <p
-            style={{
-              color: "var(--dash-text-muted)",
-              fontSize: 13.5,
-              marginBottom: 24,
-              lineHeight: 1.6,
-            }}
-          >
-            Alfred needs your Airbnb access to monitor guest messages. Your
-            credentials are encrypted and only used to maintain a browser
-            session.
+          <p style={{ color: "var(--dash-text-muted)", fontSize: 13.5, marginBottom: 24, lineHeight: 1.6 }}>
+            Alfred needs your Airbnb access to monitor guest messages. Your credentials are encrypted and only used to maintain a browser session.
           </p>
 
-          {/* Trust bar */}
-          <div
-            style={{
-              display: "flex",
-              gap: 16,
-              marginBottom: 24,
-              fontSize: 12,
-              color: "var(--dash-text-muted)",
-            }}
-          >
+          <div style={{ display: "flex", gap: 16, marginBottom: 24, fontSize: 12, color: "var(--dash-text-muted)" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
               <Lock size={11} color="var(--dash-success)" /> AES-256 encrypted
             </span>
@@ -235,6 +149,20 @@ export default function Onboarding() {
               <Shield size={11} color="var(--dash-success)" /> Shadow mode on
             </span>
           </div>
+
+          {error && (
+            <div style={{
+              background: "rgba(239, 68, 68, 0.1)",
+              border: "1px solid rgba(239, 68, 68, 0.3)",
+              borderRadius: 8,
+              padding: "10px 14px",
+              marginBottom: 16,
+              fontSize: 13,
+              color: "#ef4444",
+            }}>
+              {error}
+            </div>
+          )}
 
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 24 }}>
             <div>
@@ -257,18 +185,12 @@ export default function Onboarding() {
                   style={{ paddingRight: 44 }}
                   value={airbnbPassword}
                   onChange={(e) => setAirbnbPassword(e.target.value)}
-                  placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                  placeholder="••••••••"
                 />
                 <button
                   type="button"
                   className="dash-btn dash-btn-ghost"
-                  style={{
-                    position: "absolute",
-                    right: 4,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    padding: 6,
-                  }}
+                  style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", padding: 6 }}
                   onClick={() => setShowPassword(!showPassword)}
                 >
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -278,45 +200,17 @@ export default function Onboarding() {
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>
-            <button
-              className="dash-btn dash-btn-secondary"
-              onClick={() => setStep("activate")}
-            >
+            <button className="dash-btn dash-btn-secondary" onClick={() => setStep("activate")}>
               Back
             </button>
             <button
               className="dash-btn dash-btn-primary"
               disabled={!airbnbEmail || !airbnbPassword || connecting}
-              style={{
-                opacity:
-                  !airbnbEmail || !airbnbPassword || connecting ? 0.5 : 1,
-                flex: 1,
-                justifyContent: "center",
-              }}
-              onClick={async () => {
-                setConnecting(true);
-                try {
-                  await new Promise((r) => setTimeout(r, 2000));
-                  setStep("ready");
-                } catch (err) {
-                  alert(
-                    `Connection error: ${
-                      err instanceof Error ? err.message : "Unknown error"
-                    }`
-                  );
-                } finally {
-                  setConnecting(false);
-                }
-              }}
+              style={{ opacity: !airbnbEmail || !airbnbPassword || connecting ? 0.5 : 1, flex: 1, justifyContent: "center" }}
+              onClick={handleConnect}
             >
               {connecting ? (
-                <>
-                  <Loader2
-                    size={14}
-                    style={{ animation: "spin 1s linear infinite" }}
-                  />
-                  Connecting...
-                </>
+                <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Connecting...</>
               ) : (
                 <>Connect</>
               )}
@@ -324,7 +218,10 @@ export default function Onboarding() {
             <button
               className="dash-btn dash-btn-ghost"
               style={{ fontSize: 12 }}
-              onClick={() => setStep("ready")}
+              onClick={async () => {
+                await completeOnboarding();
+                setStep("ready");
+              }}
             >
               Skip
             </button>
@@ -343,11 +240,7 @@ export default function Onboarding() {
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{
-              delay: 0.2,
-              duration: 0.5,
-              ease: [0.34, 1.56, 0.64, 1],
-            }}
+            transition={{ delay: 0.2, duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
             style={{
               width: 72,
               height: 72,
@@ -362,41 +255,14 @@ export default function Onboarding() {
             <Check size={32} color="var(--dash-success)" />
           </motion.div>
 
-          <h2
-            style={{
-              fontSize: 26,
-              fontWeight: 700,
-              color: "var(--dash-text)",
-              marginBottom: 8,
-              fontFamily: "inherit",
-              letterSpacing: "-0.02em",
-            }}
-          >
+          <h2 style={{ fontSize: 26, fontWeight: 700, color: "var(--dash-text)", marginBottom: 8, letterSpacing: "-0.02em" }}>
             Alfred is Ready
           </h2>
-          <p
-            style={{
-              color: "var(--dash-text-secondary)",
-              fontSize: 14.5,
-              lineHeight: 1.7,
-              marginBottom: 8,
-            }}
-          >
+          <p style={{ color: "var(--dash-text-secondary)", fontSize: 14.5, lineHeight: 1.7, marginBottom: 8 }}>
             Open Telegram to start chatting with Alfred.
           </p>
-          <p
-            style={{
-              color: "var(--dash-text-muted)",
-              fontSize: 13,
-              marginBottom: 32,
-              lineHeight: 1.6,
-              maxWidth: 400,
-              margin: "0 auto 32px",
-            }}
-          >
-            Alfred will ask you about your properties, learn your communication
-            style, and start monitoring your inbox. Everything happens in the
-            chat \u2014 no forms to fill out.
+          <p style={{ color: "var(--dash-text-muted)", fontSize: 13, lineHeight: 1.6, maxWidth: 400, margin: "0 auto 32px" }}>
+            Alfred will ask you about your properties, learn your communication style, and start monitoring your inbox. Everything happens in the chat — no forms to fill out.
           </p>
 
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
@@ -405,11 +271,7 @@ export default function Onboarding() {
               target="_blank"
               rel="noopener noreferrer"
               className="dash-btn dash-btn-primary"
-              style={{
-                textDecoration: "none",
-                padding: "14px 28px",
-                fontSize: 15,
-              }}
+              style={{ textDecoration: "none", padding: "14px 28px", fontSize: 15 }}
               whileHover={{ scale: 1.03, boxShadow: "0 0 24px rgba(198, 125, 59, 0.3)" }}
               whileTap={{ scale: 0.97 }}
             >

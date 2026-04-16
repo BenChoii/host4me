@@ -1,6 +1,7 @@
 import { mutation, action, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Save platform credentials during onboarding
 export const saveCredentials = mutation({
@@ -10,12 +11,12 @@ export const saveCredentials = mutation({
     encryptedPassword: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
 
     const tenant = await ctx.db
       .query("tenants")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
     if (!tenant) throw new Error("Tenant not found");
 
@@ -59,12 +60,12 @@ export const addProperty = mutation({
     houseRules: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
 
     const tenant = await ctx.db
       .query("tenants")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
     if (!tenant) throw new Error("Tenant not found");
 
@@ -93,11 +94,27 @@ export const connectAirbnb = action({
     password: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    // Look up tenant
+    const tenant = await ctx.runQuery(internal.tenants.tenantByUserId, { userId });
+    if (!tenant) throw new Error("Tenant not found");
+
+    // Save credentials first
+    await ctx.runMutation(internal.onboarding.saveCredentialsInternal, {
+      tenantId: tenant._id,
+      platform: "airbnb",
+      email: args.email,
+      password: args.password,
+    });
 
     const workerUrl = process.env.WORKER_VPS_URL;
     const workerSecret = process.env.WORKER_API_SECRET;
+
+    if (!workerUrl || !workerSecret) {
+      throw new Error("Worker VPS not configured. Set WORKER_VPS_URL and WORKER_API_SECRET env vars.");
+    }
 
     const response = await fetch(`${workerUrl}/browser/login`, {
       method: "POST",
@@ -106,25 +123,65 @@ export const connectAirbnb = action({
         Authorization: `Bearer ${workerSecret}`,
       },
       body: JSON.stringify({
-        tenant_id: identity.subject,
+        tenant_id: tenant._id,
         platform: "airbnb",
         email: args.email,
         password: args.password,
       }),
     });
 
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Worker error (${response.status}): ${text}`);
+    }
+
     const result = await response.json();
 
     // Log the activity
     await ctx.runMutation(internal.agents.logActivity, {
-      tenantId: result.tenantId, // Worker should return this
+      tenantId: tenant._id,
       agentType: "alfred",
       actionType: "platform_login",
-      summary: `Airbnb login attempt: ${result.status}`,
+      summary: `Airbnb login attempt: ${result.status || "initiated"}`,
       metadata: { platform: "airbnb", status: result.status },
     });
 
     return result;
+  },
+});
+
+// Internal mutation to save credentials (called from connectAirbnb action)
+export const saveCredentialsInternal = internalMutation({
+  args: {
+    tenantId: v.id("tenants"),
+    platform: v.string(),
+    email: v.string(),
+    password: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("platformCredentials")
+      .withIndex("by_tenant_platform", (q) =>
+        q.eq("tenantId", args.tenantId).eq("platform", args.platform)
+      )
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        encryptedEmail: args.email,
+        encryptedPassword: args.password,
+        status: "pending",
+      });
+    } else {
+      await ctx.db.insert("platformCredentials", {
+        tenantId: args.tenantId,
+        platform: args.platform,
+        encryptedEmail: args.email,
+        encryptedPassword: args.password,
+        status: "pending",
+        lastVerifiedAt: null,
+      });
+    }
   },
 });
 
@@ -136,16 +193,15 @@ export const connectGmail = mutation({
     refreshToken: v.string(),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
 
     const tenant = await ctx.db
       .query("tenants")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
     if (!tenant) throw new Error("Tenant not found");
 
-    // Upsert Gmail connection
     const existing = await ctx.db
       .query("gmailConnections")
       .withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id))
@@ -171,10 +227,10 @@ export const connectGmail = mutation({
   },
 });
 
-// Internal: Connect Gmail from OAuth callback (no auth context, uses clerkUserId)
+// Internal: Connect Gmail from OAuth callback
 export const connectGmailInternal = internalMutation({
   args: {
-    clerkUserId: v.string(),
+    userId: v.id("users"),
     email: v.string(),
     accessToken: v.string(),
     refreshToken: v.string(),
@@ -182,9 +238,9 @@ export const connectGmailInternal = internalMutation({
   handler: async (ctx, args) => {
     const tenant = await ctx.db
       .query("tenants")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", args.clerkUserId))
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
-    if (!tenant) throw new Error("Tenant not found for Clerk user");
+    if (!tenant) throw new Error("Tenant not found");
 
     const existing = await ctx.db
       .query("gmailConnections")
