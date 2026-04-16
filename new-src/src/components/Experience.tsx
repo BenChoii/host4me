@@ -145,11 +145,6 @@ export default function Experience() {
   );
 }
 
-function scrollToCta() {
-  const el = document.getElementById('cta');
-  if (el) el.scrollIntoView({ behavior: 'smooth' });
-}
-
 function Overlay() {
   return (
     <div className="w-screen font-sans">
@@ -171,14 +166,17 @@ function Overlay() {
             The first AI Property Manager that learns how you talk, then handles your guests 24/7 with your unique voice.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button 
-              onClick={scrollToCta}
+            <button
+              onClick={() => window.location.href = "/sign-up"}
               className="bg-[#f27d26] hover:bg-[#d96a1d] text-white px-10 py-5 rounded-full text-lg font-bold transition-all transform hover:scale-105 shadow-[0_0_30px_rgba(242,125,38,0.3)]"
             >
               Start Free Trial
             </button>
-            <button 
-              onClick={() => { const el = document.getElementById('how-it-works'); if (el) el.scrollIntoView({ behavior: 'smooth' }); }}
+            <button
+              onClick={() => {
+                const el = document.getElementById('how-it-works');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
               className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-10 py-5 rounded-full text-lg font-bold transition-all"
             >
               Watch Demo
@@ -270,7 +268,7 @@ function Overlay() {
       </section>
 
       {/* CTA Section */}
-      <section id="cta" className="h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
+      <section id="pricing" className="h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
         <div className="absolute inset-0 bg-[#f27d26]/5 radial-gradient" />
         <motion.div 
           initial={{ opacity: 0, scale: 0.9 }}
@@ -285,20 +283,23 @@ function Overlay() {
             Join hosts across British Columbia who have reclaimed their time with Alfred.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a 
-              href="mailto:ronindtr@gmail.com?subject=Host4Me%20Free%20Trial&body=Hi%2C%20I'm%20interested%20in%20trying%20Alfred%20for%20my%20rental%20property."
-              className="bg-[#f27d26] text-white px-12 py-5 rounded-full text-xl font-bold hover:bg-[#d96a1d] transition-all shadow-[0_0_50px_rgba(242,125,38,0.2)] inline-block"
+            <button
+              onClick={() => window.location.href = "/sign-up"}
+              className="bg-[#f27d26] text-white px-12 py-5 rounded-full text-xl font-bold hover:bg-[#d96a1d] transition-all shadow-[0_0_50px_rgba(242,125,38,0.2)]"
             >
               Get Started Now
-            </a>
-            <button 
-              onClick={() => { const el = document.getElementById('how-it-works'); if (el) el.scrollIntoView({ behavior: 'smooth' }); }}
+            </button>
+            <button
+              onClick={() => {
+                const el = document.getElementById('pricing');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
               className="bg-white text-black px-12 py-5 rounded-full text-xl font-bold hover:bg-gray-200 transition-all"
             >
               View Pricing
             </button>
           </div>
-          <div id="pricing" className="mt-16 pt-16 border-t border-white/10 flex flex-wrap justify-center gap-8 opacity-50 grayscale">
+          <div className="mt-16 pt-16 border-t border-white/10 flex flex-wrap justify-center gap-8 opacity-50 grayscale">
             {/* Placeholder for partner logos */}
             <div className="text-xl font-bold tracking-tighter">AIRBNB</div>
             <div className="text-xl font-bold tracking-tighter">VRBO</div>
@@ -309,7 +310,7 @@ function Overlay() {
       </section>
       
       <footer className="py-12 px-6 border-t border-white/10 text-center text-gray-500 text-sm">
-        <p>&copy; 2026 Host4Me.ca &mdash; Built for Hosts in British Columbia</p>
+        <p>\u00a9 2026 Host4Me.ca \u2014 Built for Hosts in British Columbia</p>
       </footer>
     </div>
   );
