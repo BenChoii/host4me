@@ -1,15 +1,24 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { useConvexAuth } from "convex/react";
 
 export default function SignUp() {
   const navigate = useNavigate();
   const { signIn } = useAuthActions();
+  const { isAuthenticated } = useConvexAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Redirect to onboarding once auth state confirms sign-up
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/dashboard/onboarding", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,12 +46,11 @@ export default function SignUp() {
         password,
         flow: "signUp",
       });
-      navigate("/dashboard/onboarding");
+      // Navigation is handled by the useEffect above once isAuthenticated becomes true
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to sign up. Please try again."
       );
-    } finally {
       setIsLoading(false);
     }
   };
@@ -86,7 +94,7 @@ export default function SignUp() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2 bg-[#12121a] border border-[#2a2a35] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#f27d26]"
-                placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                placeholder="••••••••"
                 disabled={isLoading}
               />
             </div>
@@ -100,7 +108,7 @@ export default function SignUp() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-4 py-2 bg-[#12121a] border border-[#2a2a35] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#f27d26]"
-                placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                placeholder="••••••••"
                 disabled={isLoading}
               />
             </div>
