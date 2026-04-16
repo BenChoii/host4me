@@ -11,36 +11,61 @@ import {
   Zap,
   ArrowRight,
   ExternalLink,
-  Lock,
-  Eye,
-  EyeOff,
+  Monitor,
   Loader2,
   Check,
+  AlertCircle,
+  Globe,
 } from "lucide-react";
 
+type Platform = "airbnb" | "vrbo" | "booking";
+
+const PLATFORMS: { id: Platform; label: string; color: string }[] = [
+  { id: "airbnb", label: "Airbnb", color: "#FF5A5F" },
+  { id: "vrbo", label: "VRBO", color: "#3B5998" },
+  { id: "booking", label: "Booking.com", color: "#003580" },
+];
+
 export default function Onboarding() {
-  const [airbnbEmail, setAirbnbEmail] = useState("");
-  const [airbnbPassword, setAirbnbPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<"activate" | "connect" | "ready">("activate");
+  const [platform, setPlatform] = useState<Platform>("airbnb");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [vncUrl, setVncUrl] = useState<string | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const connectAirbnb = useAction(api.onboarding.connectAirbnb);
+  const createLiveSession = useAction(api.onboarding.createLiveSession);
+  const finishLiveSession = useAction(api.onboarding.finishLiveSession);
   const completeOnboarding = useMutation(api.tenants.completeOnboarding);
 
-  const handleConnect = async () => {
-    setConnecting(true);
+  const handleLaunchBrowser = async () => {
+    setLaunching(true);
     setError(null);
     try {
-      await connectAirbnb({ email: airbnbEmail, password: airbnbPassword });
+      const result = await createLiveSession({ platform });
+      setSessionId(result.sessionId);
+      setVncUrl(result.vncUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to launch browser");
+    } finally {
+      setLaunching(false);
+    }
+  };
+
+  const handleFinishSession = async () => {
+    if (!sessionId) return;
+    setFinishing(true);
+    setError(null);
+    try {
+      await finishLiveSession({ sessionId, platform });
       await completeOnboarding();
       setStep("ready");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Connection failed");
+      setError(err instanceof Error ? err.message : "Failed to capture session");
     } finally {
-      setConnecting(false);
+      setFinishing(false);
     }
   };
 
@@ -127,7 +152,7 @@ export default function Onboarding() {
         </motion.div>
       )}
 
-      {/* ─── Step 2: Connect Airbnb ─── */}
+      {/* ─── Step 2: Connect Platform via Live Browser ─── */}
       {step === "connect" && (
         <motion.div
           initial={{ opacity: 0, x: 20 }}
@@ -135,21 +160,48 @@ export default function Onboarding() {
           transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
           <h2 style={{ fontSize: 22, fontWeight: 700, color: "var(--dash-text)", marginBottom: 6, letterSpacing: "-0.02em" }}>
-            Connect Airbnb
+            Connect Your Platform
           </h2>
-          <p style={{ color: "var(--dash-text-muted)", fontSize: 13.5, marginBottom: 24, lineHeight: 1.6 }}>
-            Alfred needs your Airbnb access to monitor guest messages. Your credentials are encrypted and only used to maintain a browser session.
+          <p style={{ color: "var(--dash-text-muted)", fontSize: 13.5, marginBottom: 20, lineHeight: 1.6 }}>
+            Log in through a secure browser window below. Your credentials never touch our servers — we only save the session cookies so Alfred can monitor your inbox.
           </p>
 
-          <div style={{ display: "flex", gap: 16, marginBottom: 24, fontSize: 12, color: "var(--dash-text-muted)" }}>
+          {/* Trust bar */}
+          <div style={{ display: "flex", gap: 16, marginBottom: 20, fontSize: 12, color: "var(--dash-text-muted)" }}>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <Lock size={11} color="var(--dash-success)" /> AES-256 encrypted
+              <Shield size={11} color="var(--dash-success)" /> No passwords stored
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <Shield size={11} color="var(--dash-success)" /> Shadow mode on
+              <Monitor size={11} color="var(--dash-success)" /> Secure browser session
             </span>
           </div>
 
+          {/* Platform selector — only show before browser launches */}
+          {!vncUrl && (
+            <div style={{ marginBottom: 20 }}>
+              <label className="dash-label" style={{ marginBottom: 8, display: "block" }}>Platform</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                {PLATFORMS.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`dash-btn ${platform === p.id ? "dash-btn-primary" : "dash-btn-secondary"}`}
+                    style={{
+                      flex: 1,
+                      justifyContent: "center",
+                      borderColor: platform === p.id ? p.color : undefined,
+                      background: platform === p.id ? p.color : undefined,
+                      fontSize: 13,
+                    }}
+                    onClick={() => setPlatform(p.id)}
+                  >
+                    <Globe size={13} /> {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Error display */}
           {error && (
             <div style={{
               background: "rgba(239, 68, 68, 0.1)",
@@ -159,73 +211,130 @@ export default function Onboarding() {
               marginBottom: 16,
               fontSize: 13,
               color: "#ef4444",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
             }}>
-              {error}
+              <AlertCircle size={14} /> {error}
             </div>
           )}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 24 }}>
-            <div>
-              <label className="dash-label">Email</label>
-              <input
-                type="email"
-                className="dash-input"
-                value={airbnbEmail}
-                onChange={(e) => setAirbnbEmail(e.target.value)}
-                placeholder="your@email.com"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="dash-label">Password</label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  className="dash-input"
-                  style={{ paddingRight: 44 }}
-                  value={airbnbPassword}
-                  onChange={(e) => setAirbnbPassword(e.target.value)}
-                  placeholder="••••••••"
-                />
-                <button
-                  type="button"
-                  className="dash-btn dash-btn-ghost"
-                  style={{ position: "absolute", right: 4, top: "50%", transform: "translateY(-50%)", padding: 6 }}
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </div>
-          </div>
+          {/* Browser iframe or launch button */}
+          {vncUrl ? (
+            <>
+              <div
+                style={{
+                  border: "1px solid var(--dash-border)",
+                  borderRadius: 10,
+                  overflow: "hidden",
+                  marginBottom: 16,
+                  background: "#1a1a1a",
+                }}
+              >
+                {/* Browser chrome bar */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 12px",
+                  background: "var(--dash-surface)",
+                  borderBottom: "1px solid var(--dash-border)",
+                  fontSize: 12,
+                  color: "var(--dash-text-muted)",
+                }}>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ff5f57" }} />
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#febc2e" }} />
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#28c840" }} />
+                  </div>
+                  <div style={{
+                    flex: 1,
+                    background: "var(--dash-bg)",
+                    borderRadius: 4,
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    color: "var(--dash-text-muted)",
+                  }}>
+                    {platform === "airbnb" ? "airbnb.com/login" : platform === "vrbo" ? "vrbo.com/auth" : "booking.com/sign-in"}
+                  </div>
+                  <Shield size={11} color="var(--dash-success)" />
+                </div>
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button className="dash-btn dash-btn-secondary" onClick={() => setStep("activate")}>
-              Back
-            </button>
-            <button
-              className="dash-btn dash-btn-primary"
-              disabled={!airbnbEmail || !airbnbPassword || connecting}
-              style={{ opacity: !airbnbEmail || !airbnbPassword || connecting ? 0.5 : 1, flex: 1, justifyContent: "center" }}
-              onClick={handleConnect}
-            >
-              {connecting ? (
-                <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Connecting...</>
-              ) : (
-                <>Connect</>
-              )}
-            </button>
-            <button
-              className="dash-btn dash-btn-ghost"
-              style={{ fontSize: 12 }}
-              onClick={async () => {
-                await completeOnboarding();
-                setStep("ready");
-              }}
-            >
-              Skip
-            </button>
-          </div>
+                {/* noVNC iframe */}
+                <iframe
+                  src={vncUrl}
+                  style={{
+                    width: "100%",
+                    height: 440,
+                    border: "none",
+                    display: "block",
+                  }}
+                  title={`${platform} login`}
+                  sandbox="allow-scripts allow-same-origin allow-forms"
+                />
+              </div>
+
+              <p style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 16, lineHeight: 1.5 }}>
+                Log in as you normally would. When you see your dashboard or inbox, click the button below.
+              </p>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  className="dash-btn dash-btn-secondary"
+                  onClick={() => {
+                    setVncUrl(null);
+                    setSessionId(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <motion.button
+                  className="dash-btn dash-btn-primary"
+                  disabled={finishing}
+                  style={{ flex: 1, justifyContent: "center", opacity: finishing ? 0.5 : 1 }}
+                  whileHover={!finishing ? { scale: 1.02 } : {}}
+                  whileTap={!finishing ? { scale: 0.98 } : {}}
+                  onClick={handleFinishSession}
+                >
+                  {finishing ? (
+                    <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Saving session...</>
+                  ) : (
+                    <><Check size={14} /> I'm Logged In</>
+                  )}
+                </motion.button>
+              </div>
+            </>
+          ) : (
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="dash-btn dash-btn-secondary" onClick={() => setStep("activate")}>
+                Back
+              </button>
+              <motion.button
+                className="dash-btn dash-btn-primary"
+                disabled={launching}
+                style={{ flex: 1, justifyContent: "center", opacity: launching ? 0.5 : 1 }}
+                whileHover={!launching ? { scale: 1.02 } : {}}
+                whileTap={!launching ? { scale: 0.98 } : {}}
+                onClick={handleLaunchBrowser}
+              >
+                {launching ? (
+                  <><Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> Launching browser...</>
+                ) : (
+                  <><Monitor size={14} /> Open {PLATFORMS.find((p) => p.id === platform)?.label} Login</>
+                )}
+              </motion.button>
+              <button
+                className="dash-btn dash-btn-ghost"
+                style={{ fontSize: 12 }}
+                onClick={async () => {
+                  await completeOnboarding();
+                  setStep("ready");
+                }}
+              >
+                Skip
+              </button>
+            </div>
+          )}
         </motion.div>
       )}
 
