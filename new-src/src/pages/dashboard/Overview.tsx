@@ -1,12 +1,23 @@
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 export default function Overview() {
   const navigate = useNavigate();
   const tenant = useQuery(api.tenants.get);
+  const getOrCreate = useMutation(api.tenants.getOrCreate);
+  const hasTriedCreate = useRef(false);
+
+  // Auto-create tenant record if none exists
+  useEffect(() => {
+    if (tenant === null && !hasTriedCreate.current) {
+      hasTriedCreate.current = true;
+      getOrCreate().catch(console.error);
+    }
+  }, [tenant, getOrCreate]);
 
   // Check if onboarding is complete
   const isOnboarded = tenant?.onboarded;
