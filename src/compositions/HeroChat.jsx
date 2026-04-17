@@ -1,4 +1,4 @@
-import { useCurrentFrame, useVideoConfig, interpolate, spring, AbsoluteFill } from 'remotion';
+import { useCurrentFrame, useVideoConfig, interpolate, spring, AbsoluteFill, Img } from 'remotion';
 import { AlfredAvatar, AGENT_COLORS } from '../components/agents/AgentAvatars';
 
 /*
@@ -45,15 +45,32 @@ export default function HeroChat() {
   const guestMsgStart = 110;
   const typingStart = 145;
   const alfredReplyStart = 175;
-  const badgeStart = 270;
+  const bgScale = interpolate(frame, [0, 320], [1, 1.1]);
 
   return (
     <AbsoluteFill style={{
-      background: 'linear-gradient(160deg, #F7F2ED 0%, #FAF8F5 50%, #F0EBF5 100%)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Inter', -apple-system, sans-serif",
       overflow: 'hidden',
+      background: '#0a0f1a',
     }}>
+      {/* Cinematic Image Background with Ken Burns effect */}
+      <Img 
+        src={'/assets/luxury_property.png'} 
+        style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          transform: `scale(${bgScale})`,
+          opacity: 0.9
+        }}
+      />
+      {/* Dark overlay for legibility */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'linear-gradient(160deg, rgba(10, 15, 26, 0.5) 0%, rgba(10, 15, 26, 0.85) 100%)'
+      }} />
+
       {/* Ambient particles */}
       <FloatingParticle x={50} y={30} size={12} color={c.primary} frame={frame} speed={0.8} />
       <FloatingParticle x={380} y={60} size={8} color="#A3C4E4" frame={frame} speed={1.2} />
@@ -73,11 +90,11 @@ export default function HeroChat() {
           <AlfredAvatar size={120} animated frame={frame} />
 
           <div style={{
-            marginTop: 12, fontSize: 18, fontWeight: 700, color: '#2D2B3D',
-            textAlign: 'center',
+            marginTop: 12, fontSize: 18, fontWeight: 700, color: '#FFFFFF',
+            textAlign: 'center', textShadow: '0 2px 10px rgba(0,0,0,0.5)'
           }}>Alfred</div>
           <div style={{
-            fontSize: 11, color: '#9994AB', fontWeight: 500,
+            fontSize: 11, color: '#A3C4E4', fontWeight: 500,
             letterSpacing: '0.05em', textTransform: 'uppercase', marginTop: 2,
           }}>Lead Agent</div>
 
@@ -103,27 +120,28 @@ export default function HeroChat() {
           </div>
         </div>
 
-        {/* Right: Demo conversation */}
         <div style={{
-          flex: 1, background: 'white', borderRadius: 20,
-          border: '1px solid rgba(45, 43, 61, 0.06)',
-          boxShadow: '0 12px 40px rgba(45, 43, 61, 0.06)',
+          flex: 1, background: 'rgba(20, 25, 40, 0.4)', borderRadius: 24,
+          backdropFilter: 'blur(30px) saturate(120%)',
+          WebkitBackdropFilter: 'blur(30px) saturate(120%)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
           overflow: 'hidden',
           opacity: interpolate(frame, [60, 80], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
           transform: `translateY(${interpolate(frame, [60, 80], [20, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })}px)`,
         }}>
           {/* Chat header */}
           <div style={{
-            padding: '14px 20px', borderBottom: '1px solid rgba(45,43,61,0.06)',
+            padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)',
             display: 'flex', alignItems: 'center', gap: 10,
           }}>
             <AlfredAvatar size={32} />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#2D2B3D' }}>Alfred</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#FFFFFF' }}>Alfred</div>
               <div style={{ fontSize: 10, color: '#A8C5B8', fontWeight: 500 }}>Online</div>
             </div>
             <div style={{
-              marginLeft: 'auto', fontSize: 10, color: '#9994AB', fontWeight: 500,
+              marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: 500,
             }}>11:47 PM</div>
           </div>
 
@@ -139,8 +157,9 @@ export default function HeroChat() {
                   transform: `translateY(${interpolate(s, [0, 1], [15, 0])}px)`,
                 }}>
                   <div style={{
-                    maxWidth: '75%', padding: '10px 16px', borderRadius: '16px 16px 4px 16px',
-                    background: '#F5F0EB', color: '#2D2B3D', fontSize: 13, lineHeight: 1.5,
+                    maxWidth: '75%', padding: '12px 18px', borderRadius: '20px 20px 6px 20px',
+                    background: 'rgba(255, 255, 255, 0.08)', color: '#FFFFFF', fontSize: 13, lineHeight: 1.5,
+                    border: '1px solid rgba(255,255,255,0.05)'
                   }}>{GUEST_MSG}</div>
                 </div>
               );
@@ -178,9 +197,11 @@ export default function HeroChat() {
                   transform: `translateY(${interpolate(s, [0, 1], [15, 0])}px)`,
                 }}>
                   <div style={{
-                    maxWidth: '80%', padding: '10px 16px', borderRadius: '16px 16px 16px 4px',
-                    background: `linear-gradient(135deg, ${c.primary}, ${c.secondary})`,
-                    color: '#2D2B3D', fontSize: 13, lineHeight: 1.5,
+                    maxWidth: '80%', padding: '12px 18px', borderRadius: '20px 20px 20px 6px',
+                    background: `linear-gradient(135deg, rgba(176, 124, 91, 0.9), rgba(212, 181, 158, 0.7))`,
+                    color: '#FFFFFF', fontSize: 13, lineHeight: 1.5,
+                    boxShadow: '0 8px 24px rgba(176, 124, 91, 0.3)',
+                    border: '1px solid rgba(255,255,255,0.2)'
                   }}>{text}{showCursor ? '▌' : ''}</div>
                 </div>
               );

@@ -26,17 +26,50 @@ import httpx
 from aiohttp import web
 from playwright.async_api import async_playwright
 
-# Try stealth
-try:
-    from playwright_stealth import stealth_async
-except ImportError:
-    async def stealth_async(page):
-        await page.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            window.chrome = {runtime: {}};
-            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-        """)
+# Residential proxy config
+PROXY_SERVER = os.environ.get("PROXY_SERVER", "")
+PROXY_USERNAME = os.environ.get("PROXY_USERNAME", "")
+PROXY_PASSWORD = os.environ.get("PROXY_PASSWORD", "")
+
+# Comprehensive stealth — patches all major fingerprint vectors
+_STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+window.chrome = {
+  runtime: { PlatformOs: { MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd' },
+    PlatformArch: { ARM: 'arm', X86_32: 'x86-32', X86_64: 'x86-64' },
+    OnInstalledReason: { INSTALL: 'install', UPDATE: 'update', CHROME_UPDATE: 'chrome_update' } },
+  loadTimes: function() { return {} }, csi: function() { return {} },
+  app: { isInstalled: false, InstallState: { INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' } },
+};
+Object.defineProperty(navigator, 'plugins', {
+  get: () => {
+    const p = [
+      { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+      { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+      { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
+    ]; p.refresh = () => {}; return p;
+  },
+});
+Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' });
+Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+const getParam = WebGLRenderingContext.prototype.getParameter;
+WebGLRenderingContext.prototype.getParameter = function(p) {
+  if (p === 37445) return 'Intel Inc.';
+  if (p === 37446) return 'Intel Iris OpenGL Engine';
+  return getParam.call(this, p);
+};
+delete window.__playwright; delete window.__pw_manual; delete window.__PW_inspect;
+"""
+
+async def stealth_async(page):
+    """Apply stealth patches — use playwright-stealth if available, else manual JS."""
+    try:
+        from playwright_stealth import stealth_async as _stealth
+        await _stealth(page)
+    except ImportError:
+        await page.add_init_script(_STEALTH_JS)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 DATA_DIR = os.environ.get("HOST4ME_DATA_DIR", "/opt/host4me/data")
@@ -78,15 +111,29 @@ async def get_session(pm_id: str):
     session_dir.mkdir(parents=True, exist_ok=True)
     storage_path = session_dir / "storage.json"
 
-    browser = await playwright_instance.chromium.launch(
-        headless=True,
-        args=["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-infobars"],
-    )
+    # Build launch kwargs with optional proxy
+    launch_kwargs = {
+        "headless": True,
+        "args": [
+            "--no-sandbox",
+            "--disable-blink-features=AutomationControlled",
+            "--disable-infobars",
+            "--disable-dev-shm-usage",
+        ],
+    }
+    if PROXY_SERVER:
+        launch_kwargs["proxy"] = {"server": PROXY_SERVER}
+        if PROXY_USERNAME:
+            launch_kwargs["proxy"]["username"] = PROXY_USERNAME
+            launch_kwargs["proxy"]["password"] = PROXY_PASSWORD
+
+    browser = await playwright_instance.chromium.launch(**launch_kwargs)
     context = await browser.new_context(
         user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         viewport={"width": 1280, "height": 900},
         locale="en-US",
-        timezone_id="America/Vancouver",
+        timezone_id="America/Los_Angeles",
+        color_scheme="light",
         storage_state=str(storage_path) if storage_path.exists() else None,
     )
     page = await context.new_page()

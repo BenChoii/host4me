@@ -1,6 +1,6 @@
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
-import { UserButton } from '@clerk/clerk-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Outlet, NavLink, useLocation } from "react-router-dom";
+import { useAuthActions } from "@convex-dev/auth/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard,
   Building2,
@@ -9,17 +9,23 @@ import {
   MessageSquare,
   Bell,
   Shield,
-} from 'lucide-react';
-import '../../dashboard.css';
+  LogOut,
+} from "lucide-react";
+import "./dashboard.css";
 
 const NAV_ITEMS = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Overview', end: true },
-  { to: '/dashboard/properties', icon: Building2, label: 'Properties' },
-  { to: '/dashboard/settings', icon: Settings, label: 'Settings' },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Overview", end: true },
+  { to: "/dashboard/properties", icon: Building2, label: "Properties" },
+  { to: "/dashboard/settings", icon: Settings, label: "Settings" },
 ];
 
 export default function DashboardLayout() {
   const location = useLocation();
+  const { signOut } = useAuthActions();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <div className="dash">
@@ -40,7 +46,7 @@ export default function DashboardLayout() {
               to={to}
               end={end}
               className={({ isActive }) =>
-                `dash-nav-item${isActive ? ' active' : ''}`
+                `dash-nav-item${isActive ? " active" : ""}`
               }
             >
               <Icon size={16} />
@@ -57,14 +63,31 @@ export default function DashboardLayout() {
           >
             <MessageSquare size={16} />
             Chat in Telegram
-            <svg width="10" height="10" viewBox="0 0 10 10" style={{ marginLeft: 'auto', opacity: 0.4 }}>
-              <path d="M1 9L9 1M9 1H3M9 1V7" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              style={{ marginLeft: "auto", opacity: 0.4 }}
+            >
+              <path
+                d="M1 9L9 1M9 1H3M9 1V7"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                fill="none"
+              />
             </svg>
           </a>
           <NavLink to="/dashboard/settings" className="dash-nav-item">
             <Shield size={16} />
             Shadow Mode
-            <span className="dash-status active" style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 11 }}>
+            <span
+              className="dash-status active"
+              style={{
+                marginLeft: "auto",
+                padding: "2px 8px",
+                fontSize: 11,
+              }}
+            >
               <span className="dash-status-dot" />
               ON
             </span>
@@ -72,17 +95,32 @@ export default function DashboardLayout() {
         </nav>
 
         <div className="dash-sidebar-footer">
-          <UserButton
-            appearance={{
-              elements: { avatarBox: { width: 30, height: 30 } },
-            }}
-          />
+          <div className="dash-user-avatar">H</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 550, color: 'var(--dash-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 550,
+                color: "var(--dash-text)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
               My Account
             </div>
-            <div style={{ fontSize: 11, color: 'var(--dash-text-muted)' }}>Free Plan</div>
+            <div style={{ fontSize: 11, color: "var(--dash-text-muted)" }}>
+              Free Plan
+            </div>
           </div>
+          <button
+            onClick={handleSignOut}
+            className="dash-btn dash-btn-ghost"
+            style={{ padding: "4px 8px" }}
+            title="Sign out"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </aside>
 
@@ -90,13 +128,13 @@ export default function DashboardLayout() {
       <div className="dash-main">
         <header className="dash-header">
           <h1>
-            {location.pathname === '/dashboard' && 'Overview'}
-            {location.pathname === '/dashboard/properties' && 'Properties'}
-            {location.pathname === '/dashboard/settings' && 'Settings'}
-            {location.pathname === '/dashboard/onboarding' && 'Get Started'}
+            {location.pathname === "/dashboard" && "Overview"}
+            {location.pathname === "/dashboard/properties" && "Properties"}
+            {location.pathname === "/dashboard/settings" && "Settings"}
+            {location.pathname === "/dashboard/onboarding" && "Get Started"}
           </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className="dash-btn dash-btn-ghost" style={{ position: 'relative' }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button className="dash-btn dash-btn-ghost" style={{ position: "relative" }}>
               <Bell size={16} />
             </button>
             <button className="dash-btn dash-btn-primary">

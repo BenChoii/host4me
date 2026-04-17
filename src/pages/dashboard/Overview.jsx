@@ -181,7 +181,7 @@ function ActiveDashboard() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <a
-            href="https://t.me/Host4Me_bot"
+            href="https://t.me/host4me_alfred_bot"
             target="_blank"
             rel="noopener noreferrer"
             className="dash-btn dash-btn-secondary"

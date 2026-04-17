@@ -1,122 +1,51 @@
-import { Canvas } from "@react-three/fiber";
-import { Suspense, useState, useEffect } from "react";
-import Experience from "./components/Experience";
-import { Menu, X, Home, MessageSquare, Shield, Zap } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useConvexAuth } from "convex/react";
+import Landing from "./pages/Landing";
+import SignUp from "./pages/SignUp";
+import SignIn from "./pages/SignIn";
+import DashboardLayout from "./pages/dashboard/DashboardLayout";
+import Overview from "./pages/dashboard/Overview";
+import Onboarding from "./pages/dashboard/Onboarding";
+import Properties from "./pages/dashboard/Properties";
+import Settings from "./pages/dashboard/Settings";
 
-function Navbar() {
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useConvexAuth();
 
-  useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  const navLinks = [
-    { name: "Features", icon: Zap },
-    { name: "How it Works", icon: MessageSquare },
-    { name: "Security", icon: Shield },
-    { name: "Pricing", icon: Home },
-  ];
-
-  return (
-    <nav 
-      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${
-        isScrolled ? "bg-black/80 backdrop-blur-md py-4" : "bg-transparent py-6"
-      }`}
-    >
-      <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#f27d26] rounded-lg flex items-center justify-center">
-            <Zap className="text-white w-5 h-5" />
-          </div>
-          <span className="text-2xl font-display font-bold tracking-tighter">
-            HOST<span className="text-[#f27d26]">4</span>ME
-          </span>
-        </div>
-
-        {/* Desktop Nav */}
-        <div className="hidden md:flex items-center gap-8">
-          {navLinks.map((link) => (
-            <a 
-              key={link.name} 
-              href={`#${link.name.toLowerCase().replace(/\s+/g, '-')}`}
-              className="text-sm font-medium text-gray-400 hover:text-white transition-colors"
-            >
-              {link.name}
-            </a>
-          ))}
-          <button className="bg-white text-black px-6 py-2 rounded-full text-sm font-bold hover:bg-[#f27d26] hover:text-white transition-all">
-            Get Started
-          </button>
-        </div>
-
-        {/* Mobile Toggle */}
-        <button 
-          className="md:hidden text-white"
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        >
-          {isMobileMenuOpen ? <X /> : <Menu />}
-        </button>
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#050505]">
+        <div className="text-white">Loading...</div>
       </div>
+    );
+  }
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {isMobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="absolute top-full left-0 w-full bg-black border-t border-white/10 p-6 md:hidden"
-          >
-            <div className="flex flex-col gap-6">
-              {navLinks.map((link) => (
-                <a 
-                  key={link.name} 
-                  href={`#${link.name.toLowerCase().replace(/\s+/g, '-')}`}
-                  className="flex items-center gap-3 text-lg font-medium text-gray-400"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  <link.icon className="w-5 h-5 text-[#f27d26]" />
-                  {link.name}
-                </a>
-              ))}
-              <button className="bg-[#f27d26] text-white px-6 py-4 rounded-xl text-lg font-bold">
-                Get Started Free
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </nav>
-  );
+  if (!isAuthenticated) {
+    return <Navigate to="/sign-in" replace />;
+  }
+
+  return <>{children}</>;
 }
 
 export default function App() {
   return (
-    <div className="relative w-full h-screen bg-black">
-      <Navbar />
-      
-      <div className="fixed inset-0 z-0">
-        <Canvas shadows camera={{ position: [0, 0, 5], fov: 35 }}>
-          <Suspense fallback={null}>
-            <Experience />
-          </Suspense>
-        </Canvas>
-      </div>
-
-      {/* Custom Cursor or other global elements could go here */}
-      <div className="fixed bottom-8 left-8 z-50 pointer-events-none hidden md:block">
-        <div className="flex items-center gap-3 bg-white/5 backdrop-blur-sm border border-white/10 px-4 py-2 rounded-full">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-          <span className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
-            Alfred is Online
-          </span>
-        </div>
-      </div>
-    </div>
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/sign-up" element={<SignUp />} />
+      <Route path="/sign-in" element={<SignIn />} />
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Overview />} />
+        <Route path="onboarding" element={<Onboarding />} />
+        <Route path="properties" element={<Properties />} />
+        <Route path="settings" element={<Settings />} />
+      </Route>
+    </Routes>
   );
 }
-

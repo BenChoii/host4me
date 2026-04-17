@@ -1,4 +1,4 @@
-import { useCurrentFrame, useVideoConfig, interpolate, spring, AbsoluteFill } from 'remotion';
+import { useCurrentFrame, useVideoConfig, interpolate, spring, AbsoluteFill, Img } from 'remotion';
 import {
   AlfredAvatar, CommsAvatar, EscalationAvatar, ReportingAvatar,
   ResearchAvatar, OptimizerAvatar, AGENT_COLORS,
@@ -39,9 +39,10 @@ function TaskCard({ task, frame, enterFrame, fps }) {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
       padding: '7px 10px', borderRadius: 10,
-      background: 'white',
-      border: `1px solid ${resolved ? 'rgba(168,197,184,0.25)' : 'rgba(45,43,61,0.05)'}`,
-      boxShadow: '0 1px 4px rgba(45,43,61,0.03)',
+      background: 'rgba(20, 25, 40, 0.7)',
+      backdropFilter: 'blur(10px)',
+      border: `1px solid ${resolved ? 'rgba(176,124,91,0.5)' : 'rgba(255,255,255,0.05)'}`,
+      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
       opacity: interpolate(s, [0, 1], [0, 1]),
       transform: `translateX(${interpolate(s, [0, 1], [20, 0])}px)`,
       marginBottom: 5, fontSize: 10, fontFamily: "'Inter', sans-serif",
@@ -50,18 +51,18 @@ function TaskCard({ task, frame, enterFrame, fps }) {
         width: 5, height: 5, borderRadius: '50%', background: task.color, flexShrink: 0,
       }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, color: '#2D2B3D', fontSize: 9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.text}</div>
+        <div style={{ fontWeight: 600, color: '#FFFFFF', fontSize: 9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{task.text}</div>
       </div>
       <div style={{
-        fontSize: 8, fontWeight: 600, color: '#7FA695',
+        fontSize: 8, fontWeight: 600, color: 'var(--copper)',
         padding: '2px 6px', borderRadius: 100,
-        background: 'rgba(168,197,184,0.1)',
+        background: 'rgba(176,124,91,0.1)',
         flexShrink: 0, whiteSpace: 'nowrap',
         opacity: resolved ? interpolate(resolveS, [0, 1], [0, 1]) : 0,
       }}>⏱ {task.timeSaved}</div>
       {resolved && (
         <span style={{
-          color: '#7FA695', fontSize: 9, flexShrink: 0,
+          color: 'var(--copper)', fontSize: 9, flexShrink: 0,
           opacity: interpolate(resolveS, [0, 1], [0, 1]),
         }}>✓</span>
       )}
@@ -93,16 +94,26 @@ export default function AgentOffice() {
 
   return (
     <AbsoluteFill style={{
-      background: 'linear-gradient(135deg, #FAF8F5 0%, #F0EBF5 50%, #EDF2F7 100%)',
       fontFamily: "'Inter', -apple-system, sans-serif",
       overflow: 'hidden',
+      background: '#0a0f1a',
     }}>
-      {/* Subtle radial glow */}
+      {/* Cinematic Abstract Tech Background */}
+      <Img 
+        src={'/assets/abstract_tech.png'} 
+        style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          transform: `scale(${interpolate(frame, [0, 360], [1, 1.1])})`,
+          opacity: 0.8
+        }}
+      />
+      {/* Dark overlay for legibility */}
       <div style={{
-        position: 'absolute', top: '46%', left: '47%', transform: 'translate(-50%, -50%)',
-        width: 280, height: 280,
-        background: 'radial-gradient(circle, rgba(200,182,226,0.12) 0%, transparent 70%)',
-        borderRadius: '50%',
+        position: 'absolute', inset: 0,
+        background: 'radial-gradient(circle at center, rgba(10, 15, 26, 0.2) 0%, rgba(10, 15, 26, 0.85) 100%)'
       }} />
 
       {/* Connection lines */}
@@ -132,9 +143,14 @@ export default function AgentOffice() {
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         zIndex: 10,
       }}>
-        <AlfredAvatar size={80} animated frame={frame} />
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#2D2B3D', marginTop: 4 }}>Alfred</div>
-        <div style={{ fontSize: 9, color: '#9994AB', fontWeight: 500, letterSpacing: '0.04em' }}>Lead Agent</div>
+        <div style={{
+          background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)', padding: 10, borderRadius: '50%',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)'
+        }}>
+          <AlfredAvatar size={80} animated frame={frame} />
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#FFFFFF', marginTop: 4, textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>Alfred</div>
+        <div style={{ fontSize: 9, color: '#A3C4E4', fontWeight: 500, letterSpacing: '0.04em' }}>Lead Agent</div>
       </div>
 
       {/* 5 Sub-agents in circular layout */}
@@ -153,9 +169,14 @@ export default function AgentOffice() {
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             width: 70,
           }}>
-            <agent.Avatar size={52} animated frame={frame} />
-            <div style={{ fontSize: 9, fontWeight: 600, color: '#2D2B3D', marginTop: 3, textAlign: 'center', lineHeight: 1.2 }}>{agent.name}</div>
-            <div style={{ fontSize: 8, color: '#9994AB', textAlign: 'center' }}>{agent.role}</div>
+            <div style={{
+              background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(8px)', padding: 6, borderRadius: '50%',
+              boxShadow: '0 5px 15px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
+            }}>
+              <agent.Avatar size={52} animated frame={frame} />
+            </div>
+            <div style={{ fontSize: 9, fontWeight: 600, color: '#FFFFFF', marginTop: 3, textAlign: 'center', lineHeight: 1.2, textShadow: '0 2px 5px rgba(0,0,0,0.8)' }}>{agent.name}</div>
+            <div style={{ fontSize: 8, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>{agent.role}</div>
           </div>
         );
       })}
@@ -164,10 +185,12 @@ export default function AgentOffice() {
       <div style={{ position: 'absolute', right: 16, top: 16, width: 185 }}>
         <div style={{
           fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
-          color: '#9994AB', textTransform: 'uppercase', marginBottom: 6,
+          color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', marginBottom: 6,
         }}>Live Tasks</div>
         {TASKS.map((task, i) => (
-          <TaskCard key={i} task={task} frame={frame} enterFrame={45 + i * 40} fps={fps} />
+          <div key={i} style={{ marginBottom: 4 }}>
+             <TaskCard task={task} frame={frame} enterFrame={45 + i * 40} fps={fps} />
+          </div>
         ))}
       </div>
 
@@ -175,25 +198,27 @@ export default function AgentOffice() {
       <div style={{
         position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
         display: 'flex', gap: 28, alignItems: 'center',
+        background: 'rgba(20, 25, 40, 0.6)', backdropFilter: 'blur(20px)', padding: '10px 24px', borderRadius: 100,
+        border: '1px solid rgba(255,255,255,0.1)',
         opacity: interpolate(frame, [60, 90], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
       }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#2D2B3D' }}>6</div>
-          <div style={{ fontSize: 9, color: '#9994AB' }}>Agents Active</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#FFF' }}>6</div>
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)' }}>Agents Active</div>
         </div>
         <div style={{
-          width: 1, height: 28, background: 'rgba(45,43,61,0.08)',
+          width: 1, height: 28, background: 'rgba(255,255,255,0.1)',
         }} />
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#7FA695' }}>{totalTimeSaved} min</div>
-          <div style={{ fontSize: 9, color: '#9994AB' }}>Time Saved</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--copper)' }}>{totalTimeSaved} min</div>
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)' }}>Time Saved</div>
         </div>
         <div style={{
-          width: 1, height: 28, background: 'rgba(45,43,61,0.08)',
+          width: 1, height: 28, background: 'rgba(255,255,255,0.1)',
         }} />
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#2D2B3D' }}>{resolvedCount}/{TASKS.length}</div>
-          <div style={{ fontSize: 9, color: '#9994AB' }}>Tasks Done</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#FFF' }}>{resolvedCount}/{TASKS.length}</div>
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.6)' }}>Tasks Done</div>
         </div>
       </div>
     </AbsoluteFill>

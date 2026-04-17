@@ -47,7 +47,7 @@ class BotManager {
 
     return {
       token,
-      deepLink: `https://t.me/Host4Me_bot?start=${pmId}`,
+      deepLink: `https://t.me/host4me_alfred_bot?start=${pmId}`,
       poolRemaining: this.availableTokens.length,
     };
   }

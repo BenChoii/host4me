@@ -201,7 +201,7 @@ export default function Onboarding() {
 
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
             <motion.a
-              href="https://t.me/Host4Me_bot"
+              href="https://t.me/host4me_alfred_bot"
               target="_blank"
               rel="noopener noreferrer"
               className="dash-btn dash-btn-primary"

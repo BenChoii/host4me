@@ -6,12 +6,13 @@ import { ConvexProviderWithClerk } from 'convex/react-clerk'
 import { ConvexReactClient } from 'convex/react'
 import './index.css'
 import App from './App.jsx'
+import LandingPage from './pages/LandingPage.jsx'
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
-const CONVEX_URL = import.meta.env.VITE_CONVEX_URL
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+const CONVEX_URL = import.meta.env.VITE_CONVEX_URL;
 
 if (!PUBLISHABLE_KEY) {
-  throw new Error('Add your Clerk Publishable Key to the .env file')
+  console.warn('Previewing local frontend. Clerk Auth is disabled.');
 }
 
 const convex = CONVEX_URL ? new ConvexReactClient(CONVEX_URL) : null
@@ -37,8 +38,12 @@ function Providers({ children }) {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Providers>
-      <App />
-    </Providers>
+    {PUBLISHABLE_KEY ? (
+      <Providers>
+        <App />
+      </Providers>
+    ) : (
+      <LandingPage />
+    )}
   </StrictMode>,
 )

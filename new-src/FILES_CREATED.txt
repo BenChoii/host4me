@@ -1,0 +1,78 @@
+FILES CREATED FOR VITE + REACT + THREE.JS APP WITH CONVEX AUTH
+================================================================
+
+ENTRY POINT:
+- src/main.tsx
+  * Configures BrowserRouter, ConvexAuthProvider wrapping ConvexReactClient
+  * Uses VITE_CONVEX_URL environment variable
+
+ROUTING & APP:
+- src/App.tsx
+  * Defines all routes (landing, auth pages, protected dashboard routes)
+  * ProtectedRoute wrapper using useConvexAuth()
+  * Routes: / (Landing), /sign-up, /sign-in, /dashboard (protected with children)
+
+AUTHENTICATION PAGES:
+- src/pages/SignUp.tsx
+  * Dark-themed sign-up form with email/password/confirm password
+  * Uses useAuthActions().signIn("password", { flow: "signUp" })
+  * Redirects to /dashboard/onboarding on success
+
+- src/pages/SignIn.tsx
+  * Dark-themed sign-in form with email/password
+  * Uses useAuthActions().signIn("password", { flow: "signIn" })
+  * Redirects to /dashboard on success
+
+LANDING PAGE:
+- src/pages/Landing.tsx
+  * Ported from current App.tsx (Navbar + Canvas + Experience)
+  * Navigation buttons updated to use react-router navigate()
+  * "Start Free Trial" → /sign-up, "Sign In" → /sign-in
+  * Scroll navigation for "Watch Demo" and "View Pricing"
+
+DASHBOARD:
+- src/pages/dashboard/DashboardLayout.tsx
+  * Main dashboard layout with sidebar navigation
+  * Removed Clerk UserButton, added simple Sign Out button
+  * Uses useAuthActions().signOut()
+  * Navigation items: Overview, Properties, Settings
+  * Includes Telegram link and Shadow Mode indicator
+
+- src/pages/dashboard/Overview.tsx
+  * Welcome dashboard with tenant data from Convex
+  * Shows properties count and messages today
+  * If not onboarded, displays card linking to /dashboard/onboarding
+
+- src/pages/dashboard/Onboarding.tsx
+  * 3-step onboarding flow: activate → connect → ready
+  * Step 1: Meet Alfred intro with feature cards
+  * Step 2: Connect Airbnb (email/password form, mock connection)
+  * Step 3: Alfred ready with Telegram link
+
+- src/pages/dashboard/Properties.tsx
+  * Placeholder page for properties listing
+
+- src/pages/dashboard/Settings.tsx
+  * Placeholder page for user settings
+
+STYLING:
+- src/pages/dashboard/dashboard.css
+  * Complete dark theme CSS with glassmorphism effects
+  * CSS variables for colors, spacing, typography
+  * Sidebar, header, card, button, input styles
+  * Responsive mobile styles
+  * Animations (float-orb, pulse-dot, etc.)
+
+DEPENDENCIES REQUIRED:
+- react, react-dom, react-router-dom
+- convex/react, @convex-dev/auth/react
+- gsap, @gsap/react, lenis (for Landing page)
+- @remotion/player (for Landing video)
+- motion/react (for animations)
+- lucide-react (for icons)
+
+NOTE: 
+- All Clerk imports have been removed
+- All files use TypeScript (.tsx)
+- Dashboard CSS variables are pre-configured
+- Auth flows use Convex Password provider (no email verification)

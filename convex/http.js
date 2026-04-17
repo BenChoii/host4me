@@ -1,8 +1,12 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { auth } from "./auth";
 
 const http = httpRouter();
+
+// Register Convex Auth routes (signIn, signOut, etc.)
+auth.addHttpRoutes(http);
 
 // Clerk webhook — create tenant on user signup
 http.route({
