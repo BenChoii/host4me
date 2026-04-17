@@ -46,10 +46,12 @@ export const createLiveSession = action({
       metadata: { platform: args.platform, sessionId: result.session_id },
     });
 
-    // Construct noVNC URL from ws_port returned by the live browser service
-    // LIVE_BROWSER_URL is like http://187.124.182.236:8101 — extract the host
+    // Construct noVNC URL routed through Caddy HTTPS reverse proxy
+    // Caddy on the VPS proxies /vnc/{port}/* \u2192 localhost:{port}/*
+    // This avoids mixed-content blocking (HTTP iframe inside HTTPS page)
     const vpsHost = new URL(liveBrowserUrl).hostname;
-    const vncUrl = `http://${vpsHost}:${result.ws_port}/vnc.html?autoconnect=true&resize=scale`;
+    const sslipDomain = vpsHost.replace(/\./g, "-") + ".sslip.io";
+    const vncUrl = `https://${sslipDomain}/vnc/${result.ws_port}/vnc.html?autoconnect=true&resize=scale`;
 
     return {
       sessionId: result.session_id,
@@ -59,7 +61,7 @@ export const createLiveSession = action({
   },
 });
 
-// Finish a live browser session — captures cookies/storage state after user logs in
+// Finish a live browser session \u2014 captures cookies/storage state after user logs in
 export const finishLiveSession = action({
   args: {
     sessionId: v.string(),
@@ -103,7 +105,7 @@ export const finishLiveSession = action({
       tenantId: tenant._id,
       agentType: "alfred",
       actionType: "live_session_finished",
-      summary: `${args.platform} session captured — ${result.cookie_count || 0} cookies saved`,
+      summary: `${args.platform} session captured \u2014 ${result.cookie_count || 0} cookies saved`,
       metadata: {
         platform: args.platform,
         cookieCount: result.cookie_count,
