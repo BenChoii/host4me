@@ -10,12 +10,15 @@ import {
   Bell,
   Shield,
   LogOut,
+  Bot,
+  Briefcase,
 } from "lucide-react";
 import "./dashboard.css";
 
 const NAV_ITEMS = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Overview", end: true },
   { to: "/dashboard/properties", icon: Building2, label: "Properties" },
+  { to: "/dashboard/pipeline", icon: Briefcase, label: "Pipeline" },
   { to: "/dashboard/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -130,6 +133,7 @@ export default function DashboardLayout() {
           <h1>
             {location.pathname === "/dashboard" && "Overview"}
             {location.pathname === "/dashboard/properties" && "Properties"}
+            {location.pathname === "/dashboard/pipeline" && "Corporate Pipeline"}
             {location.pathname === "/dashboard/settings" && "Settings"}
             {location.pathname === "/dashboard/onboarding" && "Get Started"}
           </h1>
