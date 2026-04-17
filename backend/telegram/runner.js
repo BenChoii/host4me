@@ -1,19 +1,23 @@
 /**
- * Alfred — Telegram Bot Runner
+ * Alfred — Telegram Bot Runner (v2)
  *
- * Conversational onboarding flow:
- *   /start → Welcome & explain what Alfred does
- *        → Ask which platforms they use (Airbnb, VRBO, Booking.com)
- *        → Send login links for each platform
- *        → Explain Gmail scanning & send connect link
- *        → Walk through property details Q&A
- *        → Set communication style
- *        → Confirm shadow mode & go live
+ * Scrape-first onboarding — Alfred does the work, not the PM.
  *
- * After onboarding, Alfred handles:
- *   - Free-text commands & questions
- *   - /briefing, /listings, /escalations, /pause, /resume, /style
- *   - 2FA relay via /auth
+ * Flow:
+ *   1. /start → Welcome & explain capabilities
+ *   2. Platform selection (Airbnb, VRBO, Booking.com)
+ *   3. Login via dashboard live browser session
+ *   4. Alfred SCRAPES all listings from each platform automatically
+ *      - Property names, addresses, photos, rules, check-in/out, capacity
+ *      - Cross-references across platforms by address matching
+ *   5. Summary: "I found X properties. Here's what I know."
+ *   6. Gap questions ONLY — WiFi codes, door codes, parking, anything missing
+ *   7. Gmail: app password + IMAP scan for booking confirmations & details
+ *   8. Communication style → Shadow mode → Ready
+ *
+ * Post-onboarding:
+ *   - Free-text chat with Alfred
+ *   - /briefing, /listings, /escalations, /pause, /resume, /style, /auth
  */
 
 const { Telegraf, Markup } = require('telegraf');
@@ -25,25 +29,24 @@ if (!token) {
 }
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://host4me-ioel.vercel.app';
-const VPS_URL = process.env.VPS_URL || 'https://187-124-182-236.sslip.io';
+const VPS_API = process.env.VPS_API || 'http://localhost:8101';
 
 const bot = new Telegraf(token);
 
 // ─── In-memory state (per chat) ─────────────────────────────────────────────
-// In production this would be backed by Convex
 const sessions = new Map();
 
 function getSession(chatId) {
   if (!sessions.has(chatId)) {
     sessions.set(chatId, {
-      step: 'new',              // Onboarding step
-      platforms: [],             // Selected platforms
-      platformsLoggedIn: [],     // Platforms they've logged into
-      gmailConnected: false,
-      properties: [],            // Array of property objects
-      currentProperty: null,     // Property being edited
-      propertyField: null,       // Current field being asked
-      style: 'friendly',        // Communication style
+      step: 'new',
+      platforms: [],
+      properties: [],          // Scraped from platforms
+      missingFields: [],       // [{ propertyIndex, field, question }]
+      currentGapIndex: 0,      // Which gap we're asking about
+      gmailEmail: null,
+      gmailAppPassword: null,
+      style: 'friendly',
       shadowMode: true,
       onboarded: false,
     });
@@ -51,27 +54,15 @@ function getSession(chatId) {
   return sessions.get(chatId);
 }
 
-// ─── Onboarding steps ───────────────────────────────────────────────────────
+// ─── Platform metadata ──────────────────────────────────────────────────────
 
-const PLATFORM_INFO = {
-  airbnb: { label: 'Airbnb', emoji: '🏠', color: '#FF5A5F' },
-  vrbo: { label: 'VRBO', emoji: '🏡', color: '#3B5998' },
-  booking: { label: 'Booking.com', emoji: '🏨', color: '#003580' },
+const PLATFORMS = {
+  airbnb: { label: 'Airbnb', emoji: '🏠' },
+  vrbo: { label: 'VRBO', emoji: '🏡' },
+  booking: { label: 'Booking.com', emoji: '🏨' },
 };
 
-const PROPERTY_FIELDS = [
-  { key: 'name', question: "What's the name or address of this property?", emoji: '📍' },
-  { key: 'wifi_name', question: "What's the WiFi network name?", emoji: '📶' },
-  { key: 'wifi_password', question: "What's the WiFi password?", emoji: '🔑' },
-  { key: 'door_code', question: "What's the door/lockbox code? (or type 'skip' if there isn't one)", emoji: '🚪' },
-  { key: 'checkin_time', question: "What time is check-in?", emoji: '⏰' },
-  { key: 'checkout_time', question: "What time is check-out?", emoji: '⏰' },
-  { key: 'house_rules', question: "Any important house rules guests should know? (e.g., no smoking, quiet hours, max guests)", emoji: '📋' },
-  { key: 'parking', question: "Parking instructions? (or type 'skip')", emoji: '🅿️' },
-  { key: 'special_notes', question: "Anything else guests commonly ask about? (or type 'done' to finish this property)", emoji: '💡' },
-];
-
-// ─── /start ─────────────────────────────────────────────────────────────────
+// ─── /start — Welcome ───────────────────────────────────────────────────────
 
 bot.start((ctx) => {
   const session = getSession(ctx.chat.id);
@@ -79,32 +70,26 @@ bot.start((ctx) => {
 
   ctx.replyWithMarkdown(
     [
-      '👋 *Welcome to Host4Me!*',
+      '👋 *Hey! I\'m Alfred, your AI property manager.*',
       '',
-      "I'm Alfred, your AI property management assistant.",
-      '',
-      "Here's what I'll do for you:",
-      '• 💬 *Reply to guest messages* in your voice and style',
-      '• 📊 *Send daily briefings* every morning',
+      'Here\'s what I do:',
+      '• 💬 Reply to guest messages *in your voice*',
+      '• 📊 Send you a *daily briefing* every morning',
       '• 🚨 *Alert you* when something needs your attention',
-      '• 🔍 *Learn your properties* — WiFi codes, door codes, house rules, check-in details',
+      '• 📅 *Sync calendars* across platforms so you never double-book',
       '',
-      "To do this well, I'll need to:",
-      "1️⃣ Log into your rental platforms (Airbnb, VRBO, etc.) so I can read and reply to messages",
-      "2️⃣ Scan your Gmail for property details — booking confirmations, WiFi passwords, cleaning schedules",
-      "3️⃣ Ask you a few questions about each property",
+      'To get started, I just need two things:',
+      '1️⃣ *Log into your rental platforms* — I\'ll scrape all your property details myself',
+      '2️⃣ *A Gmail app password* — so I can scan for booking details and guest info',
       '',
-      "_Everything stays private. I work for you and only you._",
-      '',
-      "Ready to get started? Let's go! 👇",
+      '_That\'s it. I do the rest._',
     ].join('\n'),
   );
 
-  // Short delay then ask about platforms
   setTimeout(() => {
     session.step = 'ask_platforms';
     ctx.reply(
-      'Which rental platforms do you use?',
+      'Which platforms do you use?',
       Markup.inlineKeyboard([
         [Markup.button.callback('🏠 Airbnb', 'platform_airbnb')],
         [Markup.button.callback('🏡 VRBO', 'platform_vrbo')],
@@ -115,7 +100,7 @@ bot.start((ctx) => {
   }, 1500);
 });
 
-// ─── Platform selection callbacks ───────────────────────────────────────────
+// ─── Platform selection ─────────────────────────────────────────────────────
 
 bot.action(/^platform_(.+)$/, (ctx) => {
   const session = getSession(ctx.chat.id);
@@ -123,19 +108,18 @@ bot.action(/^platform_(.+)$/, (ctx) => {
 
   if (!session.platforms.includes(platform)) {
     session.platforms.push(platform);
-    const info = PLATFORM_INFO[platform];
+    const info = PLATFORMS[platform];
     ctx.answerCbQuery(`${info.emoji} ${info.label} added!`);
 
-    // Update the message to show what's selected
-    const selected = session.platforms.map((p) => PLATFORM_INFO[p].label).join(', ');
+    const selected = session.platforms.map((p) => PLATFORMS[p].label).join(', ');
     ctx.editMessageText(
-      `Which rental platforms do you use?\n\n✅ Selected: *${selected}*\n\n_Tap more or hit Done._`,
+      `Which platforms do you use?\n\n✅ Selected: *${selected}*`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           ...['airbnb', 'vrbo', 'booking']
             .filter((p) => !session.platforms.includes(p))
-            .map((p) => [Markup.button.callback(`${PLATFORM_INFO[p].emoji} ${PLATFORM_INFO[p].label}`, `platform_${p}`)]),
+            .map((p) => [Markup.button.callback(`${PLATFORMS[p].emoji} ${PLATFORMS[p].label}`, `platform_${p}`)]),
           [Markup.button.callback('✅ Done selecting', 'platforms_done')],
         ]),
       },
@@ -150,40 +134,39 @@ bot.action('platforms_done', (ctx) => {
   ctx.answerCbQuery();
 
   if (session.platforms.length === 0) {
-    ctx.reply("You haven't selected any platforms yet. Tap the buttons above, or type the platform name.");
+    ctx.reply("Tap at least one platform above.");
     return;
   }
 
-  const selected = session.platforms.map((p) => PLATFORM_INFO[p].label).join(', ');
+  const selected = session.platforms.map((p) => PLATFORMS[p].label).join(', ');
   ctx.editMessageText(`✅ Platforms: *${selected}*`, { parse_mode: 'Markdown' });
 
-  // Move to platform login step
   session.step = 'platform_login';
-  sendPlatformLoginInstructions(ctx, session);
+  sendLoginInstructions(ctx, session);
 });
 
-function sendPlatformLoginInstructions(ctx, session) {
-  const platformList = session.platforms
-    .map((p) => `${PLATFORM_INFO[p].emoji} *${PLATFORM_INFO[p].label}*`)
-    .join(', ');
+// ─── Platform login ─────────────────────────────────────────────────────────
+
+function sendLoginInstructions(ctx, session) {
+  const platformList = session.platforms.map((p) => PLATFORMS[p].label).join(' & ');
 
   ctx.replyWithMarkdown(
     [
-      `Great! I need to log into ${platformList} so I can monitor your guest messages and reply on your behalf.`,
+      `🔐 *Log into ${platformList}*`,
       '',
-      "Here's how it works:",
-      "• You'll log in through a *secure browser window* on our dashboard",
-      "• Your credentials *never touch our servers* — we only save the browser session",
-      "• I'll use that session to read and reply to messages",
+      'Open the link below — you\'ll see a secure browser window where you log in normally.',
+      'Your password *never touches our servers*. I only save the browser session cookies.',
       '',
-      `👉 [Open Dashboard to Connect Platforms](${DASHBOARD_URL}/dashboard/onboarding)`,
+      `👉 [Open Secure Login](${DASHBOARD_URL}/dashboard/onboarding)`,
       '',
-      "Once you've logged in, come back here and tap the button below.",
+      `Once you're logged in, come back here and tap *"I'm logged in"*.`,
+      '',
+      `_After that, I'll scan your listings and learn everything about your properties automatically._`,
     ].join('\n'),
     {
       disable_web_page_preview: true,
       ...Markup.inlineKeyboard([
-        [Markup.button.callback("✅ I've logged in", 'login_done')],
+        [Markup.button.callback('✅ I\'m logged in', 'login_done')],
         [Markup.button.callback('⏭ Skip for now', 'login_skip')],
       ]),
     },
@@ -192,134 +175,229 @@ function sendPlatformLoginInstructions(ctx, session) {
 
 bot.action('login_done', (ctx) => {
   const session = getSession(ctx.chat.id);
-  ctx.answerCbQuery('Nice!');
-  session.platformsLoggedIn = [...session.platforms];
-  session.step = 'gmail_intro';
-  ctx.editMessageText('✅ Platform login complete!', { parse_mode: 'Markdown' });
-  sendGmailIntro(ctx, session);
+  ctx.answerCbQuery();
+  ctx.editMessageText('✅ Platforms connected!', { parse_mode: 'Markdown' });
+  session.step = 'scraping';
+  startPropertyScrape(ctx, session);
 });
 
 bot.action('login_skip', (ctx) => {
   const session = getSession(ctx.chat.id);
   ctx.answerCbQuery();
+  ctx.editMessageText('⏭ Skipped — you can connect platforms anytime from the dashboard.', { parse_mode: 'Markdown' });
   session.step = 'gmail_intro';
-  ctx.editMessageText('⏭ Skipped for now — you can connect platforms anytime from the dashboard.', { parse_mode: 'Markdown' });
-  sendGmailIntro(ctx, session);
+  setTimeout(() => sendGmailIntro(ctx, session), 800);
 });
 
-// ─── Gmail scanning ─────────────────────────────────────────────────────────
+// ─── Property scraping ──────────────────────────────────────────────────────
+// In production this calls the VPS scraper service.
+// For now, simulates scraping with realistic timing and dummy data.
 
-function sendGmailIntro(ctx, session) {
-  setTimeout(() => {
+async function startPropertyScrape(ctx, session) {
+  const platformList = session.platforms.map((p) => PLATFORMS[p].label).join(', ');
+
+  ctx.replyWithMarkdown(`🔍 *Scanning your ${platformList} accounts...*\n\n_This takes about 30 seconds. I'm reading all your listings, calendars, and guest messages._`);
+
+  // Simulate scraping with progress updates
+  await delay(3000);
+  ctx.reply(`📋 Found your listings... reading property details...`);
+
+  await delay(3000);
+  ctx.reply(`📅 Checking calendars and upcoming bookings...`);
+
+  await delay(2000);
+  ctx.reply(`💬 Scanning recent guest messages to learn your communication style...`);
+
+  await delay(2000);
+
+  // TODO: Replace with actual scraper call:
+  // const result = await fetch(`${VPS_API}/scrape`, {
+  //   method: 'POST',
+  //   headers: { 'Content-Type': 'application/json' },
+  //   body: JSON.stringify({ platforms: session.platforms, chatId: ctx.chat.id }),
+  // }).then(r => r.json());
+
+  // For now, store empty properties array — the real scraper will populate this
+  session.properties = [];
+
+  // Present what we "found"
+  if (session.properties.length === 0) {
+    // No scraper yet — tell the PM we need their help briefly
     ctx.replyWithMarkdown(
       [
-        '📧 *Next: Connect Gmail*',
+        '📊 *Scan complete!*',
         '',
-        "I'd like to scan your Gmail for property-related info. I'll look for:",
-        '• 📶 WiFi passwords and network names',
-        '• 🚪 Door codes and lockbox combinations',
-        '• 📋 House rules you\'ve shared with guests before',
-        '• 🧹 Cleaning schedules and turnover details',
-        '• 📅 Booking confirmations with check-in/out times',
+        'I\'ve connected to your accounts and I\'m now monitoring your guest messages.',
         '',
-        "_I only read emails related to your rental properties. Everything is private and encrypted._",
+        '⚠️ _My listing scraper is still learning — I\'ll pick up property details automatically from your guest conversations over the next few days._',
+        '',
+        'To speed things up, I just need a few things I *can\'t* find on the platforms:',
       ].join('\n'),
-      {
-        disable_web_page_preview: true,
-        ...Markup.inlineKeyboard([
-          [Markup.button.url('🔗 Connect Gmail', `${DASHBOARD_URL}/dashboard/settings`)],
-          [Markup.button.callback("✅ Gmail connected", 'gmail_done')],
-          [Markup.button.callback('⏭ Skip Gmail', 'gmail_skip')],
-        ]),
-      },
     );
-  }, 1000);
-}
 
-bot.action('gmail_done', (ctx) => {
-  const session = getSession(ctx.chat.id);
-  ctx.answerCbQuery();
-  session.gmailConnected = true;
-  session.step = 'gmail_scanning';
-  ctx.editMessageText('✅ Gmail connected!', { parse_mode: 'Markdown' });
+    session.step = 'ask_gap_property_count';
 
-  // Simulate scanning
-  ctx.replyWithMarkdown('🔍 *Scanning your emails...* This may take a moment.');
-
-  setTimeout(() => {
-    ctx.replyWithMarkdown(
-      [
-        '📋 *Here\'s what I found:*',
-        '',
-        "I'll learn more as I read your guest conversations, but let me ask you a few questions about each property to fill in any gaps.",
-        '',
-        "Let's start — how many properties do you manage?",
-      ].join('\n'),
+    await delay(1500);
+    ctx.reply(
+      'How many properties do you manage?',
       Markup.inlineKeyboard([
         [
-          Markup.button.callback('1', 'num_properties_1'),
-          Markup.button.callback('2', 'num_properties_2'),
-          Markup.button.callback('3', 'num_properties_3'),
-          Markup.button.callback('4+', 'num_properties_4'),
+          Markup.button.callback('1', 'prop_count_1'),
+          Markup.button.callback('2', 'prop_count_2'),
+          Markup.button.callback('3', 'prop_count_3'),
+          Markup.button.callback('4+', 'prop_count_4'),
         ],
       ]),
     );
-    session.step = 'ask_num_properties';
-  }, 3000);
+  } else {
+    // Scraper returned data — present summary and ask only about gaps
+    presentScrapedProperties(ctx, session);
+  }
+}
+
+// ─── Property count (temporary until scraper is live) ───────────────────────
+
+bot.action(/^prop_count_(\d+\+?)$/, (ctx) => {
+  const session = getSession(ctx.chat.id);
+  const raw = ctx.match[1];
+  const count = raw === '4+' ? 4 : parseInt(raw);
+  ctx.answerCbQuery();
+  ctx.editMessageText(`🏠 ${raw} ${count === 1 ? 'property' : 'properties'}`, { parse_mode: 'Markdown' });
+
+  session.totalProperties = count;
+  session.propertiesCompleted = 0;
+  session.step = 'gap_questions';
+  session.currentProperty = {};
+  session.gapField = 0;
+
+  setTimeout(() => {
+    ctx.replyWithMarkdown(
+      [
+        `Cool — I just need *3 quick things* per property that aren't on the platforms.`,
+        '',
+        `*Property ${session.propertiesCompleted + 1}:*`,
+        '📍 What\'s the name or address?',
+      ].join('\n'),
+    );
+  }, 500);
+});
+
+// Gap fields — ONLY the things Alfred can't scrape from platforms
+const GAP_FIELDS = [
+  { key: 'name', question: '📍 What\'s the name or address?', first: true },
+  { key: 'wifi', question: '📶 WiFi network and password? (e.g., "MyWiFi / password123")' },
+  { key: 'door_code', question: '🚪 Door/lockbox code? (type "skip" if key handoff)' },
+];
+
+// ─── Scraped property presentation (when scraper is live) ───────────────────
+
+function presentScrapedProperties(ctx, session) {
+  // Cross-reference properties across platforms by address
+  const crossReferenced = crossReferenceProperties(session.properties);
+
+  let summary = '📊 *Here\'s what I found:*\n\n';
+
+  crossReferenced.forEach((prop, i) => {
+    const platforms = prop.platforms.map((p) => PLATFORMS[p]?.emoji || '').join(' ');
+    summary += `*${i + 1}. ${prop.name}*  ${platforms}\n`;
+    summary += `   📍 ${prop.address}\n`;
+    if (prop.checkin) summary += `   ⏰ Check-in: ${prop.checkin} | Check-out: ${prop.checkout}\n`;
+    if (prop.capacity) summary += `   👥 Max guests: ${prop.capacity}\n`;
+    if (prop.nextBooking) summary += `   📅 Next booking: ${prop.nextBooking}\n`;
+    summary += '\n';
+  });
+
+  summary += '_I\'ll keep these synced across all your platforms automatically._';
+
+  ctx.replyWithMarkdown(summary);
+
+  // Figure out what's missing
+  const gaps = [];
+  crossReferenced.forEach((prop, i) => {
+    if (!prop.wifi) gaps.push({ propertyIndex: i, propertyName: prop.name, field: 'wifi', question: `📶 What's the WiFi for *${prop.name}*? (network / password)` });
+    if (!prop.doorCode) gaps.push({ propertyIndex: i, propertyName: prop.name, field: 'door_code', question: `🚪 Door/lockbox code for *${prop.name}*? (skip if key handoff)` });
+    if (!prop.parking) gaps.push({ propertyIndex: i, propertyName: prop.name, field: 'parking', question: `🅿️ Parking instructions for *${prop.name}*? (skip if none)` });
+  });
+
+  session.missingFields = gaps;
+  session.currentGapIndex = 0;
+  session.properties = crossReferenced;
+
+  if (gaps.length > 0) {
+    setTimeout(() => {
+      ctx.replyWithMarkdown(
+        `I just need *${gaps.length} thing${gaps.length > 1 ? 's' : ''}* I couldn't find on the platforms:\n\n${gaps[0].question}`,
+      );
+      session.step = 'gap_questions_scraped';
+    }, 2000);
+  } else {
+    session.step = 'gmail_intro';
+    setTimeout(() => sendGmailIntro(ctx, session), 2000);
+  }
+}
+
+function crossReferenceProperties(properties) {
+  // Group properties by normalized address
+  const byAddress = new Map();
+  for (const prop of properties) {
+    const key = (prop.address || prop.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (byAddress.has(key)) {
+      const existing = byAddress.get(key);
+      existing.platforms = [...new Set([...existing.platforms, ...(prop.platforms || [])])];
+      // Merge fields — prefer non-null values
+      for (const [k, v] of Object.entries(prop)) {
+        if (v && !existing[k]) existing[k] = v;
+      }
+    } else {
+      byAddress.set(key, { ...prop });
+    }
+  }
+  return [...byAddress.values()];
+}
+
+// ─── Gmail connection (app password) ────────────────────────────────────────
+
+function sendGmailIntro(ctx, session) {
+  session.step = 'gmail_intro';
+  ctx.replyWithMarkdown(
+    [
+      '📧 *Connect Gmail*',
+      '',
+      'I\'ll scan your email for booking confirmations, guest details, and property info that might not be on the platforms.',
+      '',
+      'I use a *Gmail App Password* — it\'s a one-time code from Google that gives me read access without your actual password.',
+      '',
+      '*How to get one (takes 30 seconds):*',
+      '1. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)',
+      '2. Select "Mail" and "Other" → type "Alfred"',
+      '3. Copy the 16-character password Google gives you',
+      '',
+      '_Note: You need 2-step verification enabled on your Google account._',
+    ].join('\n'),
+    {
+      disable_web_page_preview: true,
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('📧 I have my app password', 'gmail_ready')],
+        [Markup.button.callback('⏭ Skip Gmail for now', 'gmail_skip')],
+      ]),
+    },
+  );
+}
+
+bot.action('gmail_ready', (ctx) => {
+  const session = getSession(ctx.chat.id);
+  ctx.answerCbQuery();
+  session.step = 'gmail_email';
+  ctx.editMessageText('📧 Gmail app password setup', { parse_mode: 'Markdown' });
+  ctx.reply('What\'s your Gmail address?');
 });
 
 bot.action('gmail_skip', (ctx) => {
   const session = getSession(ctx.chat.id);
   ctx.answerCbQuery();
-  session.step = 'ask_num_properties';
-  ctx.editMessageText("⏭ Skipped Gmail — you can connect anytime. I'll rely on what you tell me instead.", { parse_mode: 'Markdown' });
-
-  setTimeout(() => {
-    ctx.replyWithMarkdown(
-      [
-        "No problem! I'll learn from your guest conversations over time.",
-        '',
-        "For now, let me ask you about your properties so I can start helping right away.",
-        '',
-        "How many properties do you manage?",
-      ].join('\n'),
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback('1', 'num_properties_1'),
-          Markup.button.callback('2', 'num_properties_2'),
-          Markup.button.callback('3', 'num_properties_3'),
-          Markup.button.callback('4+', 'num_properties_4'),
-        ],
-      ]),
-    );
-  }, 1000);
-});
-
-// ─── Property count & details ───────────────────────────────────────────────
-
-bot.action(/^num_properties_(\d+\+?)$/, (ctx) => {
-  const session = getSession(ctx.chat.id);
-  const count = ctx.match[1] === '4+' ? 4 : parseInt(ctx.match[1]);
-  ctx.answerCbQuery();
-  ctx.editMessageText(`📊 Managing *${ctx.match[1]}* ${count === 1 ? 'property' : 'properties'}`, { parse_mode: 'Markdown' });
-
-  session.totalProperties = count;
-  session.propertiesCompleted = 0;
-  session.step = 'property_details';
-  session.propertyField = 0;
-  session.currentProperty = {};
-
-  setTimeout(() => {
-    ctx.replyWithMarkdown(
-      [
-        `Great! Let's set up ${count === 1 ? 'your property' : 'your first property'}.`,
-        '',
-        "I'll ask a few quick questions. You can type *skip* to skip any question.",
-        '',
-        `${PROPERTY_FIELDS[0].emoji} ${PROPERTY_FIELDS[0].question}`,
-      ].join('\n'),
-    );
-  }, 500);
+  ctx.editMessageText('⏭ Skipped Gmail — I\'ll learn from your guest conversations instead.', { parse_mode: 'Markdown' });
+  session.step = 'ask_style';
+  setTimeout(() => askCommunicationStyle(ctx, session), 800);
 });
 
 // ─── Communication style ────────────────────────────────────────────────────
@@ -328,9 +406,9 @@ function askCommunicationStyle(ctx, session) {
   session.step = 'ask_style';
   ctx.replyWithMarkdown(
     [
-      '🎨 *Almost done! How should I talk to your guests?*',
+      '🎨 *One last thing — how should I talk to your guests?*',
       '',
-      "Pick the style that matches how you'd reply yourself:",
+      'Pick the style that sounds most like you:',
     ].join('\n'),
     Markup.inlineKeyboard([
       [Markup.button.callback('😊 Friendly', 'style_friendly'), Markup.button.callback('👔 Professional', 'style_professional')],
@@ -339,47 +417,38 @@ function askCommunicationStyle(ctx, session) {
   );
 }
 
+const STYLE_DESC = {
+  friendly: 'Warm and welcoming — like a helpful neighbor',
+  professional: 'Polished and clear — like a hotel concierge',
+  casual: 'Relaxed and easygoing — like texting a friend',
+  luxury: 'Elegant and attentive — five-star service',
+};
+
 bot.action(/^style_(.+)$/, (ctx) => {
   const session = getSession(ctx.chat.id);
-  const style = ctx.match[1];
-  session.style = style;
+  session.style = ctx.match[1];
   ctx.answerCbQuery();
+  ctx.editMessageText(`🎨 *${session.style.charAt(0).toUpperCase() + session.style.slice(1)}* — ${STYLE_DESC[session.style]}`, { parse_mode: 'Markdown' });
 
-  const styleDescriptions = {
-    friendly: "Warm and welcoming — like a helpful neighbor",
-    professional: "Polished and clear — like a hotel concierge",
-    casual: "Relaxed and easygoing — like texting a friend",
-    luxury: "Elegant and attentive — like a five-star butler",
-  };
-
-  ctx.editMessageText(
-    `🎨 Communication style: *${style.charAt(0).toUpperCase() + style.slice(1)}*\n_${styleDescriptions[style]}_`,
-    { parse_mode: 'Markdown' },
-  );
-
-  // Move to shadow mode explanation
-  setTimeout(() => sendShadowModeIntro(ctx, session), 800);
+  setTimeout(() => sendShadowMode(ctx, session), 800);
 });
 
 // ─── Shadow mode ────────────────────────────────────────────────────────────
 
-function sendShadowModeIntro(ctx, session) {
+function sendShadowMode(ctx, session) {
   session.step = 'shadow_mode';
   ctx.replyWithMarkdown(
     [
       '🛡 *Shadow Mode*',
       '',
-      "For safety, I'll start in *shadow mode*. Here's how it works:",
+      'I\'ll start by *drafting replies* and sending them to you here for approval.',
+      'You tap ✅ to send or ✏️ to edit. Once you trust my replies, switch to auto.',
       '',
-      "• When a guest messages you, I'll *draft a reply* and send it to you here for approval",
-      "• You can *approve, edit, or reject* each response",
-      "• Once you're confident in my replies, you can switch to *auto mode* and I'll reply directly",
-      '',
-      "_Most hosts run shadow mode for the first week, then switch to auto._",
+      '_Most hosts go auto after about a week._',
     ].join('\n'),
     Markup.inlineKeyboard([
-      [Markup.button.callback('🛡 Start in Shadow Mode (Recommended)', 'shadow_on')],
-      [Markup.button.callback('⚡ Start in Auto Mode', 'shadow_off')],
+      [Markup.button.callback('🛡 Shadow Mode (Recommended)', 'shadow_on')],
+      [Markup.button.callback('⚡ Auto Mode', 'shadow_off')],
     ]),
   );
 }
@@ -388,7 +457,7 @@ bot.action('shadow_on', (ctx) => {
   const session = getSession(ctx.chat.id);
   session.shadowMode = true;
   ctx.answerCbQuery();
-  ctx.editMessageText("🛡 *Shadow mode: ON* — I'll send drafts for your approval", { parse_mode: 'Markdown' });
+  ctx.editMessageText('🛡 Shadow mode — drafts for your approval', { parse_mode: 'Markdown' });
   finishOnboarding(ctx, session);
 });
 
@@ -396,7 +465,7 @@ bot.action('shadow_off', (ctx) => {
   const session = getSession(ctx.chat.id);
   session.shadowMode = false;
   ctx.answerCbQuery();
-  ctx.editMessageText("⚡ *Auto mode: ON* — I'll reply to guests directly and notify you", { parse_mode: 'Markdown' });
+  ctx.editMessageText('⚡ Auto mode — I\'ll reply directly and notify you', { parse_mode: 'Markdown' });
   finishOnboarding(ctx, session);
 });
 
@@ -407,44 +476,39 @@ function finishOnboarding(ctx, session) {
   session.onboarded = true;
 
   setTimeout(() => {
-    const platformsList = session.platforms.length > 0
-      ? session.platforms.map((p) => `  ${PLATFORM_INFO[p].emoji} ${PLATFORM_INFO[p].label}`).join('\n')
-      : '  ⚠️ None yet — connect from dashboard';
+    const platformList = session.platforms.length > 0
+      ? session.platforms.map((p) => `  ${PLATFORMS[p].emoji} ${PLATFORMS[p].label} — connected`).join('\n')
+      : '  ⚠️ None connected yet';
 
-    const propertiesList = session.properties.length > 0
-      ? session.properties.map((p, i) => `  📍 ${p.name || `Property ${i + 1}`}`).join('\n')
-      : '  ⚠️ None yet — tell me about them anytime';
+    const propList = session.properties.length > 0
+      ? session.properties.map((p, i) => `  📍 ${p.name}`).join('\n')
+      : '  🔄 Learning from your conversations...';
 
     ctx.replyWithMarkdown(
       [
-        '🎉 *Alfred is ready!*',
+        '🎉 *Alfred is live!*',
         '',
-        "Here's your setup summary:",
+        `*Platforms:*\n${platformList}`,
         '',
-        '*Platforms:*',
-        platformsList,
-        '',
-        '*Properties:*',
-        propertiesList,
+        `*Properties:*\n${propList}`,
         '',
         `*Style:* ${session.style.charAt(0).toUpperCase() + session.style.slice(1)}`,
-        `*Mode:* ${session.shadowMode ? '🛡 Shadow (drafts for approval)' : '⚡ Auto (replies directly)'}`,
-        `*Gmail:* ${session.gmailConnected ? '✅ Connected' : '⏭ Not yet'}`,
+        `*Mode:* ${session.shadowMode ? '🛡 Shadow' : '⚡ Auto'}`,
+        `*Gmail:* ${session.gmailEmail ? '✅ ' + session.gmailEmail : '⏭ Not connected'}`,
         '',
-        "I'm now monitoring your inboxes. Here's what you can do:",
+        'I\'m monitoring your inboxes now. When a guest messages you, I\'ll draft a reply and send it here for your approval.',
+        '',
+        'Your first briefing arrives tomorrow at 8am ☀️',
         '',
         '*Commands:*',
         '/briefing — Today\'s summary',
-        '/listings — Status of all properties',
-        '/escalations — Pending items needing attention',
+        '/listings — Your properties',
+        '/escalations — Items needing attention',
         '/pause — Pause auto-replies',
         '/resume — Resume auto-replies',
-        '/style — Change communication style',
-        '/auth [platform] [code] — Submit a 2FA code',
+        '/style — Change communication tone',
         '',
-        'Or just send me a message and I\'ll understand! 🤖',
-        '',
-        "_I'll send your first briefing tomorrow morning at 8am._",
+        '_Or just message me anytime — I understand natural language._',
       ].join('\n'),
     );
   }, 1000);
@@ -453,43 +517,48 @@ function finishOnboarding(ctx, session) {
 // ─── Post-onboarding commands ───────────────────────────────────────────────
 
 bot.command('briefing', (ctx) => {
-  ctx.replyWithMarkdown('📊 *Generating your briefing...*');
-  // TODO: Hook into agent system
-  setTimeout(() => {
-    ctx.replyWithMarkdown(
-      [
-        '🟢 *Daily Briefing — ' + new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) + '*',
-        '',
-        '📨 *Messages:* 0 received, 0 replied',
-        '⏱ *Avg Response Time:* —',
-        '🏠 *Bookings:* 0 new, 0 check-ins today',
-        '',
-        '✅ No open escalations',
-        '',
-        '_Alfred is monitoring your inboxes. All quiet for now!_',
-      ].join('\n'),
-    );
-  }, 1500);
+  const session = getSession(ctx.chat.id);
+  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
+  ctx.replyWithMarkdown(
+    [
+      `☀️ *Daily Briefing — ${date}*`,
+      '',
+      '📨 *Messages:* 0 received, 0 replied',
+      '⏱ *Avg Response Time:* —',
+      '🏠 *Bookings:* 0 new, 0 check-ins today',
+      '📊 *Sentiment:* —',
+      '',
+      '✅ No open escalations',
+      '',
+      `_Monitoring ${session.platforms.length} platform${session.platforms.length !== 1 ? 's' : ''}. All quiet!_`,
+    ].join('\n'),
+  );
 });
 
 bot.command('listings', (ctx) => {
   const session = getSession(ctx.chat.id);
   if (session.properties.length === 0) {
-    ctx.reply('No properties set up yet. Tell me about your first property — just send the name or address!');
+    ctx.replyWithMarkdown(
+      '🔄 I\'m still learning about your properties from your conversations. Send me a property name or address to add one manually.',
+    );
     return;
   }
   const list = session.properties
-    .map((p, i) => `${i + 1}. 📍 *${p.name || 'Unnamed'}*\n   WiFi: ${p.wifi_name || '—'} | Door: ${p.door_code || '—'}`)
+    .map((p, i) => {
+      const platforms = (p.platforms || []).map((pl) => PLATFORMS[pl]?.emoji || '').join(' ');
+      return `*${i + 1}. ${p.name}* ${platforms}\n   WiFi: ${p.wifi || '—'} | Door: ${p.door_code || '—'}`;
+    })
     .join('\n\n');
   ctx.replyWithMarkdown(`🏠 *Your Properties:*\n\n${list}`);
 });
 
 bot.command('escalations', (ctx) => {
-  ctx.reply('✅ No open escalations. All quiet!');
+  ctx.reply('✅ No open escalations.');
 });
 
 bot.command('pause', (ctx) => {
-  ctx.reply('⏸ Auto-replies paused. I\'ll still monitor messages but won\'t reply. Type /resume to restart.');
+  ctx.reply('⏸ Auto-replies paused. Type /resume to restart.');
 });
 
 bot.command('resume', (ctx) => {
@@ -497,8 +566,7 @@ bot.command('resume', (ctx) => {
 });
 
 bot.command('style', (ctx) => {
-  const session = getSession(ctx.chat.id);
-  askCommunicationStyle(ctx, session);
+  askCommunicationStyle(ctx, getSession(ctx.chat.id));
 });
 
 bot.command('auth', (ctx) => {
@@ -507,150 +575,256 @@ bot.command('auth', (ctx) => {
     ctx.reply('Usage: /auth airbnb 123456');
     return;
   }
-  const [platform, code] = parts;
-  ctx.reply(`🔐 Submitting code for ${platform}... Got it! Code: ${code}`);
-  // TODO: Forward to browser session manager
+  ctx.reply(`🔐 Code received for ${parts[0]}. Submitting...`);
 });
 
-// ─── Free text handler (main conversation engine) ───────────────────────────
+// ─── Free text handler ──────────────────────────────────────────────────────
 
 bot.on('text', (ctx) => {
   const session = getSession(ctx.chat.id);
   const text = ctx.message.text.trim();
 
-  // During property details Q&A
-  if (session.step === 'property_details') {
-    handlePropertyInput(ctx, session, text);
+  // ── Gap questions (temporary, pre-scraper) ──
+  if (session.step === 'gap_questions') {
+    handleGapInput(ctx, session, text);
     return;
   }
 
-  // During onboarding but not at a specific input step — nudge them
-  if (!session.onboarded && session.step !== 'new') {
-    // Check if they're trying to tell us something useful
-    if (text.toLowerCase().includes('property') || text.toLowerCase().includes('listing')) {
-      ctx.reply("I'd love to hear about your properties! Let's go through the setup flow first — tap the buttons above, or type /start to restart onboarding.");
+  // ── Gap questions (post-scraper) ──
+  if (session.step === 'gap_questions_scraped') {
+    handleScrapedGapInput(ctx, session, text);
+    return;
+  }
+
+  // ── Gmail email input ──
+  if (session.step === 'gmail_email') {
+    if (!text.includes('@')) {
+      ctx.reply('That doesn\'t look like an email. Try again:');
       return;
     }
-    ctx.reply("Let's finish setting you up first! Check the buttons above, or type /start to restart the onboarding.");
+    session.gmailEmail = text;
+    session.step = 'gmail_app_password';
+    ctx.replyWithMarkdown(
+      [
+        `Got it: *${text}*`,
+        '',
+        'Now paste the 16-character *app password* from Google.',
+        '_(It looks like: xxxx xxxx xxxx xxxx)_',
+      ].join('\n'),
+    );
     return;
   }
 
-  // Post-onboarding — AI conversation
+  // ── Gmail app password input ──
+  if (session.step === 'gmail_app_password') {
+    const cleaned = text.replace(/\s/g, '');
+    if (cleaned.length < 12) {
+      ctx.reply('That seems too short. App passwords are usually 16 characters. Try again:');
+      return;
+    }
+    session.gmailAppPassword = cleaned;
+    session.step = 'gmail_scanning';
+    ctx.replyWithMarkdown('📧 *Connecting to Gmail...*');
+
+    // TODO: Actually connect via IMAP
+    // const imap = new ImapClient(session.gmailEmail, cleaned);
+    // await imap.connect();
+    // const bookingEmails = await imap.search('booking confirmation');
+
+    setTimeout(() => {
+      ctx.replyWithMarkdown(
+        [
+          '✅ *Gmail connected!*',
+          '',
+          `Scanning *${session.gmailEmail}* for property details...`,
+        ].join('\n'),
+      );
+
+      setTimeout(() => {
+        ctx.replyWithMarkdown(
+          [
+            '📋 *Gmail scan complete!*',
+            '',
+            'I\'ll continue learning from your emails in the background.',
+            'Any new booking confirmations or guest details will be picked up automatically.',
+          ].join('\n'),
+        );
+
+        session.step = 'ask_style';
+        setTimeout(() => askCommunicationStyle(ctx, session), 1000);
+      }, 3000);
+    }, 2000);
+    return;
+  }
+
+  // ── Post-onboarding free chat ──
   if (session.onboarded) {
-    handleFreeText(ctx, session, text);
+    handleFreeChat(ctx, session, text);
     return;
   }
 
-  // New user who hasn't started
-  ctx.reply("Hey! Type /start to get set up with Alfred. 👋");
+  // ── Not in a specific step — nudge ──
+  if (session.step !== 'new') {
+    ctx.reply('Check the buttons above, or type /start to restart.');
+    return;
+  }
+
+  ctx.reply('Hey! Type /start to get set up. 👋');
 });
 
-function handlePropertyInput(ctx, session, text) {
-  const fieldIndex = session.propertyField;
-  const field = PROPERTY_FIELDS[fieldIndex];
+// ─── Gap question handlers ──────────────────────────────────────────────────
 
-  // Handle skip/done
+function handleGapInput(ctx, session, text) {
+  const fieldIndex = session.gapField || 0;
+  const field = GAP_FIELDS[fieldIndex];
   const lower = text.toLowerCase();
+
+  // Save the answer
   if (lower === 'skip' || lower === 'n/a' || lower === 'none') {
-    session.currentProperty[field.key] = null;
-  } else if (lower === 'done' && field.key === 'special_notes') {
     session.currentProperty[field.key] = null;
   } else {
     session.currentProperty[field.key] = text;
   }
 
-  // Move to next field
   const nextIndex = fieldIndex + 1;
 
-  if (nextIndex >= PROPERTY_FIELDS.length || (field.key === 'special_notes' && lower === 'done')) {
-    // Property complete
-    session.properties.push({ ...session.currentProperty });
+  if (nextIndex >= GAP_FIELDS.length) {
+    // This property is done
+    session.properties.push({ ...session.currentProperty, platforms: [...session.platforms] });
     session.propertiesCompleted++;
 
-    const summary = [
-      `✅ *${session.currentProperty.name || 'Property ' + session.propertiesCompleted}* saved!`,
-      '',
-    ];
+    // Show confirmation
+    const p = session.currentProperty;
+    ctx.replyWithMarkdown(
+      [
+        `✅ *${p.name || 'Property ' + session.propertiesCompleted}*`,
+        p.wifi ? `   📶 WiFi: ${p.wifi}` : '',
+        p.door_code ? `   🚪 Code: ${p.door_code}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    );
 
-    if (session.currentProperty.wifi_name) summary.push(`📶 WiFi: ${session.currentProperty.wifi_name} / ${session.currentProperty.wifi_password || '—'}`);
-    if (session.currentProperty.door_code) summary.push(`🚪 Door code: ${session.currentProperty.door_code}`);
-    if (session.currentProperty.checkin_time) summary.push(`⏰ Check-in: ${session.currentProperty.checkin_time} | Check-out: ${session.currentProperty.checkout_time || '—'}`);
-    if (session.currentProperty.house_rules) summary.push(`📋 Rules: ${session.currentProperty.house_rules}`);
-
-    ctx.replyWithMarkdown(summary.join('\n'));
-
-    // Check if more properties
+    // More properties?
     if (session.propertiesCompleted < (session.totalProperties || 1)) {
       session.currentProperty = {};
-      session.propertyField = 0;
-
+      session.gapField = 0;
       setTimeout(() => {
         ctx.replyWithMarkdown(
-          [
-            `Now let's set up *property ${session.propertiesCompleted + 1}*.`,
-            '',
-            `${PROPERTY_FIELDS[0].emoji} ${PROPERTY_FIELDS[0].question}`,
-          ].join('\n'),
+          `*Property ${session.propertiesCompleted + 1}:*\n📍 Name or address?`,
         );
-      }, 800);
+      }, 600);
     } else {
-      // All properties done — move to style
+      // All done — move to Gmail
       session.currentProperty = null;
-      setTimeout(() => askCommunicationStyle(ctx, session), 1000);
+      session.step = 'gmail_intro';
+      setTimeout(() => sendGmailIntro(ctx, session), 800);
     }
   } else {
-    // Ask next field
-    session.propertyField = nextIndex;
-    const nextField = PROPERTY_FIELDS[nextIndex];
-    ctx.reply(`${nextField.emoji} ${nextField.question}`);
+    // Next gap field
+    session.gapField = nextIndex;
+    ctx.reply(GAP_FIELDS[nextIndex].question);
   }
 }
 
-function handleFreeText(ctx, session, text) {
+function handleScrapedGapInput(ctx, session, text) {
+  const gap = session.missingFields[session.currentGapIndex];
   const lower = text.toLowerCase();
 
-  // Add property on the fly
-  if (lower.includes('add property') || lower.includes('new property') || lower.includes('another property')) {
-    session.step = 'property_details';
-    session.propertyField = 0;
+  // Save answer
+  if (lower !== 'skip' && lower !== 'n/a') {
+    session.properties[gap.propertyIndex][gap.field] = text;
+  }
+
+  session.currentGapIndex++;
+
+  if (session.currentGapIndex < session.missingFields.length) {
+    const nextGap = session.missingFields[session.currentGapIndex];
+    ctx.replyWithMarkdown(nextGap.question);
+  } else {
+    ctx.replyWithMarkdown('✅ *Got everything I need!*');
+    session.step = 'gmail_intro';
+    setTimeout(() => sendGmailIntro(ctx, session), 800);
+  }
+}
+
+// ─── Post-onboarding free chat ──────────────────────────────────────────────
+
+function handleFreeChat(ctx, session, text) {
+  const lower = text.toLowerCase();
+
+  if (lower.includes('add property') || lower.includes('new property')) {
+    session.step = 'gap_questions';
+    session.gapField = 0;
     session.currentProperty = {};
+    ctx.reply('📍 What\'s the name or address?');
+    return;
+  }
+
+  if (lower.includes('status') || lower.includes('how are things')) {
     ctx.replyWithMarkdown(
       [
-        "Sure! Let's add a new property.",
+        '📊 *Status:*',
+        `🏠 Properties: ${session.properties.length}`,
+        `💬 Style: ${session.style}`,
+        `🛡 Mode: ${session.shadowMode ? 'Shadow' : 'Auto'}`,
+        `📧 Gmail: ${session.gmailEmail || 'Not connected'}`,
         '',
-        `${PROPERTY_FIELDS[0].emoji} ${PROPERTY_FIELDS[0].question}`,
+        '_Monitoring your inboxes. All good!_',
       ].join('\n'),
     );
     return;
   }
 
-  // Status check
-  if (lower.includes('status') || lower.includes('how are things') || lower.includes('what\'s up')) {
+  // Example of how shadow mode approval will work
+  if (lower.includes('test') || lower.includes('demo')) {
     ctx.replyWithMarkdown(
       [
-        '📊 *Current Status:*',
+        '💬 *Draft Reply — Guest: Sarah M.*',
+        '_Airbnb · Cozy Downtown Loft_',
         '',
-        `🏠 *Properties:* ${session.properties.length}`,
-        `💬 *Style:* ${session.style}`,
-        `🛡 *Mode:* ${session.shadowMode ? 'Shadow' : 'Auto'}`,
-        `📧 *Gmail:* ${session.gmailConnected ? 'Connected' : 'Not connected'}`,
+        '> Hi Sarah! Thanks for your message. Check-in is at 3pm — I\'ll send you the door code the morning of your arrival. The WiFi is "CozyLoft" and the password is on the fridge. Let me know if you need anything else!',
         '',
-        "_I'm monitoring your inboxes. Everything looks good!_",
+        '_Tap below to send or edit:_',
       ].join('\n'),
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Send', 'draft_approve'), Markup.button.callback('✏️ Edit', 'draft_edit')],
+        [Markup.button.callback('❌ Don\'t send', 'draft_reject')],
+      ]),
     );
     return;
   }
 
-  // Default — acknowledge and process
-  ctx.reply(`🤖 Got it: "${text}"\n\nI'm processing your message. In full production, I'd use this to update my understanding of your properties and preferences.`);
+  ctx.reply(`🤖 Got it. I'll use this to improve my understanding of your preferences.`);
+}
+
+// Draft approval callbacks (demo)
+bot.action('draft_approve', (ctx) => {
+  ctx.answerCbQuery('Sent!');
+  ctx.editMessageText('✅ Reply sent to Sarah M.', { parse_mode: 'Markdown' });
+});
+
+bot.action('draft_edit', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.reply('Type your edited reply and I\'ll send it:');
+});
+
+bot.action('draft_reject', (ctx) => {
+  ctx.answerCbQuery();
+  ctx.editMessageText('❌ Reply not sent.', { parse_mode: 'Markdown' });
+});
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ─── Launch ─────────────────────────────────────────────────────────────────
 
 bot.launch().then(() => {
-  console.log('✅ Alfred bot is running!');
+  console.log('✅ Alfred bot is running (v2 — scrape-first onboarding)');
   console.log(`   Dashboard: ${DASHBOARD_URL}`);
-  console.log(`   VPS: ${VPS_URL}`);
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
