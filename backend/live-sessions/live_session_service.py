@@ -1,4 +1,4 @@
-""" 
+"""
 Host4Me Live Browser Session Service (Port 8101)
 
 Launches headed Playwright browsers with Xvfb + noVNC so users can
@@ -9,9 +9,10 @@ Anti-bot measures:
      through real residential IPs so PerimeterX/HUMAN doesn't flag datacenter IP
   2. Playwright stealth — patches navigator.webdriver, chrome runtime, plugins,
      languages, WebGL, and other automation fingerprints
-  3. Realistic browser args — removes automation banners, disables blink
+  3. Real Google Chrome binary — authentic TLS fingerprint (JA3/JA4)
+  4. Realistic browser args — removes automation banners, disables blink
      automation detection
-  4. Human-like viewport, user agent, timezone, locale
+  5. Human-like viewport, user agent, timezone, locale
 
 API contract (consumed by convex/onboarding.js):
   POST /sessions/create   { tenant_id, platform }  → { session_id, ws_port }
@@ -144,6 +145,7 @@ const toDataURL = HTMLCanvasElement.prototype.toDataURL;
 const getImageData = CanvasRenderingContext2D.prototype.getImageData;
 
 HTMLCanvasElement.prototype.toBlob = function(...args) {
+  // Add subtle noise
   const context = this.getContext('2d');
   if (context) {
     const style = context.fillStyle;
@@ -297,14 +299,23 @@ async def create_session(tenant_id: str, platform: str) -> dict:
             proxy_config["password"] = PROXY_PASSWORD
 
     # Launch HEADED browser on the Xvfb display
+    # Use real Google Chrome instead of Playwright's Chromium for authentic
+    # TLS fingerprint (JA3/JA4) — critical for bypassing PerimeterX/HUMAN
     launch_kwargs = {
-        "headless": False,  # Headed so it renders on Xvfb -> noVNC
+        "headless": False,  # Headed so it renders on Xvfb → noVNC
+        "channel": "chrome",  # Use system-installed Google Chrome
         "args": browser_args,
     }
     if proxy_config:
         launch_kwargs["proxy"] = proxy_config
 
-    browser = await _playwright.chromium.launch(**launch_kwargs)
+    try:
+        browser = await _playwright.chromium.launch(**launch_kwargs)
+    except Exception as e:
+        # Fall back to Playwright Chromium if Chrome not installed
+        print(f"Chrome launch failed ({e}), falling back to Chromium")
+        del launch_kwargs["channel"]
+        browser = await _playwright.chromium.launch(**launch_kwargs)
 
     # Create context with realistic fingerprint
     context_kwargs = {
@@ -321,7 +332,7 @@ async def create_session(tenant_id: str, platform: str) -> dict:
         "is_mobile": False,
         "java_script_enabled": True,
         "permissions": ["geolocation"],
-        "geolocation": {"latitude": 34.0522, "longitude": -118.2437},
+        "geolocation": {"latitude": 34.0522, "longitude": -118.2437},  # LA
     }
 
     context = await browser.new_context(**context_kwargs)
