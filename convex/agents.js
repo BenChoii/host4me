@@ -30,7 +30,7 @@ export const getActivity = query({
 
     const tenant = await ctx.db
       .query("tenants")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
       .unique();
     if (!tenant) return [];
 

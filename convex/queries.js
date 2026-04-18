@@ -40,7 +40,7 @@ export const getProperties = query({
 
     const tenant = await ctx.db
       .query("tenants")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
       .unique();
     if (!tenant) return [];
 
@@ -60,7 +60,7 @@ export const getEscalations = query({
 
     const tenant = await ctx.db
       .query("tenants")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
       .unique();
     if (!tenant) return [];
 
@@ -88,7 +88,7 @@ export const getCredentialStatus = query({
 
     const tenant = await ctx.db
       .query("tenants")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
       .unique();
     if (!tenant) return [];
 
@@ -115,7 +115,7 @@ export const getGmailStatus = query({
 
     const tenant = await ctx.db
       .query("tenants")
-      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
       .unique();
     if (!tenant) return null;
 
