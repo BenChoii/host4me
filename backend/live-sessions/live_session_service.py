@@ -780,15 +780,9 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
     captured_api_responses = []  # raw JSON blobs intercepted from network
 
     # ── 1. Wire up network interception BEFORE any navigation ──────────────────
+    # Capture ALL JSON responses — VRBO's SPA API uses varied endpoint names.
     async def handle_response(response):
         url = response.url
-        # Capture any JSON that looks like it could contain reservation or property data
-        keywords = (
-            "reservation", "booking", "listing", "property", "graphql",
-            "host/api", "traveler", "accommodation", "stay", "unit"
-        )
-        if not any(k in url.lower() for k in keywords):
-            return
         try:
             ct = response.headers.get("content-type", "")
             if "json" not in ct:
@@ -796,87 +790,122 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
             status = response.status
             if status < 200 or status >= 400:
                 return
+            # Skip tiny responses (analytics pings etc.)
+            content_length = int(response.headers.get("content-length", "999"))
+            if content_length < 50:
+                return
             body = await response.json()
-            captured_api_responses.append({"url": url, "body": body})
-            print(f"[vrbo-net] Captured {url} ({type(body).__name__}, status={status})")
+            # Filter to responses that look like they have meaningful data
+            body_str = str(body)
+            has_data = any(k in body_str.lower() for k in (
+                "reservation", "booking", "listing", "property", "propert",
+                "graphql", "host", "traveler", "accommodation", "stay",
+                "check_in", "checkin", "check-in", "unit", "rental",
+            ))
+            if has_data or ("vrbo" in url.lower() or "expedia" in url.lower()):
+                captured_api_responses.append({"url": url, "body": body})
+                print(f"[vrbo-net] Captured {url} (status={status})")
         except Exception as capture_err:
             print(f"[vrbo-net] Could not capture {url}: {capture_err}")
 
     page.on("response", handle_response)
 
     try:
-        # ── 2. Build reservation URL list ─────────────────────────────────────
-        # If we have the URL the user landed on after logging in, extract the
-        # locale prefix (e.g. /en-ca/) and build locale-specific URLs first.
-        def _locale_urls(path_suffix: str) -> list[str]:
-            """Return URLs with locale-aware prefix inferred from start_url first."""
-            urls = []
-            if start_url:
-                from urllib.parse import urlparse
-                parsed = urlparse(start_url)
-                base = f"{parsed.scheme}://{parsed.netloc}"
-                # Extract locale prefix like /en-ca, /en-us from the stored URL path
-                import re
-                m = re.match(r"^/(en-[a-z]{2})/", parsed.path)
-                locale_prefix = m.group(1) if m else None
-                if locale_prefix:
-                    urls.append(f"{base}/{locale_prefix}{path_suffix}")
-                    urls.append(f"{base}/{locale_prefix}/p{path_suffix}")
-                # Also try base without locale prefix
-                urls.append(f"{base}{path_suffix}")
-            # Generic fallbacks (owner.vrbo.com removed — fails via SOCKS tunnel)
-            urls += [
-                "https://www.vrbo.com/en-ca/host/reservations",
-                "https://www.vrbo.com/en-ca/p/reservations",
-                "https://www.vrbo.com/en-us/host/reservations",
-                "https://www.vrbo.com/host/reservations",
-            ]
-            # Deduplicate while preserving order
-            seen = set()
-            return [u for u in urls if not (u in seen or seen.add(u))]
-
-        reservation_urls = _locale_urls("/host/reservations")
-        landed_url = ""
+        # ── 2. Navigate — start from homepage and discover host portal ────────
+        # Strategy A: load the authenticated homepage. VRBO's React SPA fetches
+        # owner data on boot for authenticated host accounts, so we capture those
+        # API calls even before navigating to the host dashboard.
         NOT_FOUND_SIGNALS = [
             "page cannot be found", "page not found", "404",
             "doesn't exist", "no longer available",
         ]
-        for url in reservation_urls:
-            try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                await page.wait_for_timeout(5000)
+        landed_url = ""
+
+        # Determine base URL and locale prefix from stored finalUrl
+        locale_base = "https://www.vrbo.com/en-ca"
+        if start_url:
+            import re
+            from urllib.parse import urlparse
+            parsed = urlparse(start_url)
+            m = re.match(r"^/(en-[a-z]{2})/", parsed.path)
+            if m:
+                locale_base = f"{parsed.scheme}://{parsed.netloc}/{m.group(1)}"
+
+        # Load the authenticated homepage to capture SPA bootstrap API calls
+        homepage = f"{locale_base}/"
+        print(f"[vrbo-res] Loading authenticated homepage: {homepage}")
+        try:
+            await page.goto(homepage, wait_until="networkidle", timeout=30000)
+            await page.wait_for_timeout(3000)
+            landed_url = page.url
+            debug_urls_visited.append({"attempted": homepage, "landed": landed_url})
+        except Exception as e:
+            print(f"[vrbo-res] Homepage load error: {e}")
+            debug_urls_visited.append({"attempted": homepage, "error": str(e)})
+
+        # Check for session expiry
+        if "/login" in page.url or "/auth" in page.url:
+            return {"reservations": [], "listings": [],
+                    "debug_page_text": "SESSION EXPIRED", "debug_urls_visited": debug_urls_visited}
+
+        # Strategy B: find the host/owner portal link in the DOM
+        print("[vrbo-res] Searching DOM for host portal link...")
+        try:
+            owner_href = await page.evaluate("""() => {
+                const links = Array.from(document.querySelectorAll('a[href]'));
+                const candidate = links.find(a => {
+                    const h = (a.href || '').toLowerCase();
+                    const t = (a.textContent || '').toLowerCase().trim();
+                    return h.includes('owner.vrbo') || h.includes('/host') ||
+                           t.includes('host dashboard') || t.includes('my properties') ||
+                           t.includes('switch to hosting') || t.includes('owner');
+                });
+                return candidate ? candidate.href : null;
+            }""")
+            if owner_href:
+                print(f"[vrbo-res] Found host portal link: {owner_href}")
+                await page.goto(owner_href, wait_until="networkidle", timeout=30000)
+                await page.wait_for_timeout(4000)
                 landed_url = page.url
-                # Check for login redirect
-                if "/login" in landed_url or "/auth" in landed_url:
-                    debug_urls_visited.append({"attempted": url, "landed": landed_url, "error": "login redirect"})
-                    continue
-                # Check for 404 / page-not-found in page text
+                debug_urls_visited.append({"attempted": owner_href, "landed": landed_url})
+        except Exception as e:
+            print(f"[vrbo-res] DOM host-link search error: {e}")
+
+        # Strategy C: try owner.vrbo.com directly (browser may succeed where curl fails)
+        if "owner.vrbo.com" not in page.url:
+            owner_urls = [
+                "https://owner.vrbo.com/reservations",
+                "https://owner.vrbo.com/",
+                f"{locale_base}/account/bookings",
+                f"{locale_base}/account/reservations",
+            ]
+            for url in owner_urls:
                 try:
-                    body_text = (await page.inner_text("body")).lower()
+                    print(f"[vrbo-res] Trying: {url}")
+                    await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    await page.wait_for_timeout(3000)
+                    landed_url = page.url
+                    if "/login" in landed_url or "/auth" in landed_url:
+                        debug_urls_visited.append({"attempted": url, "landed": landed_url, "error": "login redirect"})
+                        continue
+                    body_text = ""
+                    try:
+                        body_text = (await page.inner_text("body")).lower()
+                    except Exception:
+                        pass
                     if any(sig in body_text for sig in NOT_FOUND_SIGNALS):
                         debug_urls_visited.append({"attempted": url, "landed": landed_url, "error": "page not found"})
                         print(f"[vrbo-res] 404 at {url}, trying next...")
                         continue
-                except Exception:
-                    pass
-                debug_urls_visited.append({"attempted": url, "landed": landed_url})
-                print(f"[vrbo-res] Landed at: {landed_url}")
-                break
-            except Exception as nav_err:
-                debug_urls_visited.append({"attempted": url, "error": str(nav_err)})
-                continue
-
-        if "/login" in page.url or "/auth" in page.url:
-            print("[vrbo-res] Session expired — redirected to login")
-            return {
-                "reservations": [],
-                "listings": [],
-                "debug_page_text": "SESSION EXPIRED",
-                "debug_urls_visited": debug_urls_visited,
-            }
+                    debug_urls_visited.append({"attempted": url, "landed": landed_url})
+                    print(f"[vrbo-res] Landed at: {landed_url}")
+                    break
+                except Exception as nav_err:
+                    debug_urls_visited.append({"attempted": url, "error": str(nav_err)})
+                    continue
 
         # Extra wait to catch lazy-loaded XHR
-        await page.wait_for_timeout(4000)
+        await page.wait_for_timeout(5000)
 
         # Save debug screenshot
         try:
@@ -1046,7 +1075,12 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
 
         # ── 5. Also navigate to properties page for listings ──────────────────
         if not listings:
-            listing_urls = _locale_urls("/host/properties")
+            listing_urls = [
+                f"{locale_base}/host/properties",
+                "https://owner.vrbo.com/listings",
+                "https://owner.vrbo.com/properties",
+                f"{locale_base}/account/listings",
+            ]
             for url in listing_urls:
                 try:
                     await page.goto(url, wait_until="domcontentloaded", timeout=20000)
