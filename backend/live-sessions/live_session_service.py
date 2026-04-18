@@ -793,6 +793,7 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
     debug_page_text = ""
     debug_urls_visited = []
     captured_api_responses = []  # raw JSON blobs intercepted from network
+    captured_graphql_requests = []  # GraphQL request bodies from page's natural SPA calls
 
     # ── 1. Wire up network interception BEFORE any navigation ──────────────────
     # Capture ALL JSON responses — VRBO's SPA API uses varied endpoint names.
@@ -823,7 +824,21 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
         except Exception as capture_err:
             print(f"[vrbo-net] Could not capture {url}: {capture_err}")
 
+    # Also intercept REQUESTS to capture GraphQL query bodies the SPA naturally sends.
+    # This tells us the exact operation names and variables VRBO uses — we can replay them.
+    def handle_request_sync(request):
+        url = request.url
+        try:
+            if "graphql" in url.lower() and request.method == "POST":
+                post_data = request.post_data or ""
+                if post_data and len(post_data) > 10:
+                    captured_graphql_requests.append({"url": url, "body": post_data})
+                    print(f"[vrbo-gql-req] Intercepted GraphQL POST {url[:80]}: {post_data[:200]}")
+        except Exception:
+            pass
+
     page.on("response", handle_response)
+    page.on("request", handle_request_sync)
 
     try:
         # ── 2. Navigate — start from homepage and discover host portal ────────
@@ -930,6 +945,26 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                     debug_urls_visited.append({"attempted": url, "error": str(nav_err)})
                     continue
 
+        # Strategy C2: navigate to host-specific pages on www — SPA may load reservation
+        # data and make GraphQL calls that we can intercept and replay.
+        for host_page in [
+            f"https://www.vrbo.com/host/reservations",
+            f"https://www.vrbo.com/host/listings",
+        ]:
+            try:
+                print(f"[vrbo-res] Trying host page: {host_page}")
+                await page.goto(host_page, wait_until="networkidle", timeout=20000)
+                await page.wait_for_timeout(3000)
+                landed = page.url
+                print(f"[vrbo-res] host page landed: {landed}")
+                debug_urls_visited.append({"attempted": host_page, "landed": landed})
+                # If we landed on owner.vrbo.com or a real host dashboard — great, wait longer
+                if "owner.vrbo.com" in landed or "/host" in landed:
+                    await page.wait_for_timeout(4000)
+                    break
+            except Exception as e:
+                print(f"[vrbo-res] {host_page} error: {e}")
+
         # Extra wait to catch lazy-loaded XHR from all navigations above
         await page.wait_for_timeout(5000)
 
@@ -953,69 +988,122 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                 print(f"[vrbo-diag] Extracted IDs — property: {vrbo_property_id}, user: {vrbo_user_id}")
                 break
 
-        if vrbo_property_id or vrbo_user_id:
-            uid = vrbo_user_id or ""
-            pid = vrbo_property_id or ""
-            # Try a variety of VRBO host API patterns
+        if vrbo_user_id:
+            uid = vrbo_user_id
+            # NOTE: vrbo_property_id from memberDetails URL is actually the VRBO tpid
+            # (e.g. 9002003), NOT a property/listing ID. Do NOT use it for /gc/property/ calls.
+            # Use user ID-based endpoints only.
             targeted_apis = [
                 f"/gc/booking/hosted/{uid}",
                 f"/gc/reservation/inbox/{uid}",
-                f"/gc/property/{pid}/reservations",
-                f"/gc/property/{pid}/calendar",
                 f"/api/v2/host/reservations?userId={uid}",
                 f"/api/host/inbox?hostId={uid}",
+                f"/gc/host/{uid}/properties",   # look for actual listing IDs
             ]
             for api_path in targeted_apis:
                 full_url = f"https://www.vrbo.com{api_path}"
+                await asyncio.sleep(1.5)   # throttle — avoid rate limit
                 try:
                     resp = await page.evaluate(f"""
                         async () => {{
                             try {{
-                                const r = await fetch('{full_url}', {{
+                                const headers = {{
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                }};
+                                let r = await fetch('{full_url}', {{
                                     credentials: 'include',
-                                    headers: {{ 'Accept': 'application/json' }},
+                                    headers,
                                 }});
+                                if (r.status === 429) {{
+                                    // Rate limited — wait 10 s and retry once
+                                    await new Promise(res => setTimeout(res, 10000));
+                                    r = await fetch('{full_url}', {{
+                                        credentials: 'include',
+                                        headers,
+                                    }});
+                                }}
                                 const text = await r.text();
-                                return {{ status: r.status, snippet: text.substring(0, 200) }};
+                                let isJson = false;
+                                try {{ JSON.parse(text); isJson = true; }} catch {{}}
+                                return {{ status: r.status, isJson, body: text.substring(0, 600) }};
                             }} catch(e) {{ return {{ error: e.toString() }}; }}
                         }}
                     """)
-                    print(f"[vrbo-api] {api_path} → {resp}")
+                    print(f"[vrbo-api] {api_path} → status={resp.get('status')} isJson={resp.get('isJson')} body={resp.get('body','')[:300]!r}")
+                    # If it returned real JSON, add to captured responses so the parser picks it up
+                    if resp.get("status") == 200 and resp.get("isJson"):
+                        try:
+                            body = json.loads(resp["body"])
+                            captured_api_responses.append({"url": full_url, "body": body})
+                            print(f"[vrbo-api] SUCCESS — added to captured responses")
+                        except Exception:
+                            pass
                 except Exception as e:
                     print(f"[vrbo-api] {api_path} error: {e}")
 
-        # ── Strategy E: GraphQL query for host reservations ───────────────────────
-        # VRBO uses GraphQL. Try common host-inbox query shapes.
-        print("[vrbo-res] Trying GraphQL host reservation queries...")
-        graphql_results = await page.evaluate("""
-            async () => {
-                const results = [];
-                // Try different operation names VRBO might use for host reservations
-                const queries = [
-                    `query { hostInbox { reservations { id checkIn checkOut guestName status } } }`,
-                    `query { propertyReservations { reservations { id arrivalDate departureDate } } }`,
-                    `query { hostReservations { items { confirmationCode checkIn checkOut guest { displayName } } } }`,
-                ];
-                for (const query of queries) {
-                    try {
-                        const r = await fetch('/graphql', {
-                            method: 'POST',
-                            credentials: 'include',
-                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                            body: JSON.stringify({ query }),
-                        });
-                        const data = await r.json();
-                        const snippet = JSON.stringify(data).substring(0, 300);
-                        results.push({ status: r.status, snippet });
-                    } catch(e) {
-                        results.push({ error: e.toString() });
-                    }
-                }
-                return results;
-            }
-        """)
-        for i, gql in enumerate(graphql_results or []):
-            print(f"[vrbo-gql] query[{i}]: {gql}")
+        # ── Strategy E: GraphQL ────────────────────────────────────────────────────
+        # Priority 1: replay GraphQL requests the page naturally made (captured above).
+        # Priority 2: try common host-inbox operation shapes.
+        if captured_graphql_requests:
+            print(f"[vrbo-gql] Replaying {len(captured_graphql_requests)} intercepted GraphQL request(s)...")
+            for gql_req in captured_graphql_requests[:5]:
+                gql_url = gql_req["url"]
+                gql_body = gql_req["body"]
+                try:
+                    result = await page.evaluate("""
+                        async (url, body) => {
+                            try {
+                                const r = await fetch(url, {
+                                    method: 'POST',
+                                    credentials: 'include',
+                                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                    body,
+                                });
+                                const text = await r.text();
+                                return { status: r.status, body: text.substring(0, 500) };
+                            } catch(e) { return { error: e.toString() }; }
+                        }
+                    """, gql_url, gql_body)
+                    print(f"[vrbo-gql] Replay {gql_url}: {result}")
+                    if result.get("status") == 200:
+                        try:
+                            body = json.loads(result["body"])
+                            captured_api_responses.append({"url": gql_url, "body": body})
+                            print(f"[vrbo-gql] SUCCESS — added replay response to captured")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"[vrbo-gql] Replay error: {e}")
+        else:
+            # No intercepted GraphQL — try known operation names
+            print("[vrbo-res] No intercepted GraphQL. Trying known operation names...")
+            gql_url = "https://www.vrbo.com/graphql"
+            gql_queries = [
+                '{"operationName":"HostReservations","query":"query HostReservations($startDate:String,$endDate:String){hostReservations(startDate:$startDate,endDate:$endDate){items{id confirmationCode checkIn checkOut status guest{displayName}}}}","variables":{"startDate":"2024-01-01","endDate":"2027-01-01"}}',
+                '{"operationName":"HostInbox","query":"query HostInbox{hostInbox{reservations{id checkIn checkOut guestName status}}}","variables":{}}',
+                '{"operationName":"PropertyReservations","query":"query PropertyReservations{propertyReservations{reservations{id arrivalDate departureDate}}}","variables":{}}',
+            ]
+            for i, gql_body in enumerate(gql_queries):
+                await asyncio.sleep(1.0)
+                try:
+                    result = await page.evaluate("""
+                        async (url, body) => {
+                            try {
+                                const r = await fetch(url, {
+                                    method: 'POST',
+                                    credentials: 'include',
+                                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                    body,
+                                });
+                                const text = await r.text();
+                                return { status: r.status, isHtml: text.trim().startsWith('<'), body: text.substring(0, 300) };
+                            } catch(e) { return { error: e.toString() }; }
+                        }
+                    """, gql_url, gql_body)
+                    print(f"[vrbo-gql] query[{i}]: {result}")
+                except Exception as e:
+                    print(f"[vrbo-gql] query[{i}] error: {e}")
 
         # Save debug screenshot
         try:
