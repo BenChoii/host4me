@@ -257,13 +257,26 @@ async def _apply_stealth(page):
 # Session management
 # ---------------------------------------------------------------------------
 async def create_session(tenant_id: str, platform: str) -> dict:
-    """Create a new live browser session with stealth + proxy."""
+    """Create a new live browser session with stealth + proxy.
+
+    Uses patchright (patched Playwright) instead of stock Playwright so that
+    PerimeterX/HUMAN cannot detect the CDP connection via V8 heap properties,
+    timing signals, or other binary-level fingerprints.
+    """
     global _playwright
 
-    from playwright.async_api import async_playwright
+    # patchright is a drop-in Playwright replacement that patches Chromium's
+    # binary to remove CDP fingerprints — the main reason PerimeterX blocks us.
+    # Falls back to stock playwright if patchright isn't installed.
+    try:
+        from patchright.async_api import async_playwright as _new_playwright
+        print("[session] Using patchright (CDP-patched Chromium)")
+    except ImportError:
+        from playwright.async_api import async_playwright as _new_playwright
+        print("[session] patchright not found, falling back to playwright")
 
     if not _playwright:
-        _playwright = await async_playwright().start()
+        _playwright = await _new_playwright().start()
 
     session_id = str(uuid.uuid4())[:8]
     display, vnc_port = _alloc_display_and_port()
@@ -276,20 +289,15 @@ async def create_session(tenant_id: str, platform: str) -> dict:
     x11vnc_proc, ws_proc = _start_websockify(vnc_port, display)
     await asyncio.sleep(0.5)
 
-    # Build browser launch args
+    # Minimal launch args — fewer flags = fewer bot signals.
+    # We intentionally removed: --disable-extensions, --disable-background-networking,
+    # --disable-default-apps, --disable-sync, --disable-translate,
+    # --metrics-recording-only, --no-first-run, --safebrowsing-disable-auto-update
+    # All of those are bot signals PerimeterX checks for.
     browser_args = [
         "--no-sandbox",
         "--disable-blink-features=AutomationControlled",
-        "--disable-infobars",
         "--disable-dev-shm-usage",
-        "--disable-background-networking",
-        "--disable-default-apps",
-        "--disable-extensions",
-        "--disable-sync",
-        "--disable-translate",
-        "--metrics-recording-only",
-        "--no-first-run",
-        "--safebrowsing-disable-auto-update",
         f"--display=:{display}",
     ]
 
@@ -301,41 +309,27 @@ async def create_session(tenant_id: str, platform: str) -> dict:
             proxy_config["username"] = PROXY_USERNAME
             proxy_config["password"] = PROXY_PASSWORD
 
-    # Launch HEADED browser on the Xvfb display
-    # Use real Google Chrome instead of Playwright's Chromium for authentic
-    # TLS fingerprint (JA3/JA4) — critical for bypassing PerimeterX/HUMAN
+    # patchright uses its own patched Chromium — don't specify channel
     launch_kwargs = {
         "headless": False,  # Headed so it renders on Xvfb → noVNC
-        "channel": "chrome",  # Use system-installed Google Chrome
         "args": browser_args,
     }
     if proxy_config:
         launch_kwargs["proxy"] = proxy_config
 
-    try:
-        browser = await _playwright.chromium.launch(**launch_kwargs)
-    except Exception as e:
-        # Fall back to Playwright Chromium if Chrome not installed
-        print(f"Chrome launch failed ({e}), falling back to Chromium")
-        del launch_kwargs["channel"]
-        browser = await _playwright.chromium.launch(**launch_kwargs)
+    browser = await _playwright.chromium.launch(**launch_kwargs)
 
-    # Create context with realistic fingerprint
+    # Create context — let patchright set the user agent naturally so it matches
+    # its patched Chromium version (hardcoding Chrome/147 while patchright ships
+    # Chromium ~136 creates a detectable version mismatch).
     context_kwargs = {
-        "user_agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/147.0.0.0 Safari/537.36"
-        ),
         "viewport": {"width": 1280, "height": 900},
-        "locale": "en-US",
-        "timezone_id": "America/Los_Angeles",
+        "locale": "en-CA",      # Canadian locale — matches Leo's VRBO account region
+        "timezone_id": "America/Toronto",
         "color_scheme": "light",
         "has_touch": False,
         "is_mobile": False,
         "java_script_enabled": True,
-        "permissions": ["geolocation"],
-        "geolocation": {"latitude": 34.0522, "longitude": -118.2437},  # LA
     }
 
     context = await browser.new_context(**context_kwargs)
@@ -693,14 +687,17 @@ async def api_scrape_listings(req: ScrapeRequest):
 async def _launch_stealth_browser(storage_state_json: str):
     """Shared helper: launch a headless stealth browser with saved cookies."""
     global _playwright
-    from playwright.async_api import async_playwright
+    try:
+        from patchright.async_api import async_playwright as _new_playwright
+    except ImportError:
+        from playwright.async_api import async_playwright as _new_playwright
     if not _playwright:
-        _playwright = await async_playwright().start()
+        _playwright = await _new_playwright().start()
 
     storage_state = json.loads(storage_state_json)
     browser_args = [
         "--no-sandbox", "--disable-blink-features=AutomationControlled",
-        "--disable-infobars", "--disable-dev-shm-usage",
+        "--disable-dev-shm-usage",
     ]
     proxy_config = None
     if PROXY_SERVER:
