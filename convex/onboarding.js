@@ -37,14 +37,18 @@ export const createLiveSession = action({
 
     const result = await response.json();
 
-    // Log the activity
-    await ctx.runMutation(internal.agents.logActivity, {
-      tenantId: tenant._id,
-      agentType: "alfred",
-      actionType: "live_session_created",
-      summary: `Live browser session created for ${args.platform} login`,
-      metadata: { platform: args.platform, sessionId: result.session_id },
-    });
+    // Log the activity (non-fatal — don't let a logging failure block the session)
+    try {
+      await ctx.runMutation(internal.agents.logActivity, {
+        tenantId: tenant._id,
+        agentType: "alfred",
+        actionType: "live_session_created",
+        summary: `Live browser session created for ${args.platform} login`,
+        metadata: { platform: args.platform, sessionId: result.session_id },
+      });
+    } catch (logErr) {
+      console.warn("logActivity failed (non-fatal):", logErr);
+    }
 
     // Construct noVNC URL routed through Caddy HTTPS reverse proxy
     // Caddy on the VPS proxies /vnc/{port}/* → localhost:{port}/*
