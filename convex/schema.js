@@ -121,6 +121,22 @@ export default defineSchema({
     lastSentAt: v.union(v.number(), v.null()),
   }).index("by_tenant", ["tenantId"]),
 
+  reservations: defineTable({
+    tenantId: v.id("tenants"),
+    platform: v.string(),
+    guestName: v.string(),
+    checkIn: v.string(),
+    checkOut: v.string(),
+    propertyName: v.string(),
+    status: v.string(), // "confirmed" | "pending" | "cancelled" | "completed"
+    guests: v.optional(v.union(v.number(), v.null())),
+    payout: v.optional(v.union(v.string(), v.number(), v.null())),
+    reservationId: v.optional(v.union(v.string(), v.null())),
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_tenant_platform", ["tenantId", "platform"])
+    .index("by_tenant_property", ["tenantId", "propertyName"]),
+
   escalations: defineTable({
     tenantId: v.id("tenants"),
     conversationId: v.union(v.id("conversations"), v.null()),
