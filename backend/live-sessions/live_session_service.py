@@ -371,6 +371,23 @@ async def finish_session(session_id: str) -> dict:
     if not s:
         raise ValueError(f"Session {session_id} not found")
 
+    platform = s.get("platform", "")
+
+    # ── For VRBO: navigate to owner.vrbo.com before saving state ───────────
+    # VRBO moved the host dashboard to owner.vrbo.com. If we only capture
+    # www.vrbo.com cookies, scraping owner.vrbo.com later will fail. By
+    # visiting it now (while the user is authenticated), the SSO exchange
+    # will set owner.vrbo.com cookies that get captured in the storage state.
+    if platform == "vrbo":
+        try:
+            print(f"[{session_id}] VRBO: visiting owner.vrbo.com to capture owner cookies...")
+            await s["page"].goto("https://owner.vrbo.com/", wait_until="networkidle", timeout=30000)
+            await s["page"].wait_for_timeout(3000)
+            owner_landed = s["page"].url
+            print(f"[{session_id}] VRBO: owner portal landed at {owner_landed}")
+        except Exception as owner_err:
+            print(f"[{session_id}] VRBO: owner.vrbo.com navigation error (non-fatal): {owner_err}")
+
     # Capture storage state (cookies + localStorage)
     storage_state = None
     cookie_count = 0
@@ -381,8 +398,6 @@ async def finish_session(session_id: str) -> dict:
         cookie_count = len(storage_state.get("cookies", []))
     except Exception as e:
         print(f"[{session_id}] Error capturing state: {e}")
-
-    platform = s["platform"]
 
     # Tear down
     try:
@@ -871,20 +886,82 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
         except Exception as e:
             print(f"[vrbo-res] DOM host-link search error: {e}")
 
-        # Strategy C: try owner.vrbo.com directly (browser may succeed where curl fails)
+        # ── Diagnostic: print cookie domains so we know what auth we have ──────
+        try:
+            context_cookies = await page.context.cookies()
+            vrbo_domains = list({c["domain"] for c in context_cookies if "vrbo" in c["domain"].lower() or "expedia" in c["domain"].lower()})
+            print(f"[vrbo-diag] Cookie domains: {vrbo_domains}")
+        except Exception as diag_err:
+            print(f"[vrbo-diag] Cookie domain check failed: {diag_err}")
+
+        # ── Extract property/user IDs from already-captured API URLs ────────────
+        # The /gc/memberDetails/{propertyId}/{userId}/... URL gives us IDs we
+        # can use to call targeted booking/reservation APIs.
+        vrbo_property_id = None
+        vrbo_user_id = None
+        import re as _re
+        for cap in captured_api_responses:
+            m = _re.search(r"/gc/memberDetails/(\d+)/(\d+)/", cap.get("url", ""))
+            if m:
+                vrbo_property_id, vrbo_user_id = m.group(1), m.group(2)
+                print(f"[vrbo-diag] Extracted IDs — property: {vrbo_property_id}, user: {vrbo_user_id}")
+                break
+
+        # Strategy C: targeted API calls using extracted property/user IDs
+        if vrbo_property_id or vrbo_user_id:
+            uid = vrbo_user_id or ""
+            pid = vrbo_property_id or ""
+            targeted_apis = [
+                # Host inbox / booking APIs keyed by user/property
+                f"https://www.vrbo.com/gc/booking/hosted/{uid}",
+                f"https://www.vrbo.com/gc/booking/inbox/{uid}",
+                f"https://www.vrbo.com/gc/reservation/hosted/{uid}",
+                f"https://www.vrbo.com/gc/property/{pid}/reservations",
+                f"https://www.vrbo.com/gc/property/{pid}/calendar",
+                f"https://www.vrbo.com/api/v2/host/reservations?userId={uid}",
+            ]
+            for api_url in targeted_apis:
+                try:
+                    print(f"[vrbo-res] Targeted API: {api_url}")
+                    resp = await page.evaluate(f"""
+                        async () => {{
+                            try {{
+                                const r = await fetch('{api_url}', {{
+                                    credentials: 'include',
+                                    headers: {{ 'Accept': 'application/json', 'Content-Type': 'application/json' }},
+                                }});
+                                if (!r.ok) return {{ status: r.status, url: '{api_url}' }};
+                                const data = await r.json();
+                                return {{ status: r.status, url: '{api_url}', data }};
+                            }} catch(e) {{
+                                return {{ error: e.toString(), url: '{api_url}' }};
+                            }}
+                        }}
+                    """)
+                    if resp and resp.get("data"):
+                        print(f"[vrbo-res] Targeted API hit: {api_url} (status={resp.get('status')})")
+                        captured_api_responses.append({"url": api_url, "body": resp["data"]})
+                    else:
+                        print(f"[vrbo-res] Targeted API miss: {api_url} → {resp}")
+                except Exception as e:
+                    print(f"[vrbo-res] Targeted API error {api_url}: {e}")
+
+        # Strategy D: try owner.vrbo.com directly — the browser (with proxy) may
+        # succeed even if curl returns 000. If cookies include .vrbo.com-domain
+        # cookies, owner.vrbo.com should honour the session.
         if "owner.vrbo.com" not in page.url:
             owner_urls = [
                 "https://owner.vrbo.com/reservations",
                 "https://owner.vrbo.com/",
                 f"{locale_base}/account/bookings",
-                f"{locale_base}/account/reservations",
             ]
             for url in owner_urls:
                 try:
                     print(f"[vrbo-res] Trying: {url}")
                     await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                    await page.wait_for_timeout(3000)
+                    await page.wait_for_timeout(4000)
                     landed_url = page.url
+                    print(f"[vrbo-res] After nav to {url} → landed at: {landed_url}")
                     if "/login" in landed_url or "/auth" in landed_url:
                         debug_urls_visited.append({"attempted": url, "landed": landed_url, "error": "login redirect"})
                         continue
@@ -898,7 +975,7 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                         print(f"[vrbo-res] 404 at {url}, trying next...")
                         continue
                     debug_urls_visited.append({"attempted": url, "landed": landed_url})
-                    print(f"[vrbo-res] Landed at: {landed_url}")
+                    print(f"[vrbo-res] SUCCESS Landed at: {landed_url}")
                     break
                 except Exception as nav_err:
                     debug_urls_visited.append({"attempted": url, "error": str(nav_err)})
@@ -1025,6 +1102,18 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                     listings.append(l)
 
         print(f"[vrbo-net] After network capture: {len(reservations)} reservations, {len(listings)} listings")
+
+        # Diagnostic: log structure of first few captured responses
+        for i, cap in enumerate(captured_api_responses[:8]):
+            url_short = cap.get("url", "")[-70:]
+            body = cap.get("body", {})
+            if isinstance(body, dict):
+                top_keys = list(body.keys())[:8]
+            elif isinstance(body, list):
+                top_keys = f"list[{len(body)}]"
+            else:
+                top_keys = type(body).__name__
+            print(f"[vrbo-diag] cap[{i}] {url_short} | top_keys={top_keys}")
 
         # ── 4. If network capture missed everything, fire explicit API fetches ──
         if not reservations:
