@@ -65,6 +65,8 @@ sessions: dict[str, dict] = {}
 _next_display = 10  # Xvfb display number counter
 _next_vnc_port = VNC_PORT_START
 _playwright = None
+_scrape_xvfb_proc = None   # Persistent Xvfb for non-headless scraping (display :50)
+_SCRAPE_DISPLAY = 50        # Fixed display number reserved for scraping
 
 
 # ---------------------------------------------------------------------------
@@ -418,17 +420,38 @@ async def finish_session(session_id: str) -> dict:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _scrape_xvfb_proc
     print(f"Live Session Service starting on port {PORT}")
     if PROXY_SERVER:
         print(f"  Residential proxy: {PROXY_SERVER.split('@')[-1] if '@' in PROXY_SERVER else PROXY_SERVER}")
     else:
         print("  WARNING: No residential proxy configured. Set PROXY_SERVER env var.")
         print("  Bot detection WILL block datacenter IPs on VRBO/Airbnb.")
+
+    # Start a persistent Xvfb display for non-headless scraping.
+    # Running the browser headed (but on a virtual display) avoids the CDP
+    # fingerprints that PerimeterX uses to detect headless=True.
+    try:
+        _scrape_xvfb_proc = subprocess.Popen(
+            ["Xvfb", f":{_SCRAPE_DISPLAY}", "-screen", "0", "1280x900x24", "-ac"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        import time; time.sleep(0.5)
+        print(f"  Scrape display: :{_SCRAPE_DISPLAY} (non-headless scraping)")
+    except Exception as e:
+        print(f"  WARNING: Could not start scrape Xvfb: {e}")
+
     yield
+
     # Cleanup all sessions on shutdown
     for sid in list(sessions.keys()):
         try:
             await finish_session(sid)
+        except Exception:
+            pass
+    if _scrape_xvfb_proc:
+        try:
+            _scrape_xvfb_proc.terminate()
         except Exception:
             pass
 
@@ -612,8 +635,10 @@ async def scrape_listings_with_cookies(storage_state_json: str, platform: str) -
             proxy_config["username"] = PROXY_USERNAME
             proxy_config["password"] = PROXY_PASSWORD
 
+    # headless=False — run on the scrape Xvfb display to avoid PerimeterX headless detection
+    browser_args.append(f"--display=:{_SCRAPE_DISPLAY}")
     launch_kwargs = {
-        "headless": True,
+        "headless": False,
         "args": browser_args,
     }
     if proxy_config:
@@ -622,17 +647,12 @@ async def scrape_listings_with_cookies(storage_state_json: str, platform: str) -
     browser = await _playwright.chromium.launch(**launch_kwargs)
 
     try:
-        # Create context with saved cookies
+        # Create context with saved cookies — no UA override, let patchright use its own
         context = await browser.new_context(
             storage_state=storage_state,
-            user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/147.0.0.0 Safari/537.36"
-            ),
             viewport={"width": 1280, "height": 900},
-            locale="en-US",
-            timezone_id="America/Los_Angeles",
+            locale="en-CA",
+            timezone_id="America/Toronto",
         )
 
         page = await context.new_page()
@@ -685,19 +705,28 @@ async def api_scrape_listings(req: ScrapeRequest):
 # ---------------------------------------------------------------------------
 
 async def _launch_stealth_browser(storage_state_json: str):
-    """Shared helper: launch a headless stealth browser with saved cookies."""
+    """Shared helper: launch a non-headless patchright browser on the scrape display.
+
+    Running headed (on a virtual Xvfb display) avoids the CDP fingerprints that
+    PerimeterX uses to detect headless=True.  patchright's own Chromium binary
+    matches its fingerprint so we never override the user-agent.
+    """
     global _playwright
     try:
         from patchright.async_api import async_playwright as _new_playwright
+        print("[scrape] Using patchright (CDP-patched Chromium)")
     except ImportError:
         from playwright.async_api import async_playwright as _new_playwright
+        print("[scrape] patchright not found, falling back to playwright")
     if not _playwright:
         _playwright = await _new_playwright().start()
 
     storage_state = json.loads(storage_state_json)
     browser_args = [
-        "--no-sandbox", "--disable-blink-features=AutomationControlled",
+        "--no-sandbox",
+        "--disable-blink-features=AutomationControlled",
         "--disable-dev-shm-usage",
+        f"--display=:{_SCRAPE_DISPLAY}",
     ]
     proxy_config = None
     if PROXY_SERVER:
@@ -706,17 +735,18 @@ async def _launch_stealth_browser(storage_state_json: str):
             proxy_config["username"] = PROXY_USERNAME
             proxy_config["password"] = PROXY_PASSWORD
 
-    launch_kwargs = {"headless": True, "args": browser_args}
+    # headless=False — run on virtual display so PerimeterX doesn't see headless signals
+    launch_kwargs = {"headless": False, "args": browser_args}
     if proxy_config:
         launch_kwargs["proxy"] = proxy_config
 
     browser = await _playwright.chromium.launch(**launch_kwargs)
     context = await browser.new_context(
         storage_state=storage_state,
-        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+        # No user_agent override — let patchright use its own consistent fingerprint
         viewport={"width": 1280, "height": 900},
-        locale="en-US",
-        timezone_id="America/Los_Angeles",
+        locale="en-CA",
+        timezone_id="America/Toronto",
     )
     page = await context.new_page()
     try:
