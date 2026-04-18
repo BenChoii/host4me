@@ -894,61 +894,10 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
         except Exception as diag_err:
             print(f"[vrbo-diag] Cookie domain check failed: {diag_err}")
 
-        # ── Extract property/user IDs from already-captured API URLs ────────────
-        # The /gc/memberDetails/{propertyId}/{userId}/... URL gives us IDs we
-        # can use to call targeted booking/reservation APIs.
-        vrbo_property_id = None
-        vrbo_user_id = None
         import re as _re
-        for cap in captured_api_responses:
-            m = _re.search(r"/gc/memberDetails/(\d+)/(\d+)/", cap.get("url", ""))
-            if m:
-                vrbo_property_id, vrbo_user_id = m.group(1), m.group(2)
-                print(f"[vrbo-diag] Extracted IDs — property: {vrbo_property_id}, user: {vrbo_user_id}")
-                break
 
-        # Strategy C: targeted API calls using extracted property/user IDs
-        if vrbo_property_id or vrbo_user_id:
-            uid = vrbo_user_id or ""
-            pid = vrbo_property_id or ""
-            targeted_apis = [
-                # Host inbox / booking APIs keyed by user/property
-                f"https://www.vrbo.com/gc/booking/hosted/{uid}",
-                f"https://www.vrbo.com/gc/booking/inbox/{uid}",
-                f"https://www.vrbo.com/gc/reservation/hosted/{uid}",
-                f"https://www.vrbo.com/gc/property/{pid}/reservations",
-                f"https://www.vrbo.com/gc/property/{pid}/calendar",
-                f"https://www.vrbo.com/api/v2/host/reservations?userId={uid}",
-            ]
-            for api_url in targeted_apis:
-                try:
-                    print(f"[vrbo-res] Targeted API: {api_url}")
-                    resp = await page.evaluate(f"""
-                        async () => {{
-                            try {{
-                                const r = await fetch('{api_url}', {{
-                                    credentials: 'include',
-                                    headers: {{ 'Accept': 'application/json', 'Content-Type': 'application/json' }},
-                                }});
-                                if (!r.ok) return {{ status: r.status, url: '{api_url}' }};
-                                const data = await r.json();
-                                return {{ status: r.status, url: '{api_url}', data }};
-                            }} catch(e) {{
-                                return {{ error: e.toString(), url: '{api_url}' }};
-                            }}
-                        }}
-                    """)
-                    if resp and resp.get("data"):
-                        print(f"[vrbo-res] Targeted API hit: {api_url} (status={resp.get('status')})")
-                        captured_api_responses.append({"url": api_url, "body": resp["data"]})
-                    else:
-                        print(f"[vrbo-res] Targeted API miss: {api_url} → {resp}")
-                except Exception as e:
-                    print(f"[vrbo-res] Targeted API error {api_url}: {e}")
-
-        # Strategy D: try owner.vrbo.com directly — the browser (with proxy) may
-        # succeed even if curl returns 000. If cookies include .vrbo.com-domain
-        # cookies, owner.vrbo.com should honour the session.
+        # Strategy C: try owner.vrbo.com directly — cookies include .vrbo.com domain
+        # which should be valid for owner.vrbo.com
         if "owner.vrbo.com" not in page.url:
             owner_urls = [
                 "https://owner.vrbo.com/reservations",
@@ -981,8 +930,92 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                     debug_urls_visited.append({"attempted": url, "error": str(nav_err)})
                     continue
 
-        # Extra wait to catch lazy-loaded XHR
+        # Extra wait to catch lazy-loaded XHR from all navigations above
         await page.wait_for_timeout(5000)
+
+        # ── Strategy D: navigate back to www.vrbo.com, extract IDs, try targeted APIs ──
+        # NOW all API responses (including memberDetails from the p/home navigation)
+        # are in captured_api_responses. Extract property/user IDs and use them.
+        try:
+            print(f"[vrbo-res] Navigating back to www.vrbo.com for targeted API calls...")
+            await page.goto(f"{locale_base}/", wait_until="domcontentloaded", timeout=20000)
+            await page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
+        # Extract IDs from ALL captured API URLs (now includes responses from all navigations)
+        vrbo_property_id = None
+        vrbo_user_id = None
+        for cap in captured_api_responses:
+            m = _re.search(r"/gc/memberDetails/(\d+)/(\d+)/", cap.get("url", ""))
+            if m:
+                vrbo_property_id, vrbo_user_id = m.group(1), m.group(2)
+                print(f"[vrbo-diag] Extracted IDs — property: {vrbo_property_id}, user: {vrbo_user_id}")
+                break
+
+        if vrbo_property_id or vrbo_user_id:
+            uid = vrbo_user_id or ""
+            pid = vrbo_property_id or ""
+            # Try a variety of VRBO host API patterns
+            targeted_apis = [
+                f"/gc/booking/hosted/{uid}",
+                f"/gc/reservation/inbox/{uid}",
+                f"/gc/property/{pid}/reservations",
+                f"/gc/property/{pid}/calendar",
+                f"/api/v2/host/reservations?userId={uid}",
+                f"/api/host/inbox?hostId={uid}",
+            ]
+            for api_path in targeted_apis:
+                full_url = f"https://www.vrbo.com{api_path}"
+                try:
+                    resp = await page.evaluate(f"""
+                        async () => {{
+                            try {{
+                                const r = await fetch('{full_url}', {{
+                                    credentials: 'include',
+                                    headers: {{ 'Accept': 'application/json' }},
+                                }});
+                                const text = await r.text();
+                                return {{ status: r.status, snippet: text.substring(0, 200) }};
+                            }} catch(e) {{ return {{ error: e.toString() }}; }}
+                        }}
+                    """)
+                    print(f"[vrbo-api] {api_path} → {resp}")
+                except Exception as e:
+                    print(f"[vrbo-api] {api_path} error: {e}")
+
+        # ── Strategy E: GraphQL query for host reservations ───────────────────────
+        # VRBO uses GraphQL. Try common host-inbox query shapes.
+        print("[vrbo-res] Trying GraphQL host reservation queries...")
+        graphql_results = await page.evaluate("""
+            async () => {
+                const results = [];
+                // Try different operation names VRBO might use for host reservations
+                const queries = [
+                    `query { hostInbox { reservations { id checkIn checkOut guestName status } } }`,
+                    `query { propertyReservations { reservations { id arrivalDate departureDate } } }`,
+                    `query { hostReservations { items { confirmationCode checkIn checkOut guest { displayName } } } }`,
+                ];
+                for (const query of queries) {
+                    try {
+                        const r = await fetch('/graphql', {
+                            method: 'POST',
+                            credentials: 'include',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({ query }),
+                        });
+                        const data = await r.json();
+                        const snippet = JSON.stringify(data).substring(0, 300);
+                        results.push({ status: r.status, snippet });
+                    } catch(e) {
+                        results.push({ error: e.toString() });
+                    }
+                }
+                return results;
+            }
+        """)
+        for i, gql in enumerate(graphql_results or []):
+            print(f"[vrbo-gql] query[{i}]: {gql}")
 
         # Save debug screenshot
         try:
@@ -1103,17 +1136,25 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
 
         print(f"[vrbo-net] After network capture: {len(reservations)} reservations, {len(listings)} listings")
 
-        # Diagnostic: log structure of first few captured responses
-        for i, cap in enumerate(captured_api_responses[:8]):
+        # Diagnostic: log structure of captured responses (focus on non-analytics ones)
+        import json as _json
+        for i, cap in enumerate(captured_api_responses[:15]):
             url_short = cap.get("url", "")[-70:]
             body = cap.get("body", {})
+            # Skip pure analytics noise
+            if "uisprime" in url_short or "evaluateExperiment" in url_short:
+                continue
             if isinstance(body, dict):
                 top_keys = list(body.keys())[:8]
+                snippet = _json.dumps(body)[:150]
             elif isinstance(body, list):
                 top_keys = f"list[{len(body)}]"
+                snippet = _json.dumps(body[0] if body else {})[:150]
             else:
                 top_keys = type(body).__name__
-            print(f"[vrbo-diag] cap[{i}] {url_short} | top_keys={top_keys}")
+                snippet = str(body)[:150]
+            print(f"[vrbo-diag] cap[{i}] {url_short}")
+            print(f"  keys={top_keys} | {snippet}")
 
         # ── 4. If network capture missed everything, fire explicit API fetches ──
         if not reservations:
