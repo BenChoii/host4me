@@ -1,4 +1,4 @@
-import { query, action, internalMutation } from "./_generated/server";
+import { query, action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
@@ -69,7 +69,7 @@ export const syncReservations = action({
 
     const result = await response.json();
 
-    // Upsert reservations
+    // Upsert reservations + feed into knowledge graph
     const reservations = result.reservations || [];
     for (const res of reservations) {
       await ctx.runMutation(internal.reservations.upsertReservation, {
@@ -84,12 +84,35 @@ export const syncReservations = action({
         payout: res.payout || null,
         reservationId: res.reservationId || null,
       });
+
+      // Feed into Alfred's Brain knowledge graph
+      if (res.guestName && res.guestName !== "Unknown") {
+        await ctx.runMutation(internal.knowledge.ingestReservation, {
+          tenantId: tenant._id,
+          guestName: res.guestName,
+          propertyName: res.propertyName || "Unknown Property",
+          platform,
+          checkIn: res.checkIn || "",
+          checkOut: res.checkOut || "",
+          status: res.status || "confirmed",
+          guests: res.guests || null,
+          payout: res.payout || null,
+        });
+      }
     }
 
-    // Upsert scraped listings as properties
+    // Upsert scraped listings as properties + feed into knowledge graph
     const listings = result.listings || [];
     for (const listing of listings) {
       await ctx.runMutation(internal.reservations.upsertProperty, {
+        tenantId: tenant._id,
+        name: listing.name || "Unknown Property",
+        platform,
+        location: listing.location || "",
+      });
+
+      // Feed into Alfred's Brain knowledge graph
+      await ctx.runMutation(internal.knowledge.ingestProperty, {
         tenantId: tenant._id,
         name: listing.name || "Unknown Property",
         platform,
@@ -126,7 +149,7 @@ export const syncReservations = action({
 });
 
 // Internal query: get browser session
-export const getBrowserSession = query({
+export const getBrowserSession = internalQuery({
   args: {
     tenantId: v.id("tenants"),
     platform: v.string(),
