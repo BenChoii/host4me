@@ -10,12 +10,14 @@ import {
   Bell,
   Shield,
   LogOut,
+  Brain,
 } from "lucide-react";
 import "./dashboard.css";
 
 const NAV_ITEMS = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Overview", end: true },
   { to: "/dashboard/properties", icon: Building2, label: "Properties" },
+  { to: "/dashboard/brain", icon: Brain, label: "Alfred's Brain" },
   { to: "/dashboard/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -130,6 +132,7 @@ export default function DashboardLayout() {
           <h1>
             {location.pathname === "/dashboard" && "Overview"}
             {location.pathname === "/dashboard/properties" && "Properties"}
+            {location.pathname === "/dashboard/brain" && "Alfred's Brain"}
             {location.pathname === "/dashboard/settings" && "Settings"}
             {location.pathname === "/dashboard/onboarding" && "Get Started"}
           </h1>
