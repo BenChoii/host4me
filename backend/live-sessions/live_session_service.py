@@ -486,10 +486,13 @@ async def scrape_vrbo_listings(context, page) -> list[dict]:
 
         # Try to navigate to the owner/host dashboard
         for dashboard_url in [
+            "https://www.vrbo.com/en-ca/host/properties",
             "https://www.vrbo.com/en-us/host/properties",
+            "https://www.vrbo.com/en-ca/p/properties",
+            "https://www.vrbo.com/en-ca/p/home",
+            "https://www.vrbo.com/p/home",
             "https://www.vrbo.com/host/properties",
             "https://owner.vrbo.com/properties",
-            "https://www.vrbo.com/en-us/host/dashboard",
         ]:
             try:
                 await page.goto(dashboard_url, wait_until="domcontentloaded", timeout=20000)
@@ -734,7 +737,10 @@ async def scrape_vrbo_reservations(page) -> dict:
     try:
         # Navigate to VRBO host reservations page
         for url in [
+            "https://www.vrbo.com/en-ca/host/reservations",
             "https://www.vrbo.com/en-us/host/reservations",
+            "https://www.vrbo.com/en-ca/p/reservations",
+            "https://www.vrbo.com/p/reservations",
             "https://www.vrbo.com/host/reservations",
             "https://owner.vrbo.com/reservations",
         ]:
@@ -823,7 +829,7 @@ async def scrape_vrbo_reservations(page) -> dict:
             try:
                 api_data = await page.evaluate("""
                     async () => {
-                        const urls = ['/api/host/reservations', '/en-us/host/api/reservations'];
+                        const urls = ['/api/host/reservations', '/en-ca/host/api/reservations', '/en-us/host/api/reservations'];
                         for (const url of urls) {
                             try {
                                 const r = await fetch(url, { credentials: 'include' });
@@ -864,7 +870,7 @@ async def scrape_vrbo_reservations(page) -> dict:
 
         # Also grab listings
         try:
-            for url in ["https://www.vrbo.com/en-us/host/properties", "https://www.vrbo.com/host/properties"]:
+            for url in ["https://www.vrbo.com/en-ca/host/properties", "https://www.vrbo.com/en-us/host/properties", "https://www.vrbo.com/en-ca/p/properties", "https://www.vrbo.com/host/properties"]:
                 try:
                     await page.goto(url, wait_until="domcontentloaded", timeout=20000)
                     await page.wait_for_timeout(2000)
