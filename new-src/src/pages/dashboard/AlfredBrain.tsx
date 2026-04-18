@@ -385,7 +385,7 @@ export default function AlfredBrain() {
       ctx.lineTo(t.x!, t.y!);
       ctx.strokeStyle = isHighlighted
         ? (NODE_TYPES[s.type]?.color || "#888") + "80"
-        : hasFocus ? "#1a1a2e30" : "#1a1a2e80";
+        : hasFocus ? "#d4d4d830" : "#a3a3a380";
       ctx.lineWidth = isHighlighted ? 2 : 1;
       ctx.stroke();
 
@@ -394,7 +394,7 @@ export default function AlfredBrain() {
         const mx = (s.x! + t.x!) / 2;
         const my = (s.y! + t.y!) / 2;
         ctx.font = "9px Inter, sans-serif";
-        ctx.fillStyle = "#66668888";
+        ctx.fillStyle = "#52525288";
         ctx.textAlign = "center";
         ctx.fillText(e.relationship, mx, my - 4);
       }
@@ -425,7 +425,7 @@ export default function AlfredBrain() {
       ctx.arc(n.x!, n.y!, r, 0, Math.PI * 2);
       ctx.fillStyle = typeInfo.color + "18";
       ctx.fill();
-      ctx.strokeStyle = isSelected ? "#fff" : typeInfo.color;
+      ctx.strokeStyle = isSelected ? "#1a1a1a" : typeInfo.color;
       ctx.lineWidth = isSelected ? 3 : 2;
       ctx.stroke();
 
@@ -447,7 +447,7 @@ export default function AlfredBrain() {
       // Label
       if (transform.k > 0.5) {
         ctx.font = "11px Inter, sans-serif";
-        ctx.fillStyle = isDimmed ? "#44446630" : "#9d9db5";
+        ctx.fillStyle = isDimmed ? "#a3a3a330" : "#525252";
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         const label = n.name.length > 20 ? n.name.slice(0, 18) + "…" : n.name;

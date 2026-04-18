@@ -14,8 +14,10 @@ import type * as auth from "../auth.js";
 import type * as chat from "../chat.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as knowledge from "../knowledge.js";
 import type * as onboarding from "../onboarding.js";
 import type * as queries from "../queries.js";
+import type * as reservations from "../reservations.js";
 import type * as sessions from "../sessions.js";
 import type * as tenants from "../tenants.js";
 
@@ -32,8 +34,10 @@ declare const fullApi: ApiFromModules<{
   chat: typeof chat;
   crons: typeof crons;
   http: typeof http;
+  knowledge: typeof knowledge;
   onboarding: typeof onboarding;
   queries: typeof queries;
+  reservations: typeof reservations;
   sessions: typeof sessions;
   tenants: typeof tenants;
 }>;
