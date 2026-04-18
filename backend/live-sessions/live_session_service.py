@@ -1111,6 +1111,75 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
         except Exception:
             pass
 
+        # ── Strategy F: direct HTTP requests (bypass browser proxy entirely) ───
+        # The SOCKS5 proxy fails for owner.vrbo.com. Make server-side HTTP calls
+        # using the browser's own cookies — no proxy, no CORS, no rate-limit from
+        # the previous browser fetch() calls.
+        if vrbo_user_id and not reservations:  # only if we haven't found data yet
+            try:
+                import httpx as _httpx
+                ctx_cookies = await page.context.cookies()
+                cookie_jar = {
+                    c["name"]: c["value"]
+                    for c in ctx_cookies
+                    if "vrbo" in c.get("domain", "").lower()
+                    or "expedia" in c.get("domain", "").lower()
+                }
+                print(f"[vrbo-direct] Using {len(cookie_jar)} cookies for direct HTTP requests")
+                ua = (
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                )
+                direct_headers = {
+                    "Accept": "application/json",
+                    "Accept-Language": "en-CA,en;q=0.9",
+                    "User-Agent": ua,
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer": "https://www.vrbo.com/",
+                }
+                uid = vrbo_user_id
+                direct_endpoints = [
+                    f"https://www.vrbo.com/gc/booking/hosted/{uid}",
+                    f"https://www.vrbo.com/gc/reservation/inbox/{uid}",
+                    f"https://owner.vrbo.com/api/v1/reservations",
+                    f"https://owner.vrbo.com/api/v1/properties",
+                    f"https://owner.vrbo.com/api/reservations",
+                    f"https://owner.vrbo.com/graphql",
+                ]
+                async with _httpx.AsyncClient(
+                    follow_redirects=True,
+                    timeout=20.0,
+                    cookies=cookie_jar,
+                    headers=direct_headers,
+                ) as client:
+                    for endpoint in direct_endpoints:
+                        try:
+                            await asyncio.sleep(1.0)
+                            resp = await client.get(endpoint)
+                            body_text = resp.text
+                            is_json = False
+                            parsed = None
+                            try:
+                                parsed = resp.json()
+                                is_json = True
+                            except Exception:
+                                pass
+                            print(
+                                f"[vrbo-direct] {endpoint} → "
+                                f"status={resp.status_code} isJson={is_json} "
+                                f"body={body_text[:200]!r}"
+                            )
+                            if resp.status_code == 200 and is_json and parsed:
+                                captured_api_responses.append({"url": endpoint, "body": parsed})
+                                print(f"[vrbo-direct] SUCCESS — added to captured responses")
+                        except Exception as req_err:
+                            print(f"[vrbo-direct] {endpoint} error: {req_err}")
+            except ImportError:
+                print("[vrbo-direct] httpx not available — skipping direct HTTP strategy")
+            except Exception as direct_err:
+                print(f"[vrbo-direct] Strategy failed: {direct_err}")
+
         # ── 3. Parse captured network responses ───────────────────────────────
         def _extract_from_blob(blob):
             """Recursively walk a JSON blob looking for reservation-like objects."""
@@ -1361,70 +1430,205 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
 
 
 async def scrape_airbnb_reservations(page) -> dict:
-    """Scrape reservations + listings from Airbnb host dashboard."""
+    """Scrape reservations + listings from Airbnb host dashboard.
+
+    Uses network interception to capture Airbnb's internal GraphQL/REST API
+    responses — much more reliable than DOM scraping against hashed class names.
+    Falls back to DOM parsing if no API data is captured.
+    """
     reservations = []
     listings = []
+    captured = []
 
-    try:
-        # Navigate to Airbnb hosting reservations
-        await page.goto("https://www.airbnb.com/hosting/reservations", wait_until="domcontentloaded", timeout=30000)
-        await page.wait_for_timeout(4000)
-
-        if "/login" in page.url:
-            print("[airbnb-res] Session expired")
-            return {"reservations": [], "listings": []}
-
-        print(f"[airbnb-res] At: {page.url}")
-
-        # Extract from DOM
-        res_elements = await page.query_selector_all(
-            '[data-testid*="reservation"], [class*="reservation-card"], '
-            'table tbody tr, [class*="trip"]'
-        )
-
-        for el in res_elements[:50]:
-            try:
-                text = await el.inner_text()
-                lines = [l.strip() for l in text.split("\n") if l.strip()]
-                # Airbnb typically shows: guest name, dates, property, status
-                if len(lines) >= 2:
-                    guest = lines[0]
-                    dates_str = next((l for l in lines if any(m in l.lower() for m in ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])), "")
-                    check_in, check_out = _parse_date_range(dates_str)
-                    prop = next((l for l in lines[1:] if l and l != guest and l != dates_str), "")
-                    status = next((l for l in lines if l.lower() in ["confirmed", "pending", "cancelled", "completed", "upcoming"]), "confirmed")
-
-                    if guest:
-                        reservations.append({
-                            "guestName": guest,
-                            "checkIn": check_in,
-                            "checkOut": check_out,
-                            "propertyName": prop,
-                            "status": _normalize_status(status),
-                        })
-            except Exception as e:
-                print(f"[airbnb-res] Parse error: {e}")
-
-        # Grab listings too
+    # ── 1. Wire up response interception before any navigation ──────────────
+    async def handle_response(response):
+        url = response.url
         try:
-            await page.goto("https://www.airbnb.com/hosting/listings", wait_until="domcontentloaded", timeout=25000)
-            await page.wait_for_timeout(3000)
-            listing_els = await page.query_selector_all('[class*="listing"], [data-testid*="listing"]')
-            for el in listing_els[:20]:
-                try:
-                    name_el = await el.query_selector('[class*="title"], [class*="name"], h2, h3')
-                    name = await name_el.inner_text() if name_el else ""
-                    if name.strip():
-                        listings.append({"name": name.strip(), "platform": "airbnb", "location": ""})
-                except Exception:
-                    pass
+            ct = response.headers.get("content-type", "")
+            if "json" not in ct:
+                return
+            if response.status < 200 or response.status >= 400:
+                return
+            # Airbnb API calls we care about
+            if not any(k in url for k in [
+                "airbnb.com/api", "api/v3", "reservations", "listing",
+                "hosting", "stays", "trips", "inbox", "graphql",
+            ]):
+                return
+            body = await response.json()
+            body_str = str(body).lower()
+            if any(k in body_str for k in [
+                "reservation", "booking", "checkin", "checkout",
+                "guest", "listing", "property",
+            ]):
+                captured.append({"url": url, "body": body})
+                print(f"[airbnb-net] Captured {url[:80]} (status={response.status})")
         except Exception:
             pass
+
+    page.on("response", handle_response)
+
+    try:
+        # ── 2. Load host reservations page (triggers API calls) ─────────────
+        print("[airbnb-res] Loading hosting/reservations...")
+        await page.goto("https://www.airbnb.com/hosting/reservations",
+                        wait_until="networkidle", timeout=30000)
+        await page.wait_for_timeout(4000)
+
+        if "/login" in page.url or "/authenticate" in page.url:
+            print("[airbnb-res] Session expired — redirected to login")
+            return {"reservations": [], "listings": [], "debug_page_text": "SESSION EXPIRED"}
+
+        print(f"[airbnb-res] Landed at: {page.url}")
+        print(f"[airbnb-res] Captured {len(captured)} API responses so far")
+
+        # Also load listings page to capture listing data
+        try:
+            await page.goto("https://www.airbnb.com/hosting/listings",
+                            wait_until="networkidle", timeout=25000)
+            await page.wait_for_timeout(3000)
+            print(f"[airbnb-res] Captured {len(captured)} API responses after listings page")
+        except Exception:
+            pass
+
+        # ── 3. Parse captured API responses ─────────────────────────────────
+        def _walk(obj, depth=0):
+            """Recursively extract reservations and listings from Airbnb API blobs."""
+            if depth > 12 or obj is None:
+                return
+            if isinstance(obj, list):
+                for item in obj:
+                    _walk(item, depth + 1)
+            elif isinstance(obj, dict):
+                keys_l = {k.lower(): k for k in obj}
+                # Reservation detection
+                has_guest = any(k in keys_l for k in (
+                    "guest", "guestname", "guest_name", "guest_user",
+                    "guestdetails", "reservee", "traveler",
+                ))
+                has_dates = any(k in keys_l for k in (
+                    "checkin", "checkout", "check_in", "check_out",
+                    "start_date", "end_date", "checkindate", "checkoutdate",
+                    "arrival_date", "departure_date",
+                ))
+                has_id = any(k in keys_l for k in (
+                    "confirmation_code", "confirmationcode", "reservation_id",
+                    "reservationid", "code", "id",
+                ))
+                if (has_guest or has_dates) and has_id:
+                    def _get(*candidates):
+                        for c in candidates:
+                            v = obj.get(keys_l.get(c, "__miss__"))
+                            if v is not None and v != "":
+                                return str(v)
+                        return ""
+                    guest_raw = obj.get(keys_l.get("guest") or keys_l.get("guest_user", "__miss__"), {})
+                    guest_name = ""
+                    if isinstance(guest_raw, dict):
+                        guest_name = (guest_raw.get("full_name") or guest_raw.get("name")
+                                      or guest_raw.get("first_name") or "")
+                    if not guest_name:
+                        guest_name = _get("guestname", "guest_name", "reservee")
+                    check_in  = _get("checkin", "check_in", "checkindate", "start_date", "arrival_date")
+                    check_out = _get("checkout", "check_out", "checkoutdate", "end_date", "departure_date")
+                    code      = _get("confirmation_code", "confirmationcode", "reservation_id", "code", "id")
+                    status    = _get("status", "state", "reservation_status")
+                    prop_name = _get("listing_name", "property_name", "listing_title")
+                    if not prop_name:
+                        listing = obj.get(keys_l.get("listing", "__miss__"), {})
+                        if isinstance(listing, dict):
+                            prop_name = listing.get("name") or listing.get("title") or ""
+                    if guest_name or (check_in and check_out):
+                        reservations.append({
+                            "guestName": guest_name,
+                            "checkIn": check_in[:10] if check_in else "",
+                            "checkOut": check_out[:10] if check_out else "",
+                            "confirmationCode": code,
+                            "propertyName": str(prop_name),
+                            "status": _normalize_status(status or "confirmed"),
+                            "platform": "airbnb",
+                        })
+                        return  # don't recurse further into this reservation object
+                # Listing detection
+                if "listing_id" in keys_l or ("name" in keys_l and "listing" in str(obj).lower()):
+                    name = obj.get(keys_l.get("name", "__miss__")) or obj.get(keys_l.get("title", "__miss__"), "")
+                    lid  = obj.get(keys_l.get("listing_id", "__miss__")) or obj.get(keys_l.get("id", "__miss__"), "")
+                    if name:
+                        listings.append({
+                            "name": str(name),
+                            "platform": "airbnb",
+                            "externalId": str(lid) if lid else "",
+                        })
+                for v in obj.values():
+                    _walk(v, depth + 1)
+
+        for cap in captured:
+            _walk(cap.get("body"))
+
+        # Deduplicate reservations by confirmationCode
+        seen_codes = set()
+        deduped = []
+        for r in reservations:
+            key = r.get("confirmationCode") or f"{r['guestName']}_{r['checkIn']}"
+            if key not in seen_codes:
+                seen_codes.add(key)
+                deduped.append(r)
+        reservations = deduped
+
+        # Deduplicate listings by name
+        seen_names = set()
+        listings = [l for l in listings if l["name"] not in seen_names and not seen_names.add(l["name"])]
+
+        print(f"[airbnb-res] Final: {len(reservations)} reservations, {len(listings)} listings")
+        print(f"[airbnb-res] Captured {len(captured)} API responses total")
+
+        # ── 4. DOM fallback if API interception found nothing ────────────────
+        if not reservations:
+            print("[airbnb-res] No API data — trying DOM fallback...")
+            try:
+                await page.goto("https://www.airbnb.com/hosting/reservations",
+                                wait_until="domcontentloaded", timeout=20000)
+                await page.wait_for_timeout(3000)
+                els = await page.query_selector_all(
+                    '[data-testid*="reservation"], [data-testid*="trip"], '
+                    '[class*="reservation"], table tbody tr'
+                )
+                for el in els[:50]:
+                    try:
+                        text = await el.inner_text()
+                        lines = [l.strip() for l in text.split("\n") if l.strip()]
+                        if len(lines) >= 2:
+                            months = ["jan","feb","mar","apr","may","jun",
+                                      "jul","aug","sep","oct","nov","dec"]
+                            guest = lines[0]
+                            dates_str = next((l for l in lines if any(m in l.lower() for m in months)), "")
+                            check_in, check_out = _parse_date_range(dates_str)
+                            prop = next((l for l in lines[1:] if l and l != guest and l != dates_str), "")
+                            status = next((l for l in lines if l.lower() in
+                                           ["confirmed","pending","cancelled","completed","upcoming"]), "confirmed")
+                            if guest and (check_in or dates_str):
+                                reservations.append({
+                                    "guestName": guest,
+                                    "checkIn": check_in,
+                                    "checkOut": check_out,
+                                    "propertyName": prop,
+                                    "status": _normalize_status(status),
+                                    "platform": "airbnb",
+                                })
+                    except Exception:
+                        pass
+                print(f"[airbnb-res] DOM fallback found {len(reservations)} reservations")
+            except Exception as dom_err:
+                print(f"[airbnb-res] DOM fallback error: {dom_err}")
 
     except Exception as e:
         print(f"[airbnb-res] Error: {e}")
 
-    return {"reservations": reservations, "listings": listings}
+    return {
+        "reservations": reservations,
+        "listings": listings,
+        "debug_urls_visited": [{"landed": page.url}],
+    }
 
 
 async def scrape_booking_reservations(page) -> dict:
