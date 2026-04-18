@@ -8,6 +8,7 @@ import Overview from "./pages/dashboard/Overview";
 import Onboarding from "./pages/dashboard/Onboarding";
 import Properties from "./pages/dashboard/Properties";
 import Settings from "./pages/dashboard/Settings";
+import AlfredBrain from "./pages/dashboard/AlfredBrain";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
@@ -44,6 +45,7 @@ export default function App() {
         <Route index element={<Overview />} />
         <Route path="onboarding" element={<Onboarding />} />
         <Route path="properties" element={<Properties />} />
+        <Route path="brain" element={<AlfredBrain />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>

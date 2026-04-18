@@ -1,4 +1,5 @@
 import { query, mutation, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
 // Log an agent action
@@ -77,6 +78,65 @@ export const storeMemory = internalMutation({
         value: args.value,
         source: args.source,
         confidence: args.confidence,
+      });
+    }
+
+    // Bridge: also write to the knowledge graph
+    // Map category → node type
+    const typeMap = {
+      property: "property",
+      guest: "guest",
+      preference: "preference",
+      issue: "issue",
+      vendor: "vendor",
+      area: "area_tip",
+      area_tip: "area_tip",
+      pattern: "pattern",
+      platform: "platform",
+      rule: "rule",
+    };
+    const nodeType = typeMap[args.category] || "preference";
+
+    // Bridge to knowledge graph — check for existing node with same name+type
+    const existingNode = await ctx.db
+      .query("knowledgeNodes")
+      .withIndex("by_tenant_type", (q) =>
+        q.eq("tenantId", args.tenantId).eq("type", nodeType)
+      )
+      .filter((q) => q.eq(q.field("name"), args.key))
+      .first();
+
+    let nodeId;
+    if (existingNode) {
+      if (args.confidence >= existingNode.confidence) {
+        await ctx.db.patch(existingNode._id, {
+          content: args.value,
+          confidence: args.confidence,
+          source: args.source,
+          lastConfirmedAt: Date.now(),
+          accessCount: existingNode.accessCount + 1,
+        });
+      }
+      nodeId = existingNode._id;
+    } else {
+      nodeId = await ctx.db.insert("knowledgeNodes", {
+        tenantId: args.tenantId,
+        type: nodeType,
+        name: args.key,
+        content: args.value,
+        confidence: args.confidence,
+        source: args.source,
+        tags: [args.category],
+        lastConfirmedAt: Date.now(),
+        accessCount: 0,
+        archived: false,
+      });
+
+      await ctx.db.insert("knowledgeFeed", {
+        tenantId: args.tenantId,
+        action: "created",
+        nodeId,
+        summary: `Learned: "${args.key}" — ${args.source}`,
       });
     }
   },

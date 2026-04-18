@@ -148,4 +148,50 @@ export default defineSchema({
   })
     .index("by_tenant", ["tenantId"])
     .index("by_tenant_status", ["tenantId", "status"]),
+
+  // ═══════════════════════════════════════════
+  // Alfred's Brain — Knowledge Graph
+  // ═══════════════════════════════════════════
+
+  // Knowledge nodes — each piece of Alfred's understanding
+  knowledgeNodes: defineTable({
+    tenantId: v.id("tenants"),
+    type: v.string(), // "property" | "guest" | "preference" | "issue" | "vendor" | "area_tip" | "pattern" | "platform" | "rule"
+    name: v.string(), // Short label shown on graph
+    content: v.string(), // Full knowledge text
+    confidence: v.number(), // 0.0–1.0
+    source: v.string(), // "conversation" | "booking" | "review" | "scrape" | "user_input" | "pattern_detection"
+    sourceRef: v.optional(v.string()), // Reference ID (conversation ID, reservation ID, etc.)
+    tags: v.optional(v.array(v.string())), // Searchable tags
+    lastConfirmedAt: v.number(), // Timestamp of last confirmation/use
+    accessCount: v.number(), // How many times Alfred used this knowledge
+    archived: v.optional(v.boolean()), // Soft-delete
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_tenant_type", ["tenantId", "type"])
+    .searchIndex("search_content", {
+      searchField: "content",
+      filterFields: ["tenantId", "type"],
+    }),
+
+  // Relationships between knowledge nodes
+  knowledgeEdges: defineTable({
+    tenantId: v.id("tenants"),
+    sourceNode: v.id("knowledgeNodes"),
+    targetNode: v.id("knowledgeNodes"),
+    relationship: v.string(), // "stayed_at" | "known_issue" | "serviced_by" | "nearby" | "correlates" | "applies" | etc.
+    strength: v.number(), // 0.0–1.0, strengthens with repeated confirmation
+  })
+    .index("by_tenant", ["tenantId"])
+    .index("by_source", ["sourceNode"])
+    .index("by_target", ["targetNode"]),
+
+  // Real-time feed of what Alfred learned
+  knowledgeFeed: defineTable({
+    tenantId: v.id("tenants"),
+    action: v.string(), // "created" | "updated" | "connected" | "confirmed" | "decayed"
+    nodeId: v.id("knowledgeNodes"),
+    summary: v.string(), // Human-readable description
+    metadata: v.optional(v.any()),
+  }).index("by_tenant", ["tenantId"]),
 });
