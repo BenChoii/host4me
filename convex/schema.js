@@ -65,6 +65,7 @@ export default defineSchema({
     platform: v.string(),
     storageState: v.string(),
     isValid: v.boolean(),
+    finalUrl: v.optional(v.string()), // URL the user landed on after logging in — used to infer locale for scraping
   }).index("by_tenant_platform", ["tenantId", "platform"]),
 
   alfredMemory: defineTable({

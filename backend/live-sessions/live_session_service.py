@@ -49,9 +49,12 @@ VNC_PORT_START = int(os.environ.get("VNC_PORT_START", "6080"))
 VNC_PORT_MAX = int(os.environ.get("VNC_PORT_MAX", "6099"))
 
 # Platform start URLs
+# For VRBO we use the homepage so the browser gets redirected to the correct
+# locale (e.g. /en-ca/ for Canadian accounts) rather than landing on a locale
+# mismatch that triggers VRBO's error page.
 PLATFORM_URLS = {
     "airbnb": "https://www.airbnb.com/login",
-    "vrbo": "https://www.vrbo.com/login",
+    "vrbo": "https://www.vrbo.com",
     "booking": "https://account.booking.com/sign-in",
 }
 
@@ -322,7 +325,7 @@ async def create_session(tenant_id: str, platform: str) -> dict:
         "user_agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/131.0.0.0 Safari/537.36"
+            "Chrome/147.0.0.0 Safari/537.36"
         ),
         "viewport": {"width": 1280, "height": 900},
         "locale": "en-US",
@@ -467,8 +470,9 @@ async def api_finish_session(session_id: str):
 # Scrape listings using saved session cookies
 # ---------------------------------------------------------------------------
 class ScrapeRequest(BaseModel):
-    storage_state: str  # JSON string of cookies/localStorage from Convex
-    platform: str       # "vrbo" | "airbnb" | "booking"
+    storage_state: str          # JSON string of cookies/localStorage from Convex
+    platform: str               # "vrbo" | "airbnb" | "booking"
+    start_url: str | None = None  # finalUrl stored at login — used to infer correct locale
 
 
 async def scrape_vrbo_listings(context, page) -> list[dict]:
@@ -487,9 +491,9 @@ async def scrape_vrbo_listings(context, page) -> list[dict]:
         # Try to navigate to the owner/host dashboard
         for dashboard_url in [
             "https://www.vrbo.com/en-ca/host/properties",
-            "https://www.vrbo.com/en-us/host/properties",
             "https://www.vrbo.com/en-ca/p/properties",
             "https://www.vrbo.com/en-ca/p/home",
+            "https://www.vrbo.com/en-us/host/properties",
             "https://www.vrbo.com/p/home",
             "https://www.vrbo.com/host/properties",
             "https://owner.vrbo.com/properties",
@@ -630,7 +634,7 @@ async def scrape_listings_with_cookies(storage_state_json: str, platform: str) -
             user_agent=(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/131.0.0.0 Safari/537.36"
+                "Chrome/147.0.0.0 Safari/537.36"
             ),
             viewport={"width": 1280, "height": 900},
             locale="en-US",
@@ -712,7 +716,7 @@ async def _launch_stealth_browser(storage_state_json: str):
     browser = await _playwright.chromium.launch(**launch_kwargs)
     context = await browser.new_context(
         storage_state=storage_state,
-        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
         viewport={"width": 1280, "height": 900},
         locale="en-US",
         timezone_id="America/Los_Angeles",
@@ -727,179 +731,354 @@ async def _launch_stealth_browser(storage_state_json: str):
     return browser, context, page
 
 
-async def scrape_vrbo_reservations(page) -> dict:
-    """Scrape reservations + listings from VRBO host dashboard."""
+async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
+    """Scrape reservations + listings from VRBO host dashboard via network interception.
+
+    VRBO is a React SPA — DOM scraping is unreliable because class names are hashed
+    and data loads asynchronously via internal GraphQL / REST APIs.  Instead we:
+      1. Wire up page.on('response', ...) BEFORE navigating so we capture every
+         API response that the page issues during its normal data-loading lifecycle.
+      2. Navigate to the reservations page and wait generously for XHR to complete.
+      3. Parse captured JSON payloads to extract reservation and property records.
+      4. Fall back to GraphQL introspection fetch and page-text heuristics if needed.
+
+    start_url: the finalUrl captured when the user last logged in (stored in Convex).
+               Used to infer the correct locale prefix (e.g. /en-ca/) so we navigate
+               directly to the right domain+path instead of guessing.
+    """
     reservations = []
     listings = []
     debug_page_text = ""
     debug_urls_visited = []
+    captured_api_responses = []  # raw JSON blobs intercepted from network
+
+    # ── 1. Wire up network interception BEFORE any navigation ──────────────────
+    async def handle_response(response):
+        url = response.url
+        # Capture any JSON that looks like it could contain reservation or property data
+        keywords = (
+            "reservation", "booking", "listing", "property", "graphql",
+            "host/api", "traveler", "accommodation", "stay", "unit"
+        )
+        if not any(k in url.lower() for k in keywords):
+            return
+        try:
+            ct = response.headers.get("content-type", "")
+            if "json" not in ct:
+                return
+            status = response.status
+            if status < 200 or status >= 400:
+                return
+            body = await response.json()
+            captured_api_responses.append({"url": url, "body": body})
+            print(f"[vrbo-net] Captured {url} ({type(body).__name__}, status={status})")
+        except Exception as capture_err:
+            print(f"[vrbo-net] Could not capture {url}: {capture_err}")
+
+    page.on("response", handle_response)
 
     try:
-        # Navigate to VRBO host reservations page
-        for url in [
-            "https://www.vrbo.com/en-ca/host/reservations",
-            "https://www.vrbo.com/en-us/host/reservations",
-            "https://www.vrbo.com/en-ca/p/reservations",
-            "https://www.vrbo.com/p/reservations",
-            "https://www.vrbo.com/host/reservations",
-            "https://owner.vrbo.com/reservations",
-        ]:
+        # ── 2. Build reservation URL list ─────────────────────────────────────
+        # If we have the URL the user landed on after logging in, extract the
+        # locale prefix (e.g. /en-ca/) and build locale-specific URLs first.
+        def _locale_urls(path_suffix: str) -> list[str]:
+            """Return URLs with locale-aware prefix inferred from start_url first."""
+            urls = []
+            if start_url:
+                from urllib.parse import urlparse
+                parsed = urlparse(start_url)
+                base = f"{parsed.scheme}://{parsed.netloc}"
+                # Extract locale prefix like /en-ca, /en-us from the stored URL path
+                import re
+                m = re.match(r"^/(en-[a-z]{2})/", parsed.path)
+                locale_prefix = m.group(1) if m else None
+                if locale_prefix:
+                    urls.append(f"{base}/{locale_prefix}{path_suffix}")
+                    urls.append(f"{base}/{locale_prefix}/p{path_suffix}")
+                # Also try base without locale prefix
+                urls.append(f"{base}{path_suffix}")
+            # Generic fallbacks (owner.vrbo.com removed — fails via SOCKS tunnel)
+            urls += [
+                "https://www.vrbo.com/en-ca/host/reservations",
+                "https://www.vrbo.com/en-ca/p/reservations",
+                "https://www.vrbo.com/en-us/host/reservations",
+                "https://www.vrbo.com/host/reservations",
+            ]
+            # Deduplicate while preserving order
+            seen = set()
+            return [u for u in urls if not (u in seen or seen.add(u))]
+
+        reservation_urls = _locale_urls("/host/reservations")
+        landed_url = ""
+        NOT_FOUND_SIGNALS = [
+            "page cannot be found", "page not found", "404",
+            "doesn't exist", "no longer available",
+        ]
+        for url in reservation_urls:
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=25000)
-                await page.wait_for_timeout(3000)
-                debug_urls_visited.append({"attempted": url, "landed": page.url})
-                if "/login" not in page.url and "/auth" not in page.url:
-                    print(f"[vrbo-res] Found reservations at: {page.url}")
-                    break
+                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                await page.wait_for_timeout(5000)
+                landed_url = page.url
+                # Check for login redirect
+                if "/login" in landed_url or "/auth" in landed_url:
+                    debug_urls_visited.append({"attempted": url, "landed": landed_url, "error": "login redirect"})
+                    continue
+                # Check for 404 / page-not-found in page text
+                try:
+                    body_text = (await page.inner_text("body")).lower()
+                    if any(sig in body_text for sig in NOT_FOUND_SIGNALS):
+                        debug_urls_visited.append({"attempted": url, "landed": landed_url, "error": "page not found"})
+                        print(f"[vrbo-res] 404 at {url}, trying next...")
+                        continue
+                except Exception:
+                    pass
+                debug_urls_visited.append({"attempted": url, "landed": landed_url})
+                print(f"[vrbo-res] Landed at: {landed_url}")
+                break
             except Exception as nav_err:
                 debug_urls_visited.append({"attempted": url, "error": str(nav_err)})
                 continue
 
         if "/login" in page.url or "/auth" in page.url:
-            print("[vrbo-res] Session expired")
-            return {"reservations": [], "listings": [], "debug_page_text": "SESSION EXPIRED - redirected to login", "debug_urls_visited": debug_urls_visited}
+            print("[vrbo-res] Session expired — redirected to login")
+            return {
+                "reservations": [],
+                "listings": [],
+                "debug_page_text": "SESSION EXPIRED",
+                "debug_urls_visited": debug_urls_visited,
+            }
+
+        # Extra wait to catch lazy-loaded XHR
+        await page.wait_for_timeout(4000)
 
         # Save debug screenshot
         try:
             await page.screenshot(path=str(DATA_DIR / "vrbo_reservations_debug.png"), full_page=True)
-            print(f"[vrbo-res] Debug screenshot saved to {DATA_DIR}/vrbo_reservations_debug.png")
-        except Exception as e:
-            print(f"[vrbo-res] Screenshot failed: {e}")
+        except Exception:
+            pass
 
-        # Save page HTML for debugging
-        try:
-            html = await page.content()
-            with open(str(DATA_DIR / "vrbo_reservations_debug.html"), "w") as f:
-                f.write(html)
-            print(f"[vrbo-res] Page HTML saved ({len(html)} chars)")
-        except Exception as e:
-            print(f"[vrbo-res] HTML save failed: {e}")
+        # ── 3. Parse captured network responses ───────────────────────────────
+        def _extract_from_blob(blob):
+            """Recursively walk a JSON blob looking for reservation-like objects."""
+            found_res = []
+            found_list = []
 
-        # Extract reservation data from DOM — try multiple selector strategies
-        await page.wait_for_timeout(2000)
+            def _walk(obj, depth=0):
+                if depth > 10:
+                    return
+                if isinstance(obj, list):
+                    for item in obj:
+                        _walk(item, depth + 1)
+                elif isinstance(obj, dict):
+                    keys_lower = {k.lower(): k for k in obj}
+                    # Reservation detection: has a guest name + date fields
+                    has_guest = any(k in keys_lower for k in (
+                        "guestname", "travelername", "traveler", "guest", "customername",
+                        "reserveename", "reservee",
+                    ))
+                    has_dates = any(k in keys_lower for k in (
+                        "checkin", "checkout", "arrivaldate", "departuredate",
+                        "startdate", "enddate", "checkindate", "checkoutdate",
+                    ))
+                    has_res_id = any(k in keys_lower for k in (
+                        "reservationid", "reservationnumber", "bookingid", "confirmationcode",
+                        "orderid", "id",
+                    ))
+                    if (has_guest or has_dates) and (has_res_id or has_dates):
+                        # Extract best-effort fields
+                        def _get(*candidates):
+                            for c in candidates:
+                                val = obj.get(keys_lower.get(c, "__miss__"))
+                                if val is not None and val != "":
+                                    return val
+                            return None
 
-        # Strategy 1: specific VRBO selectors
-        res_elements = await page.query_selector_all(
-            '[data-testid*="reservation"], [class*="reservation"], '
-            'tr[class*="booking"], [class*="trip-card"], [data-stid*="reservation"]'
-        )
-        print(f"[vrbo-res] Strategy 1 found {len(res_elements)} elements")
+                        guest = _get("guestname", "travelername", "traveler", "guest", "customername")
+                        if isinstance(guest, dict):
+                            guest = guest.get("fullName", guest.get("name", str(guest)))
+                        check_in = _get("checkin", "checkindate", "arrivaldate", "startdate")
+                        check_out = _get("checkout", "checkoutdate", "departuredate", "enddate")
+                        prop = _get("propertyname", "listingname", "unitname", "property", "listing")
+                        if isinstance(prop, dict):
+                            prop = prop.get("name", prop.get("headline", str(prop)))
+                        status = _get("status", "bookingstatus", "reservationstatus") or "confirmed"
+                        res_id = _get("reservationid", "reservationnumber", "bookingid", "confirmationcode", "id")
+                        guests_count = _get("guestcount", "numberofguests", "adultcount", "guests")
+                        payout = _get("payout", "totalpayout", "grossearnings", "hostpayout")
 
-        # Strategy 2: table rows
-        if not res_elements:
-            res_elements = await page.query_selector_all('table tbody tr')
-            print(f"[vrbo-res] Strategy 2 (table rows) found {len(res_elements)} elements")
+                        if guest or (check_in and check_out):
+                            found_res.append({
+                                "guestName": str(guest).strip() if guest else "Unknown",
+                                "checkIn": str(check_in) if check_in else "",
+                                "checkOut": str(check_out) if check_out else "",
+                                "propertyName": str(prop).strip() if prop else "",
+                                "status": _normalize_status(str(status)),
+                                "guests": guests_count,
+                                "payout": payout,
+                                "reservationId": str(res_id) if res_id else None,
+                            })
+                            return  # don't descend into reservation objects
 
-        # Strategy 3: any card/list-item-like elements
-        if not res_elements:
-            res_elements = await page.query_selector_all(
-                '[class*="card"], [class*="list-item"], [class*="row"][class*="book"], '
-                '[role="row"], [class*="Reservation"], [class*="booking"]'
-            )
-            print(f"[vrbo-res] Strategy 3 (generic cards) found {len(res_elements)} elements")
+                    # Listing detection: has a name + location/address without guest names
+                    has_listing_name = any(k in keys_lower for k in (
+                        "headline", "propertyname", "listingname", "unitname", "propertytitle",
+                    ))
+                    has_listing_loc = any(k in keys_lower for k in (
+                        "city", "location", "address", "latitude", "longitude",
+                    ))
+                    if has_listing_name and not has_guest:
+                        def _getl(*candidates):
+                            for c in candidates:
+                                val = obj.get(keys_lower.get(c, "__miss__"))
+                                if val is not None and val != "":
+                                    return val
+                            return None
+                        name = _getl("headline", "propertyname", "listingname", "unitname", "propertytitle")
+                        loc = _getl("city", "location", "address")
+                        if isinstance(loc, dict):
+                            loc = loc.get("city", loc.get("address", ""))
+                        if name:
+                            found_list.append({
+                                "name": str(name).strip(),
+                                "location": str(loc).strip() if loc else "",
+                                "platform": "vrbo",
+                            })
+                            return
 
-        for el in res_elements[:50]:
-            try:
-                guest_el = await el.query_selector('[class*="guest"], [class*="name"], [class*="traveler"]')
-                dates_el = await el.query_selector('[class*="date"], [class*="check"]')
-                prop_el = await el.query_selector('[class*="property"], [class*="listing"]')
-                status_el = await el.query_selector('[class*="status"], [class*="badge"]')
+                    # Recurse into all values
+                    for v in obj.values():
+                        _walk(v, depth + 1)
 
-                guest = await guest_el.inner_text() if guest_el else ""
-                dates = await dates_el.inner_text() if dates_el else ""
-                prop = await prop_el.inner_text() if prop_el else ""
-                status = await status_el.inner_text() if status_el else "confirmed"
+            _walk(blob)
+            return found_res, found_list
 
-                # Parse dates — try common formats
-                check_in, check_out = _parse_date_range(dates)
+        seen_res_ids = set()
+        seen_listing_names = set()
 
-                if guest.strip():
-                    reservations.append({
-                        "guestName": guest.strip(),
-                        "checkIn": check_in,
-                        "checkOut": check_out,
-                        "propertyName": prop.strip(),
-                        "status": _normalize_status(status.strip()),
-                    })
-            except Exception as e:
-                print(f"[vrbo-res] Error parsing element: {e}")
+        for capture in captured_api_responses:
+            blob = capture["body"]
+            res_found, list_found = _extract_from_blob(blob)
+            for r in res_found:
+                key = r.get("reservationId") or f"{r['guestName']}|{r['checkIn']}"
+                if key not in seen_res_ids:
+                    seen_res_ids.add(key)
+                    reservations.append(r)
+            for l in list_found:
+                if l["name"] not in seen_listing_names:
+                    seen_listing_names.add(l["name"])
+                    listings.append(l)
 
-        # Fallback: try to extract from page JavaScript/API
+        print(f"[vrbo-net] After network capture: {len(reservations)} reservations, {len(listings)} listings")
+
+        # ── 4. If network capture missed everything, fire explicit API fetches ──
         if not reservations:
             try:
                 api_data = await page.evaluate("""
                     async () => {
-                        const urls = ['/api/host/reservations', '/en-ca/host/api/reservations', '/en-us/host/api/reservations'];
-                        for (const url of urls) {
+                        const endpoints = [
+                            '/api/host/reservations',
+                            '/en-us/host/api/reservations',
+                            '/en-ca/host/api/reservations',
+                            '/api/v2/host/reservations',
+                            '/host/api/reservations',
+                        ];
+                        for (const url of endpoints) {
                             try {
-                                const r = await fetch(url, { credentials: 'include' });
-                                if (r.ok) return await r.json();
+                                const r = await fetch(url, {
+                                    credentials: 'include',
+                                    headers: { 'Accept': 'application/json' },
+                                });
+                                if (r.ok) {
+                                    const data = await r.json();
+                                    return { url, data };
+                                }
                             } catch(e) {}
                         }
                         return null;
                     }
                 """)
                 if api_data:
-                    items = api_data if isinstance(api_data, list) else api_data.get("reservations", api_data.get("items", []))
-                    for item in items:
+                    print(f"[vrbo-res] API fetch hit: {api_data.get('url')}")
+                    blob = api_data.get("data", {})
+                    items = blob if isinstance(blob, list) else (
+                        blob.get("reservations", blob.get("items", blob.get("data", [])))
+                    )
+                    for item in (items if isinstance(items, list) else []):
                         reservations.append({
-                            "guestName": item.get("guestName", item.get("travelerName", "Unknown")),
+                            "guestName": str(item.get("guestName", item.get("travelerName", "Unknown"))).strip(),
                             "checkIn": item.get("checkIn", item.get("arrivalDate", "")),
                             "checkOut": item.get("checkOut", item.get("departureDate", "")),
                             "propertyName": item.get("propertyName", item.get("listingName", "")),
-                            "status": _normalize_status(item.get("status", "confirmed")),
+                            "status": _normalize_status(str(item.get("status", "confirmed"))),
                             "guests": item.get("guestCount", item.get("numberOfGuests")),
                             "payout": item.get("payout", item.get("totalPayout")),
                             "reservationId": item.get("reservationId", item.get("id")),
                         })
-            except Exception as e:
-                print(f"[vrbo-res] API fallback failed: {e}")
+            except Exception as api_err:
+                print(f"[vrbo-res] Explicit API fetch failed: {api_err}")
 
-        # Fallback 2: extract all visible text and parse for reservation-like patterns
-        if not reservations:
-            try:
-                all_text = await page.inner_text("body")
-                debug_page_text = all_text[:2000]
-                print(f"[vrbo-res] Full page text ({len(all_text)} chars): {all_text[:500]}")
-            except Exception as e:
-                print(f"[vrbo-res] Text extraction failed: {e}")
-        else:
-            debug_page_text = f"Found {len(reservations)} reservations"
-
-        print(f"[vrbo-res] Final: {len(reservations)} reservations found")
-
-        # Also grab listings
-        try:
-            for url in ["https://www.vrbo.com/en-ca/host/properties", "https://www.vrbo.com/en-us/host/properties", "https://www.vrbo.com/en-ca/p/properties", "https://www.vrbo.com/host/properties"]:
+        # ── 5. Also navigate to properties page for listings ──────────────────
+        if not listings:
+            listing_urls = _locale_urls("/host/properties")
+            for url in listing_urls:
                 try:
                     await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                    await page.wait_for_timeout(2000)
-                    if "/login" not in page.url:
-                        break
+                    await page.wait_for_timeout(5000)
+                    if "/login" in page.url or "/auth" in page.url:
+                        continue
+                    try:
+                        body_text = (await page.inner_text("body")).lower()
+                        if any(sig in body_text for sig in NOT_FOUND_SIGNALS):
+                            debug_urls_visited.append({"attempted": url, "landed": page.url, "error": "page not found"})
+                            continue
+                    except Exception:
+                        pass
+                    debug_urls_visited.append({"attempted": url, "landed": page.url})
+                    break
                 except Exception:
                     continue
 
-            prop_elements = await page.query_selector_all(
-                '[data-testid*="property"], [class*="property-card"], [class*="listing"]'
-            )
-            for el in prop_elements[:20]:
-                try:
-                    name_el = await el.query_selector('[class*="name"], [class*="title"], h2, h3')
-                    loc_el = await el.query_selector('[class*="location"], [class*="address"]')
-                    name = await name_el.inner_text() if name_el else ""
-                    loc = await loc_el.inner_text() if loc_el else ""
-                    if name.strip():
-                        listings.append({"name": name.strip(), "location": loc.strip(), "platform": "vrbo"})
-                except Exception:
-                    pass
+            # Re-parse whatever new network responses came in
+            for capture in captured_api_responses:
+                blob = capture["body"]
+                _, list_found = _extract_from_blob(blob)
+                for l in list_found:
+                    if l["name"] not in seen_listing_names:
+                        seen_listing_names.add(l["name"])
+                        listings.append(l)
+
+        # ── 6. Page-text fallback for debug / partial extraction ───────────────
+        if not reservations:
+            try:
+                all_text = await page.inner_text("body")
+                debug_page_text = all_text[:3000]
+                print(f"[vrbo-res] Page text ({len(all_text)} chars): {all_text[:300]}")
+            except Exception:
+                pass
+        else:
+            debug_page_text = f"network-interception: {len(reservations)} reservations, {len(listings)} listings"
+
+        print(f"[vrbo-res] Final: {len(reservations)} reservations, {len(listings)} listings")
+        print(f"[vrbo-res] Captured {len(captured_api_responses)} API responses")
+
+    except Exception as e:
+        print(f"[vrbo-res] Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
+        debug_page_text = f"ERROR: {e}"
+    finally:
+        # Clean up listener to avoid memory leaks
+        try:
+            page.remove_listener("response", handle_response)
         except Exception:
             pass
 
-    except Exception as e:
-        print(f"[vrbo-res] Error: {e}")
-        debug_page_text = f"ERROR: {e}"
-
-    return {"reservations": reservations, "listings": listings, "debug_page_text": debug_page_text, "debug_urls_visited": debug_urls_visited}
+    return {
+        "reservations": reservations,
+        "listings": listings,
+        "debug_page_text": debug_page_text,
+        "debug_urls_visited": debug_urls_visited,
+    }
 
 
 async def scrape_airbnb_reservations(page) -> dict:
@@ -1070,7 +1249,7 @@ async def api_scrape_reservations(req: ScrapeRequest):
         browser, context, page = await _launch_stealth_browser(req.storage_state)
         try:
             if req.platform == "vrbo":
-                result = await scrape_vrbo_reservations(page)
+                result = await scrape_vrbo_reservations(page, start_url=req.start_url)
             elif req.platform == "airbnb":
                 result = await scrape_airbnb_reservations(page)
             elif req.platform == "booking":

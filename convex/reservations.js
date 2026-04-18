@@ -52,13 +52,15 @@ export const syncReservations = action({
       throw new Error("LIVE_BROWSER_URL not configured");
     }
 
-    // Call the VPS scraper
+    // Call the VPS scraper, passing the stored login URL so it can infer
+    // the correct locale (e.g. /en-ca/ for Canadian accounts)
     const response = await fetch(`${liveBrowserUrl}/scrape-reservations`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         storage_state: session.storageState,
         platform,
+        start_url: session.finalUrl || null,
       }),
     });
 

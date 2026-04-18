@@ -91,12 +91,13 @@ export const finishLiveSession = action({
 
     const result = await response.json();
 
-    // Save the captured storage state to browserSessions table
+    // Save the captured storage state (+ final URL for locale detection) to browserSessions table
     if (result.storage_state) {
       await ctx.runMutation(internal.onboarding.saveBrowserSession, {
         tenantId: tenant._id,
         platform: args.platform,
         storageState: JSON.stringify(result.storage_state),
+        finalUrl: result.final_url || "",
       });
     }
 
@@ -128,6 +129,7 @@ export const saveBrowserSession = internalMutation({
     tenantId: v.id("tenants"),
     platform: v.string(),
     storageState: v.string(),
+    finalUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -141,6 +143,7 @@ export const saveBrowserSession = internalMutation({
       await ctx.db.patch(existing._id, {
         storageState: args.storageState,
         isValid: true,
+        ...(args.finalUrl ? { finalUrl: args.finalUrl } : {}),
       });
     } else {
       await ctx.db.insert("browserSessions", {
@@ -148,6 +151,7 @@ export const saveBrowserSession = internalMutation({
         platform: args.platform,
         storageState: args.storageState,
         isValid: true,
+        finalUrl: args.finalUrl || "",
       });
     }
   },
