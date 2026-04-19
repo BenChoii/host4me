@@ -2,7 +2,16 @@
   "framework": "vite",
   "buildCommand": "vite build",
   "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/scripts/:file",
+      "headers": [
+        { "key": "Content-Type", "value": "text/javascript; charset=utf-8" }
+      ]
+    }
+  ],
   "rewrites": [
+    { "source": "/scripts/:file", "destination": "/scripts/:file" },
     { "source": "/:path*", "destination": "/index.html" }
   ]
 }
