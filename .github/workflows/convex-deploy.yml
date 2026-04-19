@@ -17,11 +17,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Convex CLI
-        run: npm install -g convex@latest
+      - name: Install dependencies
+        run: npm install
 
       - name: Deploy to Convex Production
-        run: npx convex deploy --cmd-url-env-var-name CONVEX_URL
-        working-directory: .
+        run: npx convex deploy --prod
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
