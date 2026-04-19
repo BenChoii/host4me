@@ -98,4 +98,65 @@ http.route({
   }),
 });
 
+
+// Userscript sync — receives scraped data from Tampermonkey extension
+http.route({
+  path: "/webhooks/userscript-sync",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    // Allow CORS from browser extension
+    const origin = request.headers.get("Origin") || "";
+    
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response("Invalid JSON", { status: 400 });
+    }
+    
+    const { token, platform, data } = body;
+    if (!token || !platform || !data) {
+      return new Response("Missing token, platform, or data", { status: 400 });
+    }
+    
+    try {
+      const result = await ctx.runAction(internal.onboarding.ingestUserscriptData, {
+        tenantId: token,
+        platform,
+        rawData: JSON.stringify(data),
+      });
+      
+      return new Response(JSON.stringify({ ok: true, result }), {
+        status: 200,
+        headers: { 
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    } catch (e) {
+      console.error("[userscript-sync] Error:", e);
+      return new Response(JSON.stringify({ ok: false, error: String(e) }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
+// CORS preflight for userscript sync
+http.route({
+  path: "/webhooks/userscript-sync",
+  method: "OPTIONS",
+  handler: httpAction(async (_ctx, _request) => {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }),
+});
+
 export default http;

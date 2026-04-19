@@ -1,4 +1,4 @@
-import { mutation, action, internalMutation } from "./_generated/server";
+import { mutation, action, internalMutation, query, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
@@ -280,5 +280,173 @@ export const connectGmailInternal = internalMutation({
         lastSyncAt: null,
       });
     }
+  },
+});
+
+// Query: get the tenant's sync token (= their tenantId) for the userscript
+export const getSyncToken = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return null;
+    const tenant = await ctx.db
+      .query("tenants")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    return tenant ? String(tenant._id) : null;
+  },
+});
+
+// Internal query: get tenant by ID
+export const getTenantById = internalQuery({
+  args: { tenantId: v.string() },
+  handler: async (ctx, args) => {
+    try {
+      return await ctx.db.get(args.tenantId);
+    } catch {
+      return null;
+    }
+  },
+});
+
+// Helper function to parse reservations from various API endpoint response formats
+function parseReservationsFromEndpoint(url, data) {
+  const results = [];
+  if (!data || typeof data !== "object") return results;
+
+  // Try to find reservation arrays at various paths
+  const candidates = [
+    data.reservations,
+    data.data?.reservations,
+    data.items,
+    data.data?.items,
+    data.bookings,
+    data.data?.bookings,
+    Array.isArray(data) ? data : null,
+    data.content,
+    data.results,
+  ].filter(Array.isArray);
+
+  for (const list of candidates) {
+    for (const item of list) {
+      const res = extractReservationFields(item);
+      if (res.checkIn || res.guestName) results.push(res);
+    }
+  }
+  return results;
+}
+
+// Helper function to extract reservation fields from various API response formats
+function extractReservationFields(item) {
+  // Normalize field names across VRBO, Airbnb, Booking.com API responses
+  const get = (...keys) => {
+    for (const k of keys) {
+      const val = k.split(".").reduce((o, p) => o?.[p], item);
+      if (val !== undefined && val !== null && val !== "") return val;
+    }
+    return null;
+  };
+
+  const guestName =
+    get("guestName", "guest_name", "guest.name", "guestFirstName") ||
+    [get("guestFirstName", "guest.firstName"), get("guestLastName", "guest.lastName")]
+      .filter(Boolean)
+      .join(" ") || null;
+
+  const checkIn = get(
+    "checkIn", "check_in", "checkInDate", "arrival", "startDate",
+    "dates.checkin", "stayDates.checkIn"
+  );
+  const checkOut = get(
+    "checkOut", "check_out", "checkOutDate", "departure", "endDate",
+    "dates.checkout", "stayDates.checkOut"
+  );
+
+  return {
+    guestName: guestName || null,
+    checkIn: checkIn ? String(checkIn).substring(0, 10) : null,
+    checkOut: checkOut ? String(checkOut).substring(0, 10) : null,
+    propertyName: get("propertyName", "listingName", "property.name", "listing.name", "unitName") || "",
+    status: get("status", "reservationStatus", "bookingStatus") || "confirmed",
+    guests: get("guestCount", "numberOfGuests", "guests", "adults") || null,
+    payout: get("payout", "earningAmount", "hostPayout", "totalPrice", "price.total") || null,
+    reservationId: get("reservationId", "id", "confirmationCode", "bookingId", "orderId") || null,
+  };
+}
+
+// Action: ingest raw scraped data from userscript and parse + store reservations
+export const ingestUserscriptData = action({
+  args: {
+    tenantId: v.string(),
+    platform: v.string(),
+    rawData: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Validate tenantId by looking up the tenant
+    const tenant = await ctx.runQuery(internal.onboarding.getTenantById, { 
+      tenantId: args.tenantId 
+    });
+    if (!tenant) throw new Error("Invalid sync token");
+
+    const data = JSON.parse(args.rawData);
+    
+    // Store captured cookies/localStorage as browser session for VPS fallback
+    if (data.cookies || data.localStorage) {
+      const sessionData = {
+        source: "userscript",
+        cookies: data.cookies || "",
+        localStorage: data.localStorage || {},
+        capturedAt: Date.now(),
+      };
+      await ctx.runMutation(internal.onboarding.saveBrowserSession, {
+        tenantId: tenant._id,
+        platform: args.platform,
+        storageState: JSON.stringify(sessionData),
+        finalUrl: data.finalUrl,
+      });
+    }
+
+    // Parse reservations from API endpoint responses
+    const reservations = [];
+    const endpoints = data.endpoints || [];
+    
+    for (const ep of endpoints) {
+      if (!ep.data) continue;
+      const parsed = parseReservationsFromEndpoint(ep.url, ep.data);
+      reservations.push(...parsed);
+    }
+
+    // Deduplicate by reservationId or (guestName + checkIn)
+    const seen = new Set();
+    const unique = reservations.filter((r) => {
+      const key = r.reservationId || `${r.guestName}|${r.checkIn}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Upsert each reservation
+    let upserted = 0;
+    for (const res of unique) {
+      try {
+        await ctx.runMutation(internal.reservations.upsertReservation, {
+          tenantId: tenant._id,
+          platform: args.platform,
+          guestName: res.guestName || "Unknown Guest",
+          checkIn: res.checkIn || "",
+          checkOut: res.checkOut || "",
+          propertyName: res.propertyName || "",
+          status: res.status || "confirmed",
+          guests: res.guests ?? null,
+          payout: res.payout ?? null,
+          reservationId: res.reservationId ?? null,
+        });
+        upserted++;
+      } catch (e) {
+        console.error("[ingestUserscriptData] upsert error:", e);
+      }
+    }
+
+    return { upserted, total: unique.length };
   },
 });

@@ -340,14 +340,7 @@ async def create_session(tenant_id: str, platform: str) -> dict:
     page = await context.new_page()
     await _apply_stealth(page)
 
-    # Navigate to platform login
-    start_url = PLATFORM_URLS.get(platform, PLATFORM_URLS["airbnb"])
-    try:
-        await page.goto(start_url, wait_until="domcontentloaded", timeout=30000)
-    except Exception as e:
-        print(f"[{session_id}] Warning: initial navigation error (may be fine): {e}")
-
-    # Store session info
+    # Store session info first so it's available before navigation completes
     sessions[session_id] = {
         "tenant_id": tenant_id,
         "platform": platform,
@@ -360,6 +353,20 @@ async def create_session(tenant_id: str, platform: str) -> dict:
         "x11vnc": x11vnc_proc,
         "websockify": ws_proc,
     }
+
+    # Navigate to platform login in the background — don't block the API response.
+    # The noVNC viewer opens immediately showing the browser, then the page loads
+    # inside it. This cuts perceived latency from ~15s to ~3s.
+    start_url = PLATFORM_URLS.get(platform, PLATFORM_URLS["airbnb"])
+
+    async def _navigate_background():
+        try:
+            await page.goto(start_url, wait_until="domcontentloaded", timeout=30000)
+            print(f"[{session_id}] Navigated to {start_url} → {page.url}")
+        except Exception as e:
+            print(f"[{session_id}] Warning: initial navigation error (non-fatal): {e}")
+
+    asyncio.create_task(_navigate_background())
 
     print(f"[{session_id}] Session created: platform={platform}, display=:{display}, vnc_port={vnc_port}, proxy={'YES' if proxy_config else 'NO'}")
     return {"session_id": session_id, "ws_port": vnc_port}
