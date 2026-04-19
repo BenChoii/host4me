@@ -29,7 +29,7 @@ const PLATFORMS: { id: Platform; label: string; color: string }[] = [
   { id: "booking", label: "Booking.com", color: "#003580" },
 ];
 
-export default function Onboarding() {
+function OnboardingInner() {
   const [step, setStep] = useState<"activate" | "connect" | "ready">("activate");
   const [platform, setPlatform] = useState<Platform>("airbnb");
   const [connectMethod, setConnectMethod] = useState<"browser" | "script">("browser");
@@ -655,4 +655,33 @@ export default function Onboarding() {
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
+}
+
+// Error boundary so a Convex query error never blanks the whole page
+import { Component, type ReactNode } from "react";
+class OnboardingErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ maxWidth: 640, margin: "0 auto", paddingTop: 60, textAlign: "center" }}>
+          <p style={{ color: "var(--dash-text-muted)", fontSize: 14 }}>
+            Something went wrong loading this page. Try refreshing.
+          </p>
+          <button className="dash-btn dash-btn-secondary" style={{ marginTop: 16 }} onClick={() => window.location.reload()}>
+            Refresh
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function Onboarding() {
+  return <OnboardingErrorBoundary><OnboardingInner /></OnboardingErrorBoundary>;
 }
