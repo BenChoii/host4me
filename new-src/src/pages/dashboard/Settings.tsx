@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Component, type ReactNode, useState } from "react";
 import { motion } from "motion/react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -35,11 +35,9 @@ type PlatformSyncState = {
   showDebug?: boolean;
 };
 
-export default function Settings() {
-  const syncReservations = useAction(api.reservations.syncReservations);
+// ── Sync token inner component — can throw if Convex fn not deployed yet ──
+function SyncTokenInner() {
   const syncToken = useQuery(api.onboarding.getSyncToken);
-
-  const [syncState, setSyncState] = useState<Record<string, PlatformSyncState>>({});
   const [tokenCopied, setTokenCopied] = useState(false);
 
   const handleCopyToken = () => {
@@ -49,6 +47,76 @@ export default function Settings() {
       setTimeout(() => setTokenCopied(false), 2000);
     }
   };
+
+  if (syncToken === undefined) {
+    return <div style={{ fontSize: 13, color: "var(--dash-text-muted)" }}>Loading token…</div>;
+  }
+
+  if (!syncToken) {
+    return <div style={{ fontSize: 13, color: "var(--dash-text-muted)" }}>No token available. Make sure you’re logged in.</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <code style={{
+        flex: 1,
+        fontSize: 13,
+        fontFamily: "monospace",
+        background: "var(--dash-bg)",
+        border: "1px solid var(--dash-border)",
+        borderRadius: 8,
+        padding: "10px 14px",
+        color: "var(--dash-text)",
+        wordBreak: "break-all",
+        userSelect: "all",
+      }}>
+        {syncToken}
+      </code>
+      <button
+        onClick={handleCopyToken}
+        style={{
+          padding: "8px 16px",
+          borderRadius: 8,
+          border: "none",
+          background: tokenCopied ? "#10b98120" : "var(--dash-text)",
+          color: tokenCopied ? "#059669" : "white",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+          flexShrink: 0,
+          transition: "all 0.2s",
+          minWidth: 80,
+        }}
+      >
+        {tokenCopied ? "✓ Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+// ── Error boundary scoped only to the token section ──
+class SyncTokenBoundary extends Component<{ children: ReactNode }, { error: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: false };
+  }
+  static getDerivedStateFromError() { return { error: true }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ fontSize: 13, color: "var(--dash-text-muted)", fontStyle: "italic" }}>
+          Token unavailable — run <code style={{ fontSize: 12 }}>npx convex deploy</code> to enable this feature.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function Settings() {
+  const syncReservations = useAction(api.reservations.syncReservations);
+
+  const [syncState, setSyncState] = useState<Record<string, PlatformSyncState>>({});
 
   const handleSync = async (platform: string) => {
     setSyncState(prev => ({ ...prev, [platform]: { status: "syncing" } }));
@@ -90,7 +158,7 @@ export default function Settings() {
         Settings
       </h2>
       <p style={{ color: "var(--dash-text-muted)", marginBottom: 32, fontSize: 14 }}>
-        Manage platform connections and sync Alfred's data
+        Manage platform connections and sync Alfred’s data
       </p>
 
       {/* Platform Connections */}
@@ -137,7 +205,6 @@ export default function Settings() {
                       <span style={{ fontSize: 15, fontWeight: 600, color: "var(--dash-text)" }}>
                         {platform.name}
                       </span>
-                      {/* Status badge */}
                       <span style={{
                         fontSize: 11,
                         fontWeight: 600,
@@ -208,7 +275,7 @@ export default function Settings() {
                   </button>
                 </div>
 
-                {/* Diagnostic panel — shown when sync returns 0 results */}
+                {/* Diagnostic panel */}
                 {state.showDebug && (
                   <div style={{
                     background: "#fef2f2",
@@ -223,8 +290,6 @@ export default function Settings() {
                     <div style={{ fontWeight: 700, marginBottom: 8, color: "#dc2626" }}>
                       🔍 Alfred Diagnostic Report
                     </div>
-
-                    {/* Final URL */}
                     {state.debug?.finalUrl && (
                       <div style={{ marginBottom: 8 }}>
                         <span style={{ fontWeight: 600 }}>Last page: </span>
@@ -238,8 +303,6 @@ export default function Settings() {
                         )}
                       </div>
                     )}
-
-                    {/* URLs visited */}
                     {state.debug?.urlsVisited && state.debug.urlsVisited.length > 0 && (
                       <div style={{ marginBottom: 8 }}>
                         <div style={{ fontWeight: 600, marginBottom: 4 }}>Pages tried:</div>
@@ -259,8 +322,6 @@ export default function Settings() {
                         ))}
                       </div>
                     )}
-
-                    {/* Page text snippet */}
                     {state.debug?.pageText && (
                       <div>
                         <div style={{ fontWeight: 600, marginBottom: 4 }}>Page content preview:</div>
@@ -279,7 +340,6 @@ export default function Settings() {
                         </pre>
                       </div>
                     )}
-
                     {!state.debug?.finalUrl && !state.debug?.pageText && (
                       <div>No additional details available. Check that your VRBO session is still active.</div>
                     )}
@@ -300,46 +360,9 @@ export default function Settings() {
           Use this token when setting up the Tampermonkey script to link your browser to Alfred.
         </p>
         <div className="dash-card" style={{ padding: "16px 20px" }}>
-          {syncToken === undefined ? (
-            <div style={{ fontSize: 13, color: "var(--dash-text-muted)" }}>Loading token…</div>
-          ) : syncToken === null ? (
-            <div style={{ fontSize: 13, color: "var(--dash-text-muted)" }}>No token available. Make sure you're logged in.</div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <code style={{
-                flex: 1,
-                fontSize: 13,
-                fontFamily: "monospace",
-                background: "var(--dash-bg)",
-                border: "1px solid var(--dash-border)",
-                borderRadius: 8,
-                padding: "10px 14px",
-                color: "var(--dash-text)",
-                wordBreak: "break-all",
-                userSelect: "all",
-              }}>
-                {syncToken}
-              </code>
-              <button
-                onClick={handleCopyToken}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: tokenCopied ? "#10b98120" : "var(--dash-text)",
-                  color: tokenCopied ? "#059669" : "white",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  flexShrink: 0,
-                  transition: "all 0.2s",
-                  minWidth: 80,
-                }}
-              >
-                {tokenCopied ? "✓ Copied" : "Copy"}
-              </button>
-            </div>
-          )}
+          <SyncTokenBoundary>
+            <SyncTokenInner />
+          </SyncTokenBoundary>
         </div>
       </div>
 
