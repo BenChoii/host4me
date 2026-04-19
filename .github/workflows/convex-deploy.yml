@@ -1,0 +1,26 @@
+name: Deploy Convex Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'convex/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Convex CLI
+        run: npm install -g convex@latest
+
+      - name: Deploy to Convex Production
+        run: npx convex deploy --cmd-url-env-var-name CONVEX_URL
+        working-directory: .
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
