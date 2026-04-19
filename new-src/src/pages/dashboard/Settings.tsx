@@ -1,7 +1,24 @@
-import { useState } from "react";
+import { useState, Component } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
+
+// Catches Convex "function not found" errors so a missing query doesn't blank the page
+class QueryErrorBoundary extends Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
 
 const PLATFORMS = [
   {
@@ -43,10 +60,24 @@ type ReconnectState = {
   error?: string;
 };
 
+// Fetches the (potentially-missing) query and passes it down
+function SettingsWithSession() {
+  const sessionStatuses = useQuery(api.onboarding.getBrowserSessionStatus);
+  return <SettingsCore sessionStatuses={sessionStatuses ?? undefined} />;
+}
+
+// Default export: wraps with ErrorBoundary so a missing Convex function doesn't crash the page
 export default function Settings() {
+  return (
+    <QueryErrorBoundary fallback={<SettingsCore sessionStatuses={undefined} />}>
+      <SettingsWithSession />
+    </QueryErrorBoundary>
+  );
+}
+
+function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform: string; hasSession: boolean; isValid: boolean; finalUrl?: string }> }) {
   const syncReservations = useAction(api.reservations.syncReservations);
   const syncToken = useQuery(api.onboarding.getSyncToken);
-  const sessionStatuses = useQuery(api.onboarding.getBrowserSessionStatus);
   const createLiveSession = useAction(api.onboarding.createLiveSession);
   const finishLiveSession = useAction(api.onboarding.finishLiveSession);
 
