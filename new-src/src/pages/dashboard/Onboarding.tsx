@@ -287,24 +287,34 @@ function OnboardingInner() {
             >
               {!scriptDone ? (
                 <div className="dash-card" style={{ padding: 20, marginBottom: 16 }}>
-                  <p style={{ fontSize: 13, color: "var(--dash-text-secondary)", marginBottom: 18, lineHeight: 1.6 }}>
-                    Install a tiny browser script that syncs your reservations automatically whenever you visit {platform === "vrbo" ? "VRBO" : platform === "airbnb" ? "Airbnb" : "Booking.com"}. No credentials leave your browser.
-                  </p>
+                  {/* What this does */}
+                  <div style={{
+                    background: "rgba(198,125,59,0.07)",
+                    border: "1px solid rgba(198,125,59,0.2)",
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    marginBottom: 20,
+                    fontSize: 12.5,
+                    color: "var(--dash-text-secondary)",
+                    lineHeight: 1.6,
+                  }}>
+                    <strong style={{ color: "var(--dash-text)" }}>How this works:</strong> You'll install a small helper script that runs silently in your browser. Whenever you visit {platform === "vrbo" ? "vrbo.com" : platform === "airbnb" ? "airbnb.com" : "booking.com"} while logged in, it automatically sends your reservation data to Alfred. Your password never leaves your computer.
+                  </div>
 
                   {/* Step 1 */}
-                  <div style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", gap: 12, marginBottom: 18, alignItems: "flex-start" }}>
                     <div style={{
-                      width: 24, height: 24, borderRadius: "50%",
+                      width: 26, height: 26, borderRadius: "50%",
                       background: "var(--dash-accent)", color: "white",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1,
                     }}>1</div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 4 }}>
-                        Install Tampermonkey
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 3 }}>
+                        Install Tampermonkey (free, takes 30 seconds)
                       </div>
-                      <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 6 }}>
-                        Free browser extension — 10M+ users, trusted for 15 years
+                      <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 8, lineHeight: 1.6 }}>
+                        Tampermonkey is a free Chrome extension used by 10+ million people — think of it as a safe way to run small helper scripts in your browser. Click below, then click <strong style={{ color: "var(--dash-text)" }}>“Add to Chrome”</strong> → <strong style={{ color: "var(--dash-text)" }}>“Add extension”</strong> when Chrome asks.
                       </div>
                       <a
                         href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo"
@@ -313,50 +323,75 @@ function OnboardingInner() {
                         className="dash-btn dash-btn-secondary"
                         style={{ fontSize: 12, display: "inline-flex", padding: "6px 12px" }}
                       >
-                        <ExternalLink size={11} /> Install Tampermonkey
+                        <ExternalLink size={11} /> Get Tampermonkey on Chrome Web Store
                       </a>
+                      <div style={{ marginTop: 8, fontSize: 11.5, color: "var(--dash-text-muted)", fontStyle: "italic" }}>
+                        Already have it? Skip to step 2.
+                      </div>
                     </div>
                   </div>
 
+                  {/* Divider */}
+                  <div style={{ height: 1, background: "var(--dash-border)", marginBottom: 18 }} />
+
                   {/* Step 2 */}
-                  <div style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", gap: 12, marginBottom: 18, alignItems: "flex-start" }}>
                     <div style={{
-                      width: 24, height: 24, borderRadius: "50%",
+                      width: 26, height: 26, borderRadius: "50%",
                       background: "var(--dash-accent)", color: "white",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1,
                     }}>2</div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 4 }}>
-                        Get your sync token
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 3 }}>
+                        Copy your personal sync token
                       </div>
-                      <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 6 }}>
-                        Find it in Settings → Platform Connections. The script will ask you to paste it on first run.
+                      <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 8, lineHeight: 1.6 }}>
+                        Your sync token is a unique code that links the script to your Alfred account. Go to Settings, find the <strong style={{ color: "var(--dash-text)" }}>“Browser Extension Sync Token”</strong> section, and click <strong style={{ color: "var(--dash-text)" }}>Copy</strong>. Keep it handy — you'll paste it in step 4.
                       </div>
                       <button
                         className="dash-btn dash-btn-secondary"
                         style={{ fontSize: 12, padding: "6px 12px" }}
                         onClick={() => navigate("/dashboard/settings")}
                       >
-                        <ExternalLink size={11} /> Open Settings
+                        <ExternalLink size={11} /> Open Settings → Copy Token
                       </button>
                     </div>
                   </div>
 
+                  {/* Divider */}
+                  <div style={{ height: 1, background: "var(--dash-border)", marginBottom: 18 }} />
+
                   {/* Step 3 */}
-                  <div style={{ display: "flex", gap: 12, marginBottom: 14, alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", gap: 12, marginBottom: 18, alignItems: "flex-start" }}>
                     <div style={{
-                      width: 24, height: 24, borderRadius: "50%",
+                      width: 26, height: 26, borderRadius: "50%",
                       background: "var(--dash-accent)", color: "white",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1,
                     }}>3</div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 4 }}>
-                        Install the Host4Me script
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 3 }}>
+                        Install the Alfred sync script
                       </div>
-                      <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 6 }}>
-                        Tampermonkey will ask you to confirm — click Install
+                      <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 8, lineHeight: 1.6 }}>
+                        Clicking the button below will open a new tab in Tampermonkey. You'll see an install screen — look for a big <strong style={{ color: "var(--dash-text)" }}>“Install”</strong> button in the top-right corner and click it. That's it!
+                      </div>
+                      {/* Visual hint */}
+                      <div style={{
+                        background: "var(--dash-bg)",
+                        border: "1px solid var(--dash-border)",
+                        borderRadius: 7,
+                        padding: "8px 12px",
+                        marginBottom: 10,
+                        fontSize: 11.5,
+                        color: "var(--dash-text-muted)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}>
+                        <span style={{ fontSize: 16 }}>💡</span>
+                        <span>The page that opens will look like a code file. Ignore the code — just find and click the <strong style={{ color: "var(--dash-text)" }}>Install</strong> button at the top.</span>
                       </div>
                       <a
                         href="https://host4me.vercel.app/scripts/host4me.user.js"
@@ -365,25 +400,42 @@ function OnboardingInner() {
                         className="dash-btn dash-btn-primary"
                         style={{ fontSize: 12, display: "inline-flex", padding: "6px 12px" }}
                       >
-                        <ExternalLink size={11} /> Install Host4Me Script
+                        <ExternalLink size={11} /> Install Alfred Script
                       </a>
                     </div>
                   </div>
 
+                  {/* Divider */}
+                  <div style={{ height: 1, background: "var(--dash-border)", marginBottom: 18 }} />
+
                   {/* Step 4 */}
                   <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
                     <div style={{
-                      width: 24, height: 24, borderRadius: "50%",
+                      width: 26, height: 26, borderRadius: "50%",
                       background: "var(--dash-accent)", color: "white",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1,
                     }}>4</div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 4 }}>
-                        Visit {platform === "vrbo" ? "vrbo.com" : platform === "airbnb" ? "airbnb.com" : "booking.com"} and log in
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 3 }}>
+                        Visit {platform === "vrbo" ? "vrbo.com" : platform === "airbnb" ? "airbnb.com" : "booking.com"} while logged in
                       </div>
-                      <div style={{ fontSize: 12, color: "var(--dash-text-muted)" }}>
-                        The script will auto-sync and ask for your token the first time. Alfred will start seeing your reservations within minutes.
+                      <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 8, lineHeight: 1.6 }}>
+                        Open {platform === "vrbo" ? "vrbo.com" : platform === "airbnb" ? "airbnb.com" : "booking.com"} in your browser while you're logged in. The script will run automatically and a small popup will appear asking for your sync token — paste in the code you copied in step 2. After that, Alfred starts seeing your reservations within a minute.
+                      </div>
+                      <div style={{
+                        background: "var(--dash-bg)",
+                        border: "1px solid var(--dash-border)",
+                        borderRadius: 7,
+                        padding: "8px 12px",
+                        fontSize: 11.5,
+                        color: "var(--dash-text-muted)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}>
+                        <span style={{ fontSize: 16 }}>🔁</span>
+                        <span>You only enter the token once. After that, syncing happens automatically every time you visit the site.</span>
                       </div>
                     </div>
                   </div>
