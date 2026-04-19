@@ -37,18 +37,9 @@ const PLATFORMS = [
   },
 ];
 
-type SyncDebug = {
-  pageText?: string;
-  urlsVisited?: Array<{ attempted: string; landed?: string; error?: string }>;
-  finalUrl?: string;
-};
-
 type PlatformSyncState = {
   status: "idle" | "syncing" | "success" | "error";
   message?: string;
-  reservations?: number;
-  listings?: number;
-  debug?: SyncDebug;
   showDebug?: boolean;
 };
 
@@ -76,7 +67,8 @@ export default function Settings() {
 }
 
 function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform: string; hasSession: boolean; isValid: boolean; finalUrl?: string }> }) {
-  const syncReservations = useAction(api.reservations.syncReservations);
+  // Use the new AI agent sync (Browser Use + Gemma) instead of old proxy method
+  const agentBrowseSyncForUser = useAction(api.reservations.agentBrowseSyncForUser);
   const syncToken = useQuery(api.onboarding.getSyncToken);
   const createLiveSession = useAction(api.onboarding.createLiveSession);
   const finishLiveSession = useAction(api.onboarding.finishLiveSession);
@@ -99,21 +91,38 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
   const handleSync = async (platform: string) => {
     setSyncState(prev => ({ ...prev, [platform]: { status: "syncing" } }));
     try {
-      const result = await syncReservations({ platform });
-      const noData = result.reservations === 0 && result.listings === 0;
-      setSyncState(prev => ({
-        ...prev,
-        [platform]: {
-          status: noData ? "error" : "success",
-          message: noData
-            ? "No data found — see diagnostic below"
-            : `Synced ${result.reservations} reservations and ${result.listings} listings`,
-          reservations: result.reservations,
-          listings: result.listings,
-          debug: result.debug as SyncDebug,
-          showDebug: noData,
-        },
-      }));
+      const result = await agentBrowseSyncForUser({ platform });
+      if (result.status === "auth_required") {
+        setSyncState(prev => ({
+          ...prev,
+          [platform]: {
+            status: "error",
+            message: "Session expired — click Re-connect to log in again",
+            showDebug: true,
+          },
+        }));
+      } else if (result.status === "no_session") {
+        setSyncState(prev => ({
+          ...prev,
+          [platform]: {
+            status: "error",
+            message: "No session found — click Connect to log in first",
+            showDebug: true,
+          },
+        }));
+      } else {
+        const count = (result.reservations ?? 0) + (result.inbox ?? 0) + (result.properties ?? 0);
+        setSyncState(prev => ({
+          ...prev,
+          [platform]: {
+            status: count > 0 ? "success" : "error",
+            message: count > 0
+              ? `Synced ${result.reservations ?? 0} reservations, ${result.inbox ?? 0} messages, ${result.properties ?? 0} listings`
+              : "No data returned — session may need a refresh",
+            showDebug: count === 0,
+          },
+        }));
+      }
     } catch (err: any) {
       setSyncState(prev => ({
         ...prev,
@@ -156,7 +165,6 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
     try {
       await finishLiveSession({ sessionId: reconnect.sessionId!, platform: reconnect.platform });
       setReconnect(prev => prev ? { ...prev, step: "done" } : null);
-      // Reset sync state so the new session is picked up on next sync
       setSyncState(prev => ({ ...prev, [reconnect.platform]: { status: "idle" } }));
     } catch (err: any) {
       setReconnect(prev => prev ? {
@@ -345,7 +353,7 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                   </div>
                 </div>
 
-                {/* Diagnostic panel */}
+                {/* Error / diagnostic panel */}
                 {state.showDebug && (
                   <div style={{
                     background: "#fef2f2",
@@ -357,62 +365,12 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                     fontSize: 12,
                     color: "#7f1d1d",
                   }}>
-                    <div style={{ fontWeight: 700, marginBottom: 8, color: "#dc2626" }}>
-                      🔍 Alfred Diagnostic Report
+                    <div style={{ fontWeight: 700, marginBottom: 4, color: "#dc2626" }}>
+                      ⚠ {state.message}
                     </div>
-                    {state.debug?.finalUrl && (
-                      <div style={{ marginBottom: 8 }}>
-                        <span style={{ fontWeight: 600 }}>Last page: </span>
-                        <code style={{ background: "#fee2e2", padding: "1px 4px", borderRadius: 3 }}>
-                          {state.debug.finalUrl}
-                        </code>
-                        {(state.debug.finalUrl.includes("login") || state.debug.finalUrl.includes("auth")) && (
-                          <span style={{ marginLeft: 8, fontWeight: 700, color: "#dc2626" }}>
-                            ← SESSION EXPIRED — click Re-connect above
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {state.debug?.urlsVisited && state.debug.urlsVisited.length > 0 && (
-                      <div style={{ marginBottom: 8 }}>
-                        <div style={{ fontWeight: 600, marginBottom: 4 }}>Pages tried:</div>
-                        {state.debug.urlsVisited.map((v: any, i: number) => (
-                          <div key={i} style={{ marginLeft: 8, marginBottom: 2 }}>
-                            {v.error
-                              ? <span>❌ {v.attempted} — {v.error}</span>
-                              : <span>
-                                  {v.landed?.includes("login") || v.landed?.includes("auth") ? "🔒" : "✓"}{" "}
-                                  {v.attempted}
-                                  {v.landed && v.landed !== v.attempted && (
-                                    <span style={{ color: "#991b1b" }}> → {v.landed}</span>
-                                  )}
-                                </span>
-                            }
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {state.debug?.pageText && (
-                      <div>
-                        <div style={{ fontWeight: 600, marginBottom: 4 }}>Page content preview:</div>
-                        <pre style={{
-                          background: "#fee2e2",
-                          padding: "8px",
-                          borderRadius: 6,
-                          whiteSpace: "pre-wrap",
-                          wordBreak: "break-all",
-                          maxHeight: 120,
-                          overflow: "auto",
-                          fontSize: 11,
-                          margin: 0,
-                        }}>
-                          {state.debug.pageText.slice(0, 600)}
-                        </pre>
-                      </div>
-                    )}
-                    {!state.debug?.finalUrl && !state.debug?.pageText && (
-                      <div>No details available. Use the Re-connect button to refresh your session.</div>
-                    )}
+                    <div style={{ color: "#991b1b" }}>
+                      Use the Re-connect button above to refresh your session, then try syncing again.
+                    </div>
                   </div>
                 )}
               </div>
@@ -564,7 +522,7 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                         ? "✓ Session Captured"
                         : reconnect.step === "error"
                         ? "⚠ Connection Failed"
-                        : `Re-connect ${PLATFORMS.find(p => p.id === reconnect.platform)?.name}`}
+                        : `Connect ${PLATFORMS.find(p => p.id === reconnect.platform)?.name}`}
                     </h3>
                     <button
                       onClick={() => setReconnect(null)}
@@ -582,13 +540,13 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                 </div>
               )}
 
-              {/* Step: idle — prompt to launch */}
+              {/* Step: idle */}
               {reconnect.step === "idle" && (
                 <div>
                   <p style={{ fontSize: 14, color: "var(--dash-text-muted)", marginBottom: 24 }}>
                     Alfred will open a live browser window. Log into{" "}
                     <strong>{PLATFORMS.find(p => p.id === reconnect.platform)?.name}</strong> normally,
-                    then click "I've logged in" to save your session.
+                    then click "Capture Session" to save your login.
                   </p>
                   <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
                     <button
@@ -642,7 +600,6 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
               {/* Step: browser — show noVNC iframe */}
               {reconnect.step === "browser" && reconnect.vncUrl && (
                 <div style={{ display: "flex", flexDirection: "column" }}>
-                  {/* Top bar */}
                   <div style={{
                     padding: "12px 20px",
                     borderBottom: "1px solid var(--dash-border)",
@@ -656,7 +613,7 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                         Log into {PLATFORMS.find(p => p.id === reconnect.platform)?.name}
                       </span>
                       <span style={{ fontSize: 13, color: "var(--dash-text-muted)", marginLeft: 12 }}>
-                        When you're fully logged in, click "Capture Session" →
+                        When fully logged in, click "Capture Session" →
                       </span>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
@@ -688,7 +645,6 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                       >✓ Capture Session</button>
                     </div>
                   </div>
-                  {/* noVNC iframe */}
                   <iframe
                     src={reconnect.vncUrl}
                     style={{
@@ -737,7 +693,7 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                   }}>✓</div>
                   <p style={{ fontSize: 14, color: "var(--dash-text-muted)", textAlign: "center", marginBottom: 24 }}>
                     {PLATFORMS.find(p => p.id === reconnect.platform)?.name} session saved.
-                    Alfred will now use it to sync your data automatically.
+                    Alfred will use it to sync your data automatically every hour.
                   </p>
                   <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
                     <button

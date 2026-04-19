@@ -24,7 +24,7 @@ export const list = query({
   },
 });
 
-// Action: scrape reservations from VPS and upsert into DB
+// Action: scrape reservations from VPS and upsert into DB (legacy proxy method)
 export const syncReservations = action({
   args: {
     platform: v.optional(v.string()),
@@ -147,6 +147,22 @@ export const syncReservations = action({
         finalUrl: result.final_url || "",
       },
     };
+  },
+});
+
+// Public action: trigger AI agent sync (Browser Use + Gemma) for the current user
+// Wraps internal.actions.worker.agentBrowseSync with user authentication
+export const agentBrowseSyncForUser = action({
+  args: { platform: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    const tenant = await ctx.runQuery(internal.tenants.tenantByUserId, { userId });
+    if (!tenant) throw new Error("Tenant not found");
+    return ctx.runAction(internal.actions.worker.agentBrowseSync, {
+      tenantId: tenant._id,
+      platform: args.platform,
+    });
   },
 });
 
