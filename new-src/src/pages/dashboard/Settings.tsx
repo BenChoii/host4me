@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 
 const PLATFORMS = [
@@ -37,8 +37,18 @@ type PlatformSyncState = {
 
 export default function Settings() {
   const syncReservations = useAction(api.reservations.syncReservations);
+  const syncToken = useQuery(api.onboarding.getSyncToken);
 
   const [syncState, setSyncState] = useState<Record<string, PlatformSyncState>>({});
+  const [tokenCopied, setTokenCopied] = useState(false);
+
+  const handleCopyToken = () => {
+    if (syncToken) {
+      navigator.clipboard.writeText(syncToken);
+      setTokenCopied(true);
+      setTimeout(() => setTokenCopied(false), 2000);
+    }
+  };
 
   const handleSync = async (platform: string) => {
     setSyncState(prev => ({ ...prev, [platform]: { status: "syncing" } }));
@@ -278,6 +288,58 @@ export default function Settings() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* Browser Extension Sync Token */}
+      <div style={{ marginBottom: 32 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--dash-text)", marginBottom: 4 }}>
+          Browser Extension Sync Token
+        </h3>
+        <p style={{ fontSize: 13, color: "var(--dash-text-muted)", marginBottom: 16 }}>
+          Use this token when setting up the Tampermonkey script to link your browser to Alfred.
+        </p>
+        <div className="dash-card" style={{ padding: "16px 20px" }}>
+          {syncToken === undefined ? (
+            <div style={{ fontSize: 13, color: "var(--dash-text-muted)" }}>Loading token…</div>
+          ) : syncToken === null ? (
+            <div style={{ fontSize: 13, color: "var(--dash-text-muted)" }}>No token available. Make sure you're logged in.</div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <code style={{
+                flex: 1,
+                fontSize: 13,
+                fontFamily: "monospace",
+                background: "var(--dash-bg)",
+                border: "1px solid var(--dash-border)",
+                borderRadius: 8,
+                padding: "10px 14px",
+                color: "var(--dash-text)",
+                wordBreak: "break-all",
+                userSelect: "all",
+              }}>
+                {syncToken}
+              </code>
+              <button
+                onClick={handleCopyToken}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: tokenCopied ? "#10b98120" : "var(--dash-text)",
+                  color: tokenCopied ? "#059669" : "white",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  flexShrink: 0,
+                  transition: "all 0.2s",
+                  minWidth: 80,
+                }}
+              >
+                {tokenCopied ? "✓ Copied" : "Copy"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
