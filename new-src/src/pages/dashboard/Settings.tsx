@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { useAction } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { api } from "../../../../convex/_generated/api";
 
 const PLATFORMS = [
   {
@@ -20,27 +20,42 @@ const PLATFORMS = [
   },
 ];
 
+type SyncDebug = {
+  pageText?: string;
+  urlsVisited?: Array<{ attempted: string; landed?: string; error?: string }>;
+  finalUrl?: string;
+};
+
+type PlatformSyncState = {
+  status: "idle" | "syncing" | "success" | "error";
+  message?: string;
+  reservations?: number;
+  listings?: number;
+  debug?: SyncDebug;
+  showDebug?: boolean;
+};
+
 export default function Settings() {
   const syncReservations = useAction(api.reservations.syncReservations);
 
-  const [syncState, setSyncState] = useState<Record<string, {
-    status: "idle" | "syncing" | "success" | "error";
-    message?: string;
-    reservations?: number;
-    listings?: number;
-  }>>({});
+  const [syncState, setSyncState] = useState<Record<string, PlatformSyncState>>({});
 
   const handleSync = async (platform: string) => {
     setSyncState(prev => ({ ...prev, [platform]: { status: "syncing" } }));
     try {
       const result = await syncReservations({ platform });
+      const noData = result.reservations === 0 && result.listings === 0;
       setSyncState(prev => ({
         ...prev,
         [platform]: {
-          status: "success",
-          message: `Synced ${result.reservations} reservations and ${result.listings} listings`,
+          status: noData ? "error" : "success",
+          message: noData
+            ? "No data found — see diagnostic below"
+            : `Synced ${result.reservations} reservations and ${result.listings} listings`,
           reservations: result.reservations,
           listings: result.listings,
+          debug: result.debug as SyncDebug,
+          showDebug: noData,
         },
       }));
     } catch (err: any) {
@@ -49,6 +64,7 @@ export default function Settings() {
         [platform]: {
           status: "error",
           message: err.message || "Sync failed",
+          showDebug: true,
         },
       }));
     }
@@ -78,106 +94,187 @@ export default function Settings() {
             const isSyncing = state.status === "syncing";
 
             return (
-              <div
-                key={platform.id}
-                className="dash-card"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 16,
-                  padding: "16px 20px",
-                }}
-              >
-                {/* Logo */}
-                <div style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 10,
-                  background: `${platform.color}18`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 22,
-                  flexShrink: 0,
-                }}>
-                  {platform.logo}
-                </div>
-
-                {/* Info */}
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: "var(--dash-text)" }}>
-                      {platform.name}
-                    </span>
-                    {/* Status badge */}
-                    <span style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      padding: "2px 8px",
-                      borderRadius: 20,
-                      background: state.status === "success"
-                        ? "#10b98120"
-                        : state.status === "error"
-                        ? "#ef444420"
-                        : "#6b728020",
-                      color: state.status === "success"
-                        ? "#059669"
-                        : state.status === "error"
-                        ? "#dc2626"
-                        : "var(--dash-text-muted)",
-                    }}>
-                      {state.status === "success" ? "✓ Synced" :
-                       state.status === "error" ? "Error" :
-                       state.status === "syncing" ? "Syncing..." :
-                       "Connected"}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 13, color: "var(--dash-text-muted)", margin: 0 }}>
-                    {state.status === "success"
-                      ? state.message
-                      : state.status === "error"
-                      ? state.message
-                      : platform.description}
-                  </p>
-                </div>
-
-                {/* Sync button */}
-                <button
-                  onClick={() => handleSync(platform.id)}
-                  disabled={isSyncing}
+              <div key={platform.id} style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <div
+                  className="dash-card"
                   style={{
-                    padding: "8px 16px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: isSyncing ? "var(--dash-border)" : "var(--dash-text)",
-                    color: isSyncing ? "var(--dash-text-muted)" : "white",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: isSyncing ? "default" : "pointer",
-                    flexShrink: 0,
                     display: "flex",
                     alignItems: "center",
-                    gap: 6,
-                    transition: "all 0.2s",
+                    gap: 16,
+                    padding: "16px 20px",
+                    borderBottomLeftRadius: state.showDebug ? 0 : undefined,
+                    borderBottomRightRadius: state.showDebug ? 0 : undefined,
                   }}
                 >
-                  {isSyncing ? (
-                    <>
+                  {/* Logo */}
+                  <div style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 10,
+                    background: `${platform.color}18`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 22,
+                    flexShrink: 0,
+                  }}>
+                    {platform.logo}
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: "var(--dash-text)" }}>
+                        {platform.name}
+                      </span>
+                      {/* Status badge */}
                       <span style={{
-                        display: "inline-block",
-                        width: 12,
-                        height: 12,
-                        border: "2px solid var(--dash-text-muted)",
-                        borderTopColor: "transparent",
-                        borderRadius: "50%",
-                        animation: "spin 0.8s linear infinite",
-                      }} />
-                      Syncing...
-                    </>
-                  ) : (
-                    <>↻ Sync Now</>
-                  )}
-                </button>
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: "2px 8px",
+                        borderRadius: 20,
+                        background: state.status === "success"
+                          ? "#10b98120"
+                          : state.status === "error"
+                          ? "#ef444420"
+                          : "#6b728020",
+                        color: state.status === "success"
+                          ? "#059669"
+                          : state.status === "error"
+                          ? "#dc2626"
+                          : "var(--dash-text-muted)",
+                      }}>
+                        {state.status === "success" ? "✓ Synced" :
+                         state.status === "error" ? "⚠ Issue" :
+                         state.status === "syncing" ? "Syncing..." :
+                         "Connected"}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 13, color: "var(--dash-text-muted)", margin: 0 }}>
+                      {state.status === "success"
+                        ? state.message
+                        : state.status === "error"
+                        ? state.message
+                        : platform.description}
+                    </p>
+                  </div>
+
+                  {/* Sync button */}
+                  <button
+                    onClick={() => handleSync(platform.id)}
+                    disabled={isSyncing}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: isSyncing ? "var(--dash-border)" : "var(--dash-text)",
+                      color: isSyncing ? "var(--dash-text-muted)" : "white",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: isSyncing ? "default" : "pointer",
+                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    {isSyncing ? (
+                      <>
+                        <span style={{
+                          display: "inline-block",
+                          width: 12,
+                          height: 12,
+                          border: "2px solid var(--dash-text-muted)",
+                          borderTopColor: "transparent",
+                          borderRadius: "50%",
+                          animation: "spin 0.8s linear infinite",
+                        }} />
+                        Syncing...
+                      </>
+                    ) : (
+                      <>↻ Sync Now</>
+                    )}
+                  </button>
+                </div>
+
+                {/* Diagnostic panel — shown when sync returns 0 results */}
+                {state.showDebug && (
+                  <div style={{
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    borderTop: "none",
+                    borderBottomLeftRadius: 12,
+                    borderBottomRightRadius: 12,
+                    padding: "14px 20px",
+                    fontSize: 12,
+                    color: "#7f1d1d",
+                  }}>
+                    <div style={{ fontWeight: 700, marginBottom: 8, color: "#dc2626" }}>
+                      🔍 Alfred Diagnostic Report
+                    </div>
+
+                    {/* Final URL */}
+                    {state.debug?.finalUrl && (
+                      <div style={{ marginBottom: 8 }}>
+                        <span style={{ fontWeight: 600 }}>Last page: </span>
+                        <code style={{ background: "#fee2e2", padding: "1px 4px", borderRadius: 3 }}>
+                          {state.debug.finalUrl}
+                        </code>
+                        {(state.debug.finalUrl.includes("login") || state.debug.finalUrl.includes("auth")) && (
+                          <span style={{ marginLeft: 8, fontWeight: 700, color: "#dc2626" }}>
+                            ← SESSION EXPIRED — please reconnect VRBO
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* URLs visited */}
+                    {state.debug?.urlsVisited && state.debug.urlsVisited.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>Pages tried:</div>
+                        {state.debug.urlsVisited.map((v: any, i: number) => (
+                          <div key={i} style={{ marginLeft: 8, marginBottom: 2 }}>
+                            {v.error
+                              ? <span>❌ {v.attempted} — {v.error}</span>
+                              : <span>
+                                  {v.landed?.includes("login") || v.landed?.includes("auth") ? "🔒" : "✓"}{" "}
+                                  {v.attempted}
+                                  {v.landed && v.landed !== v.attempted && (
+                                    <span style={{ color: "#991b1b" }}> → {v.landed}</span>
+                                  )}
+                                </span>
+                            }
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Page text snippet */}
+                    {state.debug?.pageText && (
+                      <div>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>Page content preview:</div>
+                        <pre style={{
+                          background: "#fee2e2",
+                          padding: "8px",
+                          borderRadius: 6,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-all",
+                          maxHeight: 120,
+                          overflow: "auto",
+                          fontSize: 11,
+                          margin: 0,
+                        }}>
+                          {state.debug.pageText.slice(0, 600)}
+                        </pre>
+                      </div>
+                    )}
+
+                    {!state.debug?.finalUrl && !state.debug?.pageText && (
+                      <div>No additional details available. Check that your VRBO session is still active.</div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
