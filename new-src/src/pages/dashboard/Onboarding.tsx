@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { motion } from "motion/react";
 import {
@@ -17,8 +17,6 @@ import {
   AlertCircle,
   Globe,
   Puzzle,
-  Copy,
-  CheckCheck,
 } from "lucide-react";
 
 type Platform = "airbnb" | "vrbo" | "booking";
@@ -38,22 +36,12 @@ function OnboardingInner() {
   const [launching, setLaunching] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tokenCopied, setTokenCopied] = useState(false);
   const [scriptDone, setScriptDone] = useState(false);
   const navigate = useNavigate();
 
-  const syncToken = useQuery(api.onboarding.getSyncToken);
   const createLiveSession = useAction(api.onboarding.createLiveSession);
   const finishLiveSession = useAction(api.onboarding.finishLiveSession);
   const completeOnboarding = useMutation(api.tenants.completeOnboarding);
-
-  const handleCopyToken = () => {
-    if (syncToken) {
-      navigator.clipboard.writeText(syncToken);
-      setTokenCopied(true);
-      setTimeout(() => setTokenCopied(false), 2000);
-    }
-  };
 
   const handleLaunchBrowser = async () => {
     setLaunching(true);
@@ -340,36 +328,18 @@ function OnboardingInner() {
                     }}>2</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--dash-text)", marginBottom: 4 }}>
-                        Copy your sync token
+                        Get your sync token
                       </div>
                       <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 6 }}>
-                        The script needs this to know which account to sync to
+                        Find it in Settings → Platform Connections. The script will ask you to paste it on first run.
                       </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <div style={{
-                          flex: 1,
-                          background: "var(--dash-bg)",
-                          border: "1px solid var(--dash-border)",
-                          borderRadius: 6,
-                          padding: "7px 10px",
-                          fontSize: 11,
-                          fontFamily: "monospace",
-                          color: "var(--dash-text-secondary)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}>
-                          {syncToken ?? "Loading..."}
-                        </div>
-                        <button
-                          className="dash-btn dash-btn-secondary"
-                          style={{ fontSize: 12, padding: "7px 12px", flexShrink: 0 }}
-                          onClick={handleCopyToken}
-                          disabled={!syncToken}
-                        >
-                          {tokenCopied ? <><CheckCheck size={11} /> Copied!</> : <><Copy size={11} /> Copy</>}
-                        </button>
-                      </div>
+                      <button
+                        className="dash-btn dash-btn-secondary"
+                        style={{ fontSize: 12, padding: "6px 12px" }}
+                        onClick={() => navigate("/dashboard/settings")}
+                      >
+                        <ExternalLink size={11} /> Open Settings
+                      </button>
                     </div>
                   </div>
 
