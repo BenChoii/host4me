@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Host4Me Sync
 // @namespace    https://host4me.vercel.app
-// @version      1.0.0
+// @version      1.0.1
 // @description  Syncs VRBO/Airbnb/Booking.com reservation data to Host4Me platform
 // @author       Host4Me
 // @match        https://www.vrbo.com/*
@@ -13,7 +13,7 @@
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_notification
-// @connect      host4me.vercel.app
+// @connect      brainy-gnu-879.convex.site
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -22,7 +22,7 @@
 
   const CONFIG = {
     SYNC_INTERVAL_MS: 4 * 60 * 60 * 1000, // 4 hours
-    WEBHOOK_URL: 'https://host4me.vercel.app/webhooks/userscript-sync',
+    WEBHOOK_URL: 'https://brainy-gnu-879.convex.site/webhooks/userscript-sync',
     DASHBOARD_URL: 'https://host4me.vercel.app/dashboard/settings',
     TOKEN_STORAGE_KEY: 'host4me_sync_token',
     STARTUP_DELAY_MS: 3000
