@@ -127,6 +127,26 @@ export const finishLiveSession = action({
   },
 });
 
+// Internal mutation: mark a browser session as invalid (session expired)
+export const invalidateBrowserSession = internalMutation({
+  args: {
+    tenantId: v.id("tenants"),
+    platform: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("browserSessions")
+      .withIndex("by_tenant_platform", (q) =>
+        q.eq("tenantId", args.tenantId).eq("platform", args.platform)
+      )
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { isValid: false });
+    }
+  },
+});
+
 // Internal mutation: save or update browser session storage state
 export const saveBrowserSession = internalMutation({
   args: {
@@ -280,6 +300,38 @@ export const connectGmailInternal = internalMutation({
         lastSyncAt: null,
       });
     }
+  },
+});
+
+// Query: get browser session status for each platform (used in Settings)
+export const getBrowserSessionStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+    const tenant = await ctx.db
+      .query("tenants")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (!tenant) return [];
+
+    const platforms = ["vrbo", "airbnb", "booking"];
+    const results = [];
+    for (const platform of platforms) {
+      const session = await ctx.db
+        .query("browserSessions")
+        .withIndex("by_tenant_platform", (q) =>
+          q.eq("tenantId", tenant._id).eq("platform", platform)
+        )
+        .unique();
+      results.push({
+        platform,
+        hasSession: !!session,
+        isValid: session?.isValid ?? false,
+        finalUrl: session?.finalUrl ?? null,
+      });
+    }
+    return results;
   },
 });
 

@@ -17,6 +17,13 @@ crons.interval(
   internal.actions.worker.syncAllGmail
 );
 
+// AI agent platform browse — Alfred visits platforms and extracts data every hour
+crons.interval(
+  "agent-browse-sync",
+  { hours: 1 },
+  internal.actions.worker.agentBrowseAllTenants
+);
+
 // Daily briefings at 8am UTC (tenants adjust via timezone)
 crons.daily(
   "daily-briefings",
