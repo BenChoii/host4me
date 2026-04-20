@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Host4Me Sync
 // @namespace    https://host4me.vercel.app
-// @version      2.1.0
+// @version      2.2.0
 // @description  Syncs VRBO/Airbnb/Booking.com reservation data by intercepting the browser's own API calls
 // @author       Host4Me
 // @match        https://www.vrbo.com/*
@@ -14,11 +14,13 @@
 // @grant        GM_registerMenuCommand
 // @grant        GM_notification
 // @connect      brainy-gnu-879.convex.site
+// @connect      owner.vrbo.com
+// @connect      www.vrbo.com
 // @run-at       document-start
 // ==/UserScript==
 
 /**
- * Host4Me Sync v2.1
+ * Host4Me Sync v2.2
  *
  * Architecture: browser-native interception.
  *
