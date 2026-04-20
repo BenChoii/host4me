@@ -295,10 +295,10 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
 
                   {/* Action buttons */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0, alignItems: "flex-end" }}>
-                    {/* Tampermonkey platforms: open VRBO directly in user's browser */}
+                    {/* Tampermonkey platforms: open VRBO inbox directly */}
                     {platform.connectionType === "tampermonkey" ? (
                       <button
-                        onClick={() => window.open("https://www.vrbo.com/en-ca/pm/reservations", "_blank")}
+                        onClick={() => window.open("https://owner.vrbo.com/en-ca/supply/inbox", "_blank")}
                         style={{
                           padding: "8px 16px",
                           borderRadius: 8,
@@ -315,7 +315,6 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                         Open VRBO ↗
                       </button>
                     ) : (
-                      /* VPS-browser platforms: Sync Now only when session is valid */
                       hasValidSession && (
                         <button
                           onClick={() => handleSync(platform.id)}
@@ -356,7 +355,6 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                       )
                     )}
 
-                    {/* Setup / Connect button */}
                     <button
                       onClick={() => handleOpenReconnect(platform.id)}
                       style={{
@@ -383,8 +381,7 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                   </div>
                 </div>
 
-                {/* Diagnostic panel (VPS platforms only) */}
-                {state.showDebug && platform.connectionType !== "tampermonkey" && (
+                {state.showDebug && (
                   <div style={{
                     background: "#fef2f2",
                     border: "1px solid #fecaca",
@@ -399,28 +396,9 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                       ⚠ {state.message}
                     </div>
                     <div style={{ color: "#991b1b" }}>
-                      Use the Re-connect button above to refresh your session, then try syncing again.
-                    </div>
-                  </div>
-                )}
-
-                {/* Error panel (Tampermonkey platforms) */}
-                {state.showDebug && platform.connectionType === "tampermonkey" && (
-                  <div style={{
-                    background: "#fef2f2",
-                    border: "1px solid #fecaca",
-                    borderTop: "none",
-                    borderBottomLeftRadius: 12,
-                    borderBottomRightRadius: 12,
-                    padding: "14px 20px",
-                    fontSize: 12,
-                    color: "#7f1d1d",
-                  }}>
-                    <div style={{ fontWeight: 700, marginBottom: 4, color: "#dc2626" }}>
-                      ⚠ {state.message}
-                    </div>
-                    <div style={{ color: "#991b1b" }}>
-                      Click "Setup" to check your Tampermonkey script configuration.
+                      {platform.connectionType === "tampermonkey"
+                        ? 'Click "Setup" to check your Tampermonkey configuration.'
+                        : 'Use the Re-connect button to refresh your session.'}
                     </div>
                   </div>
                 )}
@@ -527,7 +505,7 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
         </div>
       </div>
 
-      {/* ── Connect / Setup Modal ── */}
+      {/* ── Reconnect Modal ── */}
       <AnimatePresence>
         {reconnect && (
           <motion.div
@@ -564,34 +542,20 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                 overflow: "hidden",
               }}
             >
-              {/* Header */}
               {reconnect.step !== "browser" && (
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--dash-text)", margin: 0 }}>
-                      {reconnect.step === "done"
-                        ? "✓ All set!"
-                        : reconnect.step === "error"
-                        ? "⚠ Connection Failed"
+                      {reconnect.step === "done" ? "✓ All set!"
+                        : reconnect.step === "error" ? "⚠ Connection Failed"
                         : `Connect ${PLATFORMS.find(p => p.id === reconnect.platform)?.name}`}
                     </h3>
-                    <button
-                      onClick={() => setReconnect(null)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        fontSize: 20,
-                        cursor: "pointer",
-                        color: "var(--dash-text-muted)",
-                        lineHeight: 1,
-                        padding: "0 4px",
-                      }}
-                    >×</button>
+                    <button onClick={() => setReconnect(null)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "var(--dash-text-muted)", lineHeight: 1, padding: "0 4px" }}>×</button>
                   </div>
                 </div>
               )}
 
-              {/* ── Tampermonkey setup flow (VRBO) ── */}
+              {/* Tampermonkey setup (VRBO) */}
               {reconnect.step === "idle" && PLATFORMS.find(p => p.id === reconnect.platform)?.connectionType === "tampermonkey" && (
                 <div>
                   <p style={{ fontSize: 14, color: "var(--dash-text-muted)", marginBottom: 20 }}>
@@ -601,56 +565,31 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                   <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
                     {[
                       { n: 1, text: "Install Tampermonkey in Chrome (if you haven't already)" },
-                      { n: 2, text: "Install the Alfred VRBO sync script (ask your admin for the link)" },
-                      { n: 3, text: "Paste your sync token (below) into the script when prompted" },
-                      { n: 4, text: "Visit owner.vrbo.com while logged in — data syncs automatically" },
+                      { n: 2, text: "Install the Alfred VRBO sync script from your admin panel" },
+                      { n: 3, text: "Paste your sync token below into the script when prompted" },
+                      { n: 4, text: "Visit owner.vrbo.com/en-ca/supply/inbox — data syncs automatically" },
                     ].map(step => (
                       <div key={step.n} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                        <div style={{
-                          width: 24, height: 24, borderRadius: "50%",
-                          background: "var(--dash-text)", color: "white",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 1,
-                        }}>{step.n}</div>
+                        <div style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--dash-text)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{step.n}</div>
                         <span style={{ fontSize: 14, color: "var(--dash-text)" }}>{step.text}</span>
                       </div>
                     ))}
                   </div>
-                  {/* Sync token inline */}
-                  <div style={{
-                    background: "var(--dash-bg)",
-                    border: "1px solid var(--dash-border)",
-                    borderRadius: 10,
-                    padding: "12px 16px",
-                    marginBottom: 24,
-                  }}>
+                  <div style={{ background: "var(--dash-bg)", border: "1px solid var(--dash-border)", borderRadius: 10, padding: "12px 16px", marginBottom: 24 }}>
                     <div style={{ fontSize: 12, color: "var(--dash-text-muted)", marginBottom: 6 }}>Your sync token:</div>
-                    <code style={{ fontSize: 13, fontFamily: "monospace", color: "var(--dash-text)", wordBreak: "break-all" }}>
-                      {syncToken ?? "Loading…"}
-                    </code>
+                    <code style={{ fontSize: 13, fontFamily: "monospace", color: "var(--dash-text)", wordBreak: "break-all" }}>{syncToken ?? "Loading…"}</code>
                   </div>
                   <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                    <button onClick={() => setReconnect(null)} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid var(--dash-border)", background: "transparent", color: "var(--dash-text-muted)", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Close</button>
                     <button
-                      onClick={() => setReconnect(null)}
-                      style={{
-                        padding: "10px 20px", borderRadius: 8,
-                        border: "1px solid var(--dash-border)", background: "transparent",
-                        color: "var(--dash-text-muted)", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >Close</button>
-                    <button
-                      onClick={() => { window.open("https://www.vrbo.com/en-ca/pm/reservations", "_blank"); setReconnect(null); }}
-                      style={{
-                        padding: "10px 24px", borderRadius: 8,
-                        border: "none", background: "var(--dash-text)",
-                        color: "white", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                      }}
+                      onClick={() => { window.open("https://owner.vrbo.com/en-ca/supply/inbox", "_blank"); setReconnect(null); }}
+                      style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: "var(--dash-text)", color: "white", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
                     >Open VRBO ↗</button>
                   </div>
                 </div>
               )}
 
-              {/* ── VPS browser connect flow (Airbnb etc.) ── */}
+              {/* VPS browser connect flow */}
               {reconnect.step === "idle" && PLATFORMS.find(p => p.id === reconnect.platform)?.connectionType !== "tampermonkey" && (
                 <div>
                   <p style={{ fontSize: 14, color: "var(--dash-text-muted)", marginBottom: 24 }}>
@@ -659,158 +598,61 @@ function SettingsCore({ sessionStatuses }: { sessionStatuses?: Array<{ platform:
                     then click "Capture Session" to save your login.
                   </p>
                   <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => setReconnect(null)}
-                      style={{
-                        padding: "10px 20px", borderRadius: 8,
-                        border: "1px solid var(--dash-border)", background: "transparent",
-                        color: "var(--dash-text-muted)", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >Cancel</button>
-                    <button
-                      onClick={handleLaunchBrowser}
-                      style={{
-                        padding: "10px 24px", borderRadius: 8,
-                        border: "none", background: "var(--dash-text)",
-                        color: "white", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >🖥 Launch Browser</button>
+                    <button onClick={() => setReconnect(null)} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid var(--dash-border)", background: "transparent", color: "var(--dash-text-muted)", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+                    <button onClick={handleLaunchBrowser} style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: "var(--dash-text)", color: "white", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>🖥 Launch Browser</button>
                   </div>
                 </div>
               )}
 
-              {/* Step: launching */}
               {reconnect.step === "launching" && (
                 <div style={{ textAlign: "center", padding: "16px 0" }}>
-                  <div style={{
-                    width: 40, height: 40,
-                    border: "3px solid var(--dash-border)",
-                    borderTopColor: "var(--dash-text)",
-                    borderRadius: "50%",
-                    animation: "spin 0.8s linear infinite",
-                    margin: "0 auto 16px",
-                  }} />
+                  <div style={{ width: 40, height: 40, border: "3px solid var(--dash-border)", borderTopColor: "var(--dash-text)", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
                   <p style={{ color: "var(--dash-text-muted)", fontSize: 14 }}>Starting browser session…</p>
                 </div>
               )}
 
-              {/* Step: browser — noVNC iframe */}
               {reconnect.step === "browser" && reconnect.vncUrl && (
                 <div style={{ display: "flex", flexDirection: "column" }}>
-                  <div style={{
-                    padding: "12px 20px",
-                    borderBottom: "1px solid var(--dash-border)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    background: "var(--dash-surface)",
-                  }}>
+                  <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--dash-border)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--dash-surface)" }}>
                     <div>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: "var(--dash-text)" }}>
-                        Log into {PLATFORMS.find(p => p.id === reconnect.platform)?.name}
-                      </span>
-                      <span style={{ fontSize: 13, color: "var(--dash-text-muted)", marginLeft: 12 }}>
-                        When fully logged in, click "Capture Session" →
-                      </span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: "var(--dash-text)" }}>Log into {PLATFORMS.find(p => p.id === reconnect.platform)?.name}</span>
+                      <span style={{ fontSize: 13, color: "var(--dash-text-muted)", marginLeft: 12 }}>When fully logged in, click "Capture Session" →</span>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button
-                        onClick={() => setReconnect(null)}
-                        style={{
-                          padding: "8px 16px", borderRadius: 8,
-                          border: "1px solid var(--dash-border)", background: "transparent",
-                          color: "var(--dash-text-muted)", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                        }}
-                      >Cancel</button>
-                      <button
-                        onClick={handleFinishSession}
-                        style={{
-                          padding: "8px 20px", borderRadius: 8,
-                          border: "none", background: "#10b981",
-                          color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer",
-                        }}
-                      >✓ Capture Session</button>
+                      <button onClick={() => setReconnect(null)} style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid var(--dash-border)", background: "transparent", color: "var(--dash-text-muted)", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+                      <button onClick={handleFinishSession} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "#10b981", color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✓ Capture Session</button>
                     </div>
                   </div>
-                  <iframe
-                    src={reconnect.vncUrl}
-                    style={{ width: "100%", height: "65vh", border: "none", display: "block" }}
-                    title="Live Browser"
-                    allow="clipboard-read; clipboard-write"
-                  />
+                  <iframe src={reconnect.vncUrl} style={{ width: "100%", height: "65vh", border: "none", display: "block" }} title="Live Browser" allow="clipboard-read; clipboard-write" />
                 </div>
               )}
 
-              {/* Step: finishing */}
               {reconnect.step === "finishing" && (
                 <div style={{ textAlign: "center", padding: "16px 0" }}>
-                  <div style={{
-                    width: 40, height: 40,
-                    border: "3px solid var(--dash-border)",
-                    borderTopColor: "#10b981",
-                    borderRadius: "50%",
-                    animation: "spin 0.8s linear infinite",
-                    margin: "0 auto 16px",
-                  }} />
+                  <div style={{ width: 40, height: 40, border: "3px solid var(--dash-border)", borderTopColor: "#10b981", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 16px" }} />
                   <p style={{ color: "var(--dash-text-muted)", fontSize: 14 }}>Capturing session cookies…</p>
                 </div>
               )}
 
-              {/* Step: done */}
               {reconnect.step === "done" && (
                 <div>
-                  <div style={{
-                    width: 56, height: 56, borderRadius: "50%",
-                    background: "#10b98120",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 28, margin: "0 auto 16px",
-                  }}>✓</div>
+                  <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#10b98120", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px" }}>✓</div>
                   <p style={{ fontSize: 14, color: "var(--dash-text-muted)", textAlign: "center", marginBottom: 24 }}>
-                    {PLATFORMS.find(p => p.id === reconnect.platform)?.name} session saved.
-                    Alfred will use it to sync your data automatically every hour.
+                    {PLATFORMS.find(p => p.id === reconnect.platform)?.name} session saved. Alfred will use it to sync your data automatically.
                   </p>
                   <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
-                    <button
-                      onClick={() => { setReconnect(null); handleSync(reconnect.platform); }}
-                      style={{
-                        padding: "10px 24px", borderRadius: 8,
-                        border: "none", background: "var(--dash-text)",
-                        color: "white", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >↻ Sync Now</button>
-                    <button
-                      onClick={() => setReconnect(null)}
-                      style={{
-                        padding: "10px 20px", borderRadius: 8,
-                        border: "1px solid var(--dash-border)", background: "transparent",
-                        color: "var(--dash-text-muted)", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >Close</button>
+                    <button onClick={() => { setReconnect(null); handleSync(reconnect.platform); }} style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: "var(--dash-text)", color: "white", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>↻ Sync Now</button>
+                    <button onClick={() => setReconnect(null)} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid var(--dash-border)", background: "transparent", color: "var(--dash-text-muted)", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Close</button>
                   </div>
                 </div>
               )}
 
-              {/* Step: error */}
               {reconnect.step === "error" && (
                 <div>
                   <p style={{ fontSize: 14, color: "#dc2626", marginBottom: 16 }}>{reconnect.error}</p>
                   <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-                    <button
-                      onClick={() => setReconnect(null)}
-                      style={{
-                        padding: "10px 20px", borderRadius: 8,
-                        border: "1px solid var(--dash-border)", background: "transparent",
-                        color: "var(--dash-text-muted)", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >Close</button>
-                    <button
-                      onClick={() => setReconnect(prev => prev ? { ...prev, step: "idle" } : null)}
-                      style={{
-                        padding: "10px 24px", borderRadius: 8,
-                        border: "none", background: "var(--dash-text)",
-                        color: "white", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >Try Again</button>
+                    <button onClick={() => setReconnect(null)} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid var(--dash-border)", background: "transparent", color: "var(--dash-text-muted)", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Close</button>
+                    <button onClick={() => setReconnect(prev => prev ? { ...prev, step: "idle" } : null)} style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: "var(--dash-text)", color: "white", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Try Again</button>
                   </div>
                 </div>
               )}
