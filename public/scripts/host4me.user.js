@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Host4Me Sync
 // @namespace    https://host4me.vercel.app
-// @version      2.0.0
+// @version      2.1.0
 // @description  Syncs VRBO/Airbnb/Booking.com reservation data by intercepting the browser's own API calls
 // @author       Host4Me
 // @match        https://www.vrbo.com/*
@@ -13,12 +13,12 @@
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_notification
-// @connect      modest-bandicoot-699.convex.site
+// @connect      brainy-gnu-879.convex.site
 // @run-at       document-start
 // ==/UserScript==
 
 /**
- * Host4Me Sync v2.0
+ * Host4Me Sync v2.1
  *
  * Architecture: browser-native interception.
  *
@@ -43,10 +43,10 @@
   // Config
   // ---------------------------------------------------------------------------
   const CONFIG = {
-    WEBHOOK_URL: 'https://modest-bandicoot-699.convex.site/webhooks/userscript-sync',
+    WEBHOOK_URL: 'https://brainy-gnu-879.convex.site/webhooks/userscript-sync',
     TOKEN_KEY: 'host4me_sync_token',
-    COOLDOWN_MS: 30 * 60 * 1000,   // 30 min between automatic syncs per hostname
-    SETTLE_MS: 4000,                // wait 4 s after page load for SPA to finish its calls
+    COOLDOWN_MS: 15 * 60 * 1000,   // 15 min between automatic syncs per hostname
+    SETTLE_MS: 5000,                // wait 5 s after page load for SPA to finish its calls
   };
 
   // ---------------------------------------------------------------------------
@@ -58,6 +58,10 @@
   const INTERESTING_URL = [
     /reservation/i, /booking/i, /listing/i, /propert/i,
     /calendar/i, /inbox/i, /hosted/i, /member/i, /gc\//i,
+    // VRBO / Expedia Group specific
+    /\/api\//i, /graphql/i, /\/pm\//i, /expedia/i, /vrbo/i,
+    /\/v\d+\//i,   // versioned APIs like /v3/, /v2/
+    /\/lp\//i,     // VRBO landing/property manager portal
   ];
 
   /** JSON body keys that suggest reservation content */
@@ -66,6 +70,11 @@
     '"checkIn"', '"checkOut"', '"checkInDate"', '"checkOutDate"',
     '"guestName"', '"guestFirstName"', '"confirmationCode"',
     '"reservationId"', '"tuid"', '"hostId"',
+    // VRBO Canadian / Expedia Group specific
+    '"stayDates"', '"arrivalDate"', '"departureDate"', '"travelerFirstName"',
+    '"travelerLastName"', '"egUnit"', '"unitListing"', '"guestInfo"',
+    '"reservationStatus"', '"bookingStatus"', '"rentalAgreement"',
+    '"ownerAmount"', '"hostPayout"', '"earningAmount"',
   ];
 
   function urlIsInteresting(url) {
