@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { Component, type ReactNode } from "react";
 import Landing from "./pages/Landing";
+import LandingRedirect from "./pages/LandingRedirect";
 import SignUp from "./pages/SignUp";
 import SignIn from "./pages/SignIn";
 import DashboardLayout from "./pages/dashboard/DashboardLayout";
@@ -72,7 +73,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={<LandingRedirect />} />
+      <Route path="/old-landing" element={<Landing />} />
       <Route path="/sign-up/*" element={<SignUp />} />
       <Route path="/sign-in/*" element={<SignIn />} />
       <Route

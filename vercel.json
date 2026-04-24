@@ -3,6 +3,8 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/", "destination": "/Host4Me.html" },
+    { "source": "/index.html", "destination": "/Host4Me.html" },
     { "source": "/:path*", "destination": "/index.html" }
   ]
 }
