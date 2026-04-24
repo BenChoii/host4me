@@ -20,12 +20,16 @@
 // ==/UserScript==
 
 /**
- * Host4Me Sync v2.3
+ * Host4Me Sync v2.4
  *
  * Two-track data collection:
  *   1. XHR/fetch interceptors (installed at document-start) — catches dynamic API calls
  *   2. Apollo SSR cache reader (runs after DOM ready) — catches server-rendered data
  *      baked into window.__APOLLO_STATE__ (VRBO's inbox is SSR, so this is critical)
+ *
+ * Token self-healing:
+ *   - Auto-clears tokens that don't match Convex ID format (leftover from old script versions)
+ *   - Clears token if webhook returns an invalid-token error, prompts on next sync
  *
  * Sends reservations + messages to Convex webhook.
  */
@@ -205,7 +209,7 @@
   function getSyncToken() {
     let t = GM_getValue(CONFIG.TOKEN_KEY, '');
     // Auto-clear tokens that don't look like a valid Convex tenant ID
-    // (Convex IDs are 28-36 lowercase alphanumeric chars, no dashes/dots)
+    // (Convex IDs are 20-40 lowercase alphanumeric chars, no dashes/dots/uppercase)
     if (t && !/^[a-z0-9]{20,40}$/.test(t)) {
       console.log('[Host4Me] Clearing invalid token format, will re-prompt');
       GM_setValue(CONFIG.TOKEN_KEY, '');
@@ -313,12 +317,14 @@
         console.error('[Host4Me] Webhook error:', resp.status, resp.responseText);
         // If the token was rejected, clear it so the user gets prompted on next sync
         if (resp.status === 401 || resp.status === 500) {
-          const errBody = JSON.parse(resp.responseText || '{}');
-          if (String(errBody.error || '').toLowerCase().includes('token')) {
-            GM_setValue(CONFIG.TOKEN_KEY, '');
-            notify('Invalid sync token cleared — you will be prompted on next sync');
-            return;
-          }
+          try {
+            const errBody = JSON.parse(resp.responseText || '{}');
+            if (String(errBody.error || '').toLowerCase().includes('token')) {
+              GM_setValue(CONFIG.TOKEN_KEY, '');
+              notify('Invalid sync token cleared — you will be prompted on next sync');
+              return;
+            }
+          } catch (_) {}
         }
         notify('Sync failed — see console');
       }
@@ -334,12 +340,12 @@
     const platform = getPlatform();
     if (!platform) return;
 
-    GM_registerMenuCommand('🔄 Sync Host4Me Now', () => {
+    GM_registerMenuCommand('\uD83D\uDD04 Sync Host4Me Now', () => {
       captured.length = 0;
       GM_setValue('h4m_last_' + location.hostname, '0');
       setTimeout(() => performSync(true), 1000);
     });
-    GM_registerMenuCommand('🔑 Reset Host4Me Token', () => {
+    GM_registerMenuCommand('\uD83D\uDD11 Reset Host4Me Token', () => {
       GM_setValue(CONFIG.TOKEN_KEY, '');
       alert('Token cleared. You will be prompted on next sync.');
     });

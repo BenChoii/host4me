@@ -39,19 +39,15 @@ PORT = int(os.environ.get("LIVE_SESSION_PORT", "8101"))
 DATA_DIR = Path(os.environ.get("HOST4ME_DATA_DIR", "/opt/host4me/data"))
 
 # Residential proxy — format: http://user:pass@host:port
-# Sign up at Bright Data, IPRoyal, SmartProxy, etc. and set this env var
 PROXY_SERVER = os.environ.get("PROXY_SERVER", "")
 PROXY_USERNAME = os.environ.get("PROXY_USERNAME", "")
 PROXY_PASSWORD = os.environ.get("PROXY_PASSWORD", "")
 
-# VNC port range — each session gets its own Xvfb display + websockify port
+# VNC port range
 VNC_PORT_START = int(os.environ.get("VNC_PORT_START", "6080"))
 VNC_PORT_MAX = int(os.environ.get("VNC_PORT_MAX", "6099"))
 
 # Platform start URLs
-# For VRBO we use the homepage so the browser gets redirected to the correct
-# locale (e.g. /en-ca/ for Canadian accounts) rather than landing on a locale
-# mismatch that triggers VRBO's error page.
 PLATFORM_URLS = {
     "airbnb": "https://www.airbnb.com/login",
     "vrbo": "https://www.vrbo.com",
@@ -62,21 +58,18 @@ PLATFORM_URLS = {
 # State
 # ---------------------------------------------------------------------------
 sessions: dict[str, dict] = {}
-_next_display = 10  # Xvfb display number counter
+_next_display = 10
 _next_vnc_port = VNC_PORT_START
 _playwright = None
-_scrape_xvfb_proc = None   # Persistent Xvfb for non-headless scraping (display :50)
-_SCRAPE_DISPLAY = 50        # Fixed display number reserved for scraping
+_scrape_xvfb_proc = None
+_SCRAPE_DISPLAY = 50
 
 
 # ---------------------------------------------------------------------------
-# Stealth patches (comprehensive — works without playwright-extra)
+# Stealth patches
 # ---------------------------------------------------------------------------
 STEALTH_JS = """
-// Remove webdriver flag
 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-
-// Chrome runtime
 window.chrome = {
   runtime: {
     PlatformOs: { MAC: 'mac', WIN: 'win', ANDROID: 'android', CROS: 'cros', LINUX: 'linux', OPENBSD: 'openbsd' },
@@ -90,8 +83,6 @@ window.chrome = {
   csi: function() { return {} },
   app: { isInstalled: false, InstallState: { INSTALLED: 'installed', NOT_INSTALLED: 'not_installed', DISABLED: 'disabled' }, RunningState: { RUNNING: 'running', CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run' } },
 };
-
-// Plugins — make it look like a real browser
 Object.defineProperty(navigator, 'plugins', {
   get: () => {
     const plugins = [
@@ -103,91 +94,41 @@ Object.defineProperty(navigator, 'plugins', {
     return plugins;
   },
 });
-
-// Languages
 Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
 Object.defineProperty(navigator, 'language', { get: () => 'en-US' });
-
-// Platform
 Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' });
-
-// Hardware concurrency
 Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
-
-// Device memory
 Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
-
-// Connection
 Object.defineProperty(navigator, 'connection', {
-  get: () => ({
-    effectiveType: '4g',
-    rtt: 50,
-    downlink: 10,
-    saveData: false,
-  }),
+  get: () => ({ effectiveType: '4g', rtt: 50, downlink: 10, saveData: false }),
 });
-
-// Permissions — make Notification.permission look normal
-const originalQuery = window.Notification && Notification.permission;
-if (originalQuery) {
-  const originalQueryFn = window.Notification.requestPermission;
-  window.Notification.requestPermission = function() {
-    return Promise.resolve(originalQuery);
-  };
-}
-
-// WebGL vendor/renderer
 const getParameter = WebGLRenderingContext.prototype.getParameter;
 WebGLRenderingContext.prototype.getParameter = function(parameter) {
   if (parameter === 37445) return 'Intel Inc.';
   if (parameter === 37446) return 'Intel Iris OpenGL Engine';
   return getParameter.call(this, parameter);
 };
-
-// Canvas fingerprint noise
 const toBlob = HTMLCanvasElement.prototype.toBlob;
 const toDataURL = HTMLCanvasElement.prototype.toDataURL;
-const getImageData = CanvasRenderingContext2D.prototype.getImageData;
-
 HTMLCanvasElement.prototype.toBlob = function(...args) {
-  // Add subtle noise
   const context = this.getContext('2d');
-  if (context) {
-    const style = context.fillStyle;
-    context.fillStyle = 'rgba(0,0,0,0.01)';
-    context.fillRect(0, 0, 1, 1);
-    context.fillStyle = style;
-  }
+  if (context) { const style = context.fillStyle; context.fillStyle = 'rgba(0,0,0,0.01)'; context.fillRect(0, 0, 1, 1); context.fillStyle = style; }
   return toBlob.apply(this, args);
 };
-
 HTMLCanvasElement.prototype.toDataURL = function(...args) {
   const context = this.getContext('2d');
-  if (context) {
-    const style = context.fillStyle;
-    context.fillStyle = 'rgba(0,0,0,0.01)';
-    context.fillRect(0, 0, 1, 1);
-    context.fillStyle = style;
-  }
+  if (context) { const style = context.fillStyle; context.fillStyle = 'rgba(0,0,0,0.01)'; context.fillRect(0, 0, 1, 1); context.fillStyle = style; }
   return toDataURL.apply(this, args);
 };
-
-// Remove Playwright-specific properties
 delete window.__playwright;
 delete window.__pw_manual;
 delete window.__PW_inspect;
-
-// Fix iframe contentWindow
 try {
   const originalContentWindow = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
   Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
     get: function() {
       const result = originalContentWindow.get.call(this);
-      if (result) {
-        try {
-          Object.defineProperty(result.navigator, 'webdriver', { get: () => undefined });
-        } catch (e) {}
-      }
+      if (result) { try { Object.defineProperty(result.navigator, 'webdriver', { get: () => undefined }); } catch (e) {} }
       return result;
     },
   });
@@ -199,7 +140,6 @@ try {
 # Helpers
 # ---------------------------------------------------------------------------
 def _alloc_display_and_port() -> tuple[int, int]:
-    """Allocate next available Xvfb display number and websockify port."""
     global _next_display, _next_vnc_port
     display = _next_display
     port = _next_vnc_port
@@ -211,47 +151,34 @@ def _alloc_display_and_port() -> tuple[int, int]:
 
 
 def _start_xvfb(display: int, width=1280, height=900, depth=24) -> subprocess.Popen:
-    """Start an Xvfb virtual display."""
     proc = subprocess.Popen(
         ["Xvfb", f":{display}", "-screen", "0", f"{width}x{height}x{depth}", "-ac", "-nolisten", "tcp"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     return proc
 
 
 def _start_websockify(vnc_port: int, display: int) -> subprocess.Popen:
-    """Start websockify to bridge WebSocket (noVNC) to the X display via x11vnc."""
-    # First start x11vnc on the display
     vnc_display_port = 5900 + display
     x11vnc = subprocess.Popen(
         ["x11vnc", "-display", f":{display}", "-rfbport", str(vnc_display_port),
          "-nopw", "-forever", "-shared", "-noxrecord", "-noxfixes", "-noxdamage"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
-
-    # Then websockify connects noVNC (WebSocket) to x11vnc (RFB)
     websockify = subprocess.Popen(
-        ["websockify", "--web", "/usr/share/novnc",
-         str(vnc_port), f"localhost:{vnc_display_port}"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        ["websockify", "--web", "/usr/share/novnc", str(vnc_port), f"localhost:{vnc_display_port}"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     return x11vnc, websockify
 
 
 async def _apply_stealth(page):
-    """Apply comprehensive stealth patches to a page."""
-    # Try playwright-extra stealth first (better coverage)
     try:
         from playwright_stealth import stealth_async
         await stealth_async(page)
         return
     except ImportError:
         pass
-
-    # Fall back to manual stealth JS
     await page.add_init_script(STEALTH_JS)
 
 
@@ -259,17 +186,7 @@ async def _apply_stealth(page):
 # Session management
 # ---------------------------------------------------------------------------
 async def create_session(tenant_id: str, platform: str) -> dict:
-    """Create a new live browser session with stealth + proxy.
-
-    Uses patchright (patched Playwright) instead of stock Playwright so that
-    PerimeterX/HUMAN cannot detect the CDP connection via V8 heap properties,
-    timing signals, or other binary-level fingerprints.
-    """
     global _playwright
-
-    # patchright is a drop-in Playwright replacement that patches Chromium's
-    # binary to remove CDP fingerprints — the main reason PerimeterX blocks us.
-    # Falls back to stock playwright if patchright isn't installed.
     try:
         from patchright.async_api import async_playwright as _new_playwright
         print("[session] Using patchright (CDP-patched Chromium)")
@@ -283,19 +200,12 @@ async def create_session(tenant_id: str, platform: str) -> dict:
     session_id = str(uuid.uuid4())[:8]
     display, vnc_port = _alloc_display_and_port()
 
-    # Start virtual display
     xvfb_proc = _start_xvfb(display)
-    await asyncio.sleep(0.5)  # Let Xvfb initialize
+    await asyncio.sleep(0.5)
 
-    # Start x11vnc + websockify
     x11vnc_proc, ws_proc = _start_websockify(vnc_port, display)
     await asyncio.sleep(0.5)
 
-    # Minimal launch args — fewer flags = fewer bot signals.
-    # We intentionally removed: --disable-extensions, --disable-background-networking,
-    # --disable-default-apps, --disable-sync, --disable-translate,
-    # --metrics-recording-only, --no-first-run, --safebrowsing-disable-auto-update
-    # All of those are bot signals PerimeterX checks for.
     browser_args = [
         "--no-sandbox",
         "--disable-blink-features=AutomationControlled",
@@ -303,7 +213,6 @@ async def create_session(tenant_id: str, platform: str) -> dict:
         f"--display=:{display}",
     ]
 
-    # Build proxy config if available
     proxy_config = None
     if PROXY_SERVER:
         proxy_config = {"server": PROXY_SERVER}
@@ -311,22 +220,15 @@ async def create_session(tenant_id: str, platform: str) -> dict:
             proxy_config["username"] = PROXY_USERNAME
             proxy_config["password"] = PROXY_PASSWORD
 
-    # patchright uses its own patched Chromium — don't specify channel
-    launch_kwargs = {
-        "headless": False,  # Headed so it renders on Xvfb → noVNC
-        "args": browser_args,
-    }
+    launch_kwargs = {"headless": False, "args": browser_args}
     if proxy_config:
         launch_kwargs["proxy"] = proxy_config
 
     browser = await _playwright.chromium.launch(**launch_kwargs)
 
-    # Create context — let patchright set the user agent naturally so it matches
-    # its patched Chromium version (hardcoding Chrome/147 while patchright ships
-    # Chromium ~136 creates a detectable version mismatch).
     context_kwargs = {
         "viewport": {"width": 1280, "height": 900},
-        "locale": "en-CA",      # Canadian locale — matches Leo's VRBO account region
+        "locale": "en-CA",
         "timezone_id": "America/Toronto",
         "color_scheme": "light",
         "has_touch": False,
@@ -335,12 +237,9 @@ async def create_session(tenant_id: str, platform: str) -> dict:
     }
 
     context = await browser.new_context(**context_kwargs)
-
-    # Apply stealth before any navigation
     page = await context.new_page()
     await _apply_stealth(page)
 
-    # Store session info first so it's available before navigation completes
     sessions[session_id] = {
         "tenant_id": tenant_id,
         "platform": platform,
@@ -354,15 +253,12 @@ async def create_session(tenant_id: str, platform: str) -> dict:
         "websockify": ws_proc,
     }
 
-    # Navigate to platform login in the background — don't block the API response.
-    # The noVNC viewer opens immediately showing the browser, then the page loads
-    # inside it. This cuts perceived latency from ~15s to ~3s.
     start_url = PLATFORM_URLS.get(platform, PLATFORM_URLS["airbnb"])
 
     async def _navigate_background():
         try:
             await page.goto(start_url, wait_until="domcontentloaded", timeout=30000)
-            print(f"[{session_id}] Navigated to {start_url} → {page.url}")
+            print(f"[{session_id}] Navigated to {start_url} -> {page.url}")
         except Exception as e:
             print(f"[{session_id}] Warning: initial navigation error (non-fatal): {e}")
 
@@ -373,29 +269,30 @@ async def create_session(tenant_id: str, platform: str) -> dict:
 
 
 async def finish_session(session_id: str) -> dict:
-    """Capture cookies/storage from the session, then tear it down."""
     s = sessions.get(session_id)
     if not s:
         raise ValueError(f"Session {session_id} not found")
 
     platform = s.get("platform", "")
 
-    # ── For VRBO: navigate to owner.vrbo.com before saving state ───────────
-    # VRBO moved the host dashboard to owner.vrbo.com. If we only capture
-    # www.vrbo.com cookies, scraping owner.vrbo.com later will fail. By
-    # visiting it now (while the user is authenticated), the SSO exchange
-    # will set owner.vrbo.com cookies that get captured in the storage state.
+    # For VRBO: navigate to host dashboard before saving state.
+    # Try /p/ paths first (confirmed for Canadian accounts), then owner.vrbo.com as fallback.
     if platform == "vrbo":
-        try:
-            print(f"[{session_id}] VRBO: visiting owner.vrbo.com to capture owner cookies...")
-            await s["page"].goto("https://owner.vrbo.com/", wait_until="networkidle", timeout=30000)
-            await s["page"].wait_for_timeout(3000)
-            owner_landed = s["page"].url
-            print(f"[{session_id}] VRBO: owner portal landed at {owner_landed}")
-        except Exception as owner_err:
-            print(f"[{session_id}] VRBO: owner.vrbo.com navigation error (non-fatal): {owner_err}")
+        for vrbo_dash in [
+            "https://www.vrbo.com/en-ca/p/properties",
+            "https://www.vrbo.com/en-us/p/properties",
+            "https://owner.vrbo.com/",
+        ]:
+            try:
+                print(f"[{session_id}] VRBO: visiting {vrbo_dash} to capture host cookies...")
+                await s["page"].goto(vrbo_dash, wait_until="networkidle", timeout=15000)
+                await s["page"].wait_for_timeout(2000)
+                print(f"[{session_id}] VRBO: landed at {s['page'].url}")
+                if "/p/" in s["page"].url or "owner.vrbo.com" in s["page"].url:
+                    break
+            except Exception as owner_err:
+                print(f"[{session_id}] VRBO: {vrbo_dash} navigation error (non-fatal): {owner_err}")
 
-    # Capture storage state (cookies + localStorage)
     storage_state = None
     cookie_count = 0
     final_url = ""
@@ -406,13 +303,11 @@ async def finish_session(session_id: str) -> dict:
     except Exception as e:
         print(f"[{session_id}] Error capturing state: {e}")
 
-    # Tear down
     try:
         await s["browser"].close()
     except Exception:
         pass
 
-    # Kill subprocesses
     for proc_name in ["websockify", "x11vnc", "xvfb"]:
         proc = s.get(proc_name)
         if proc:
@@ -450,9 +345,6 @@ async def lifespan(app: FastAPI):
         print("  WARNING: No residential proxy configured. Set PROXY_SERVER env var.")
         print("  Bot detection WILL block datacenter IPs on VRBO/Airbnb.")
 
-    # Start a persistent Xvfb display for non-headless scraping.
-    # Running the browser headed (but on a virtual display) avoids the CDP
-    # fingerprints that PerimeterX uses to detect headless=True.
     try:
         _scrape_xvfb_proc = subprocess.Popen(
             ["Xvfb", f":{_SCRAPE_DISPLAY}", "-screen", "0", "1280x900x24", "-ac"],
@@ -465,7 +357,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Cleanup all sessions on shutdown
     for sid in list(sessions.keys()):
         try:
             await finish_session(sid)
@@ -482,7 +373,7 @@ app = FastAPI(title="Host4Me Live Sessions", version="2.0.0", lifespan=lifespan)
 
 class CreateSessionRequest(BaseModel):
     tenant_id: str
-    platform: str  # "airbnb" | "vrbo" | "booking"
+    platform: str
 
 
 @app.post("/sessions/create")
@@ -509,25 +400,19 @@ async def api_finish_session(session_id: str):
 # Scrape listings using saved session cookies
 # ---------------------------------------------------------------------------
 class ScrapeRequest(BaseModel):
-    storage_state: str          # JSON string of cookies/localStorage from Convex
-    platform: str               # "vrbo" | "airbnb" | "booking"
-    start_url: str | None = None  # finalUrl stored at login — used to infer correct locale
+    storage_state: str
+    platform: str
+    start_url: str | None = None
 
 
 async def scrape_vrbo_listings(context, page) -> list[dict]:
-    """Navigate VRBO dashboard and extract property listings."""
     listings = []
-
-    # Navigate to VRBO property listing page
     try:
         await page.goto("https://www.vrbo.com/", wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(3000)
-
-        # Check if we're logged in by looking for host dashboard indicators
         current_url = page.url
         print(f"[scrape] After VRBO home, URL: {current_url}")
 
-        # Try to navigate to the owner/host dashboard
         for dashboard_url in [
             "https://www.vrbo.com/en-ca/host/properties",
             "https://www.vrbo.com/en-ca/p/properties",
@@ -547,56 +432,38 @@ async def scrape_vrbo_listings(context, page) -> list[dict]:
                 print(f"[scrape] {dashboard_url} failed: {e}")
                 continue
 
-        # Check if we got redirected to login
         if "/login" in page.url or "/auth" in page.url:
-            print("[scrape] Session expired — redirected to login")
+            print("[scrape] Session expired - redirected to login")
             return []
 
-        # Extract listings from the page
-        # Try multiple selectors for different VRBO dashboard layouts
         await page.wait_for_timeout(2000)
-
-        # Method 1: Try to get listing data from the page content
         page_content = await page.content()
 
-        # Method 2: Try extracting from DOM elements
         listing_elements = await page.query_selector_all('[data-testid*="property"], [class*="property-card"], [class*="listing"], .property-item, [data-stid*="property"]')
 
         if listing_elements:
-            for el in listing_elements[:20]:  # Cap at 20
+            for el in listing_elements[:20]:
                 try:
                     name = await el.query_selector('[class*="name"], [class*="title"], h2, h3')
                     name_text = await name.inner_text() if name else "Unknown Property"
-
                     location = await el.query_selector('[class*="location"], [class*="address"]')
                     location_text = await location.inner_text() if location else ""
-
-                    listings.append({
-                        "name": name_text.strip(),
-                        "location": location_text.strip(),
-                        "platform": "vrbo",
-                    })
+                    listings.append({"name": name_text.strip(), "location": location_text.strip(), "platform": "vrbo"})
                 except Exception as e:
                     print(f"[scrape] Error extracting listing element: {e}")
                     continue
 
-        # Method 3: If no elements found, try Gemini-style extraction from page text
         if not listings:
-            # Get all visible text and try to parse property info
             try:
                 all_text = await page.inner_text("body")
-                # Look for property-like patterns in the text
-                # This is a fallback — the DOM extraction above is preferred
                 print(f"[scrape] No listing elements found. Page text length: {len(all_text)}")
                 print(f"[scrape] Page URL: {page.url}")
                 print(f"[scrape] First 500 chars: {all_text[:500]}")
             except Exception:
                 pass
 
-        # Method 4: Try VRBO API endpoint that the dashboard calls
         if not listings:
             try:
-                # VRBO's host dashboard often loads data from an API
                 api_response = await page.evaluate("""
                     async () => {
                         try {
@@ -629,25 +496,23 @@ async def scrape_vrbo_listings(context, page) -> list[dict]:
 
 
 async def scrape_listings_with_cookies(storage_state_json: str, platform: str) -> dict:
-    """Launch a headless browser with saved cookies and scrape listings."""
     global _playwright
     from playwright.async_api import async_playwright
 
     if not _playwright:
         _playwright = await async_playwright().start()
 
-    # Parse storage state
     try:
         storage_state = json.loads(storage_state_json)
     except json.JSONDecodeError as e:
         return {"status": "error", "message": f"Invalid storage state JSON: {e}", "listings": []}
 
-    # Build browser launch args
     browser_args = [
         "--no-sandbox",
         "--disable-blink-features=AutomationControlled",
         "--disable-infobars",
         "--disable-dev-shm-usage",
+        f"--display=:{_SCRAPE_DISPLAY}",
     ]
 
     proxy_config = None
@@ -657,64 +522,44 @@ async def scrape_listings_with_cookies(storage_state_json: str, platform: str) -
             proxy_config["username"] = PROXY_USERNAME
             proxy_config["password"] = PROXY_PASSWORD
 
-    # headless=False — run on the scrape Xvfb display to avoid PerimeterX headless detection
-    browser_args.append(f"--display=:{_SCRAPE_DISPLAY}")
-    launch_kwargs = {
-        "headless": False,
-        "args": browser_args,
-    }
+    launch_kwargs = {"headless": False, "args": browser_args}
     if proxy_config:
         launch_kwargs["proxy"] = proxy_config
 
     browser = await _playwright.chromium.launch(**launch_kwargs)
 
     try:
-        # Create context with saved cookies — no UA override, let patchright use its own
         context = await browser.new_context(
             storage_state=storage_state,
             viewport={"width": 1280, "height": 900},
             locale="en-CA",
             timezone_id="America/Toronto",
         )
-
         page = await context.new_page()
-
-        # Apply stealth
         try:
             from playwright_stealth import stealth_async as _stealth
             await _stealth(page)
         except ImportError:
             await page.add_init_script(STEALTH_JS)
 
-        # Scrape based on platform
         if platform == "vrbo":
             listings = await scrape_vrbo_listings(context, page)
         else:
-            # TODO: Add airbnb/booking scrapers
             listings = []
 
-        # Take a screenshot for debugging
         screenshot_path = DATA_DIR / "last_scrape.png"
         try:
             await page.screenshot(path=str(screenshot_path))
         except Exception:
             pass
 
-        return {
-            "status": "ok",
-            "platform": platform,
-            "listings": listings,
-            "count": len(listings),
-            "final_url": page.url,
-        }
-
+        return {"status": "ok", "platform": platform, "listings": listings, "count": len(listings), "final_url": page.url}
     finally:
         await browser.close()
 
 
 @app.post("/scrape-listings")
 async def api_scrape_listings(req: ScrapeRequest):
-    """Scrape property listings using saved session cookies."""
     try:
         result = await scrape_listings_with_cookies(req.storage_state, req.platform)
         return result
@@ -723,16 +568,10 @@ async def api_scrape_listings(req: ScrapeRequest):
 
 
 # ---------------------------------------------------------------------------
-# Scrape RESERVATIONS using saved session cookies (all platforms)
+# Scrape RESERVATIONS using saved session cookies
 # ---------------------------------------------------------------------------
 
 async def _launch_stealth_browser(storage_state_json: str):
-    """Shared helper: launch a non-headless patchright browser on the scrape display.
-
-    Running headed (on a virtual Xvfb display) avoids the CDP fingerprints that
-    PerimeterX uses to detect headless=True.  patchright's own Chromium binary
-    matches its fingerprint so we never override the user-agent.
-    """
     global _playwright
     try:
         from patchright.async_api import async_playwright as _new_playwright
@@ -757,7 +596,6 @@ async def _launch_stealth_browser(storage_state_json: str):
             proxy_config["username"] = PROXY_USERNAME
             proxy_config["password"] = PROXY_PASSWORD
 
-    # headless=False — run on virtual display so PerimeterX doesn't see headless signals
     launch_kwargs = {"headless": False, "args": browser_args}
     if proxy_config:
         launch_kwargs["proxy"] = proxy_config
@@ -765,7 +603,6 @@ async def _launch_stealth_browser(storage_state_json: str):
     browser = await _playwright.chromium.launch(**launch_kwargs)
     context = await browser.new_context(
         storage_state=storage_state,
-        # No user_agent override — let patchright use its own consistent fingerprint
         viewport={"width": 1280, "height": 900},
         locale="en-CA",
         timezone_id="America/Toronto",
@@ -783,8 +620,8 @@ async def _launch_stealth_browser(storage_state_json: str):
 async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
     """Scrape reservations + listings from VRBO host dashboard via network interception.
 
-    VRBO is a React SPA — DOM scraping is unreliable because class names are hashed
-    and data loads asynchronously via internal GraphQL / REST APIs.  Instead we:
+    VRBO is a React SPA - DOM scraping is unreliable because class names are hashed
+    and data loads asynchronously via internal GraphQL / REST APIs. Instead we:
       1. Wire up page.on('response', ...) BEFORE navigating so we capture every
          API response that the page issues during its normal data-loading lifecycle.
       2. Navigate to the reservations page and wait generously for XHR to complete.
@@ -799,11 +636,10 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
     listings = []
     debug_page_text = ""
     debug_urls_visited = []
-    captured_api_responses = []  # raw JSON blobs intercepted from network
-    captured_graphql_requests = []  # GraphQL request bodies from page's natural SPA calls
+    captured_api_responses = []
+    captured_graphql_requests = []
 
-    # ── 1. Wire up network interception BEFORE any navigation ──────────────────
-    # Capture ALL JSON responses — VRBO's SPA API uses varied endpoint names.
+    # 1. Wire up network interception BEFORE any navigation
     async def handle_response(response):
         url = response.url
         try:
@@ -813,12 +649,10 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
             status = response.status
             if status < 200 or status >= 400:
                 return
-            # Skip tiny responses (analytics pings etc.)
             content_length = int(response.headers.get("content-length", "999"))
             if content_length < 50:
                 return
             body = await response.json()
-            # Filter to responses that look like they have meaningful data
             body_str = str(body)
             has_data = any(k in body_str.lower() for k in (
                 "reservation", "booking", "listing", "property", "propert",
@@ -831,8 +665,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
         except Exception as capture_err:
             print(f"[vrbo-net] Could not capture {url}: {capture_err}")
 
-    # Also intercept REQUESTS to capture GraphQL query bodies the SPA naturally sends.
-    # This tells us the exact operation names and variables VRBO uses — we can replay them.
     def handle_request_sync(request):
         url = request.url
         try:
@@ -848,10 +680,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
     page.on("request", handle_request_sync)
 
     try:
-        # ── 2. Navigate — start from homepage and discover host portal ────────
-        # Strategy A: load the authenticated homepage. VRBO's React SPA fetches
-        # owner data on boot for authenticated host accounts, so we capture those
-        # API calls even before navigating to the host dashboard.
         NOT_FOUND_SIGNALS = [
             "page cannot be found", "page not found", "404",
             "doesn't exist", "no longer available",
@@ -868,7 +696,7 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
             if m:
                 locale_base = f"{parsed.scheme}://{parsed.netloc}/{m.group(1)}"
 
-        # Load the authenticated homepage to capture SPA bootstrap API calls
+        # Strategy A: load authenticated homepage to capture SPA bootstrap API calls
         homepage = f"{locale_base}/"
         print(f"[vrbo-res] Loading authenticated homepage: {homepage}")
         try:
@@ -880,12 +708,11 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
             print(f"[vrbo-res] Homepage load error: {e}")
             debug_urls_visited.append({"attempted": homepage, "error": str(e)})
 
-        # Check for session expiry
         if "/login" in page.url or "/auth" in page.url:
             return {"reservations": [], "listings": [],
                     "debug_page_text": "SESSION EXPIRED", "debug_urls_visited": debug_urls_visited}
 
-        # Strategy B: find the host/owner portal link in the DOM
+        # Strategy B: find host/owner portal link in the DOM
         print("[vrbo-res] Searching DOM for host portal link...")
         try:
             owner_href = await page.evaluate("""() => {
@@ -910,7 +737,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
         except Exception as e:
             print(f"[vrbo-res] DOM host-link search error: {e}")
 
-        # ── Diagnostic: print cookie domains so we know what auth we have ──────
         try:
             context_cookies = await page.context.cookies()
             vrbo_domains = list({c["domain"] for c in context_cookies if "vrbo" in c["domain"].lower() or "expedia" in c["domain"].lower()})
@@ -920,13 +746,13 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
 
         import re as _re
 
-        # Strategy C: try host dashboard URLs — /p/ path is the correct modern VRBO
-        # host dashboard (confirmed for Canadian en-ca accounts). owner.vrbo.com is
-        # a US-only legacy path that also fails with SOCKS proxy errors.
+        # Strategy C: try host dashboard URLs
+        # /p/ path is the correct modern VRBO host dashboard (confirmed for Canadian en-ca accounts).
+        # owner.vrbo.com is US-only legacy and also fails with SOCKS proxy errors.
         host_dashboard_already = any(
             "/p/reservations" in page.url or "/p/properties" in page.url
             or "owner.vrbo.com" in page.url
-            for _ in [None]  # single iteration
+            for _ in [None]
         )
         if not host_dashboard_already:
             owner_urls = [
@@ -942,7 +768,7 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                     await page.goto(url, wait_until="domcontentloaded", timeout=20000)
                     await page.wait_for_timeout(4000)
                     landed_url = page.url
-                    print(f"[vrbo-res] After nav to {url} → landed at: {landed_url}")
+                    print(f"[vrbo-res] After nav to {url} -> landed at: {landed_url}")
                     if "/login" in landed_url or "/auth" in landed_url:
                         debug_urls_visited.append({"attempted": url, "landed": landed_url, "error": "login redirect"})
                         continue
@@ -971,7 +797,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
             f"https://www.vrbo.com/host/listings",
         ]
         for host_page in c2_pages:
-            # Skip if we're already on a /p/ or owner page
             if "/p/reservations" in page.url or "/p/properties" in page.url or "owner.vrbo.com" in page.url:
                 break
             try:
@@ -981,19 +806,15 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                 landed = page.url
                 print(f"[vrbo-res] host page landed: {landed}")
                 debug_urls_visited.append({"attempted": host_page, "landed": landed})
-                # If we landed on a real host dashboard — wait longer for XHR and stop
                 if "owner.vrbo.com" in landed or "/p/" in landed or "/host" in landed:
                     await page.wait_for_timeout(5000)
                     break
             except Exception as e:
                 print(f"[vrbo-res] {host_page} error: {e}")
 
-        # Extra wait to catch lazy-loaded XHR from all navigations above
         await page.wait_for_timeout(5000)
 
-        # ── Strategy D: navigate back to www.vrbo.com, extract IDs, try targeted APIs ──
-        # NOW all API responses (including memberDetails from the p/home navigation)
-        # are in captured_api_responses. Extract property/user IDs and use them.
+        # Strategy D: navigate back to www.vrbo.com, extract IDs, try targeted APIs
         try:
             print(f"[vrbo-res] Navigating back to www.vrbo.com for targeted API calls...")
             await page.goto(f"{locale_base}/", wait_until="domcontentloaded", timeout=20000)
@@ -1001,31 +822,27 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
         except Exception:
             pass
 
-        # Extract IDs from ALL captured API URLs (now includes responses from all navigations)
         vrbo_property_id = None
         vrbo_user_id = None
         for cap in captured_api_responses:
             m = _re.search(r"/gc/memberDetails/(\d+)/(\d+)/", cap.get("url", ""))
             if m:
                 vrbo_property_id, vrbo_user_id = m.group(1), m.group(2)
-                print(f"[vrbo-diag] Extracted IDs — property: {vrbo_property_id}, user: {vrbo_user_id}")
+                print(f"[vrbo-diag] Extracted IDs - property: {vrbo_property_id}, user: {vrbo_user_id}")
                 break
 
         if vrbo_user_id:
             uid = vrbo_user_id
-            # NOTE: vrbo_property_id from memberDetails URL is actually the VRBO tpid
-            # (e.g. 9002003), NOT a property/listing ID. Do NOT use it for /gc/property/ calls.
-            # Use user ID-based endpoints only.
             targeted_apis = [
                 f"/gc/booking/hosted/{uid}",
                 f"/gc/reservation/inbox/{uid}",
                 f"/api/v2/host/reservations?userId={uid}",
                 f"/api/host/inbox?hostId={uid}",
-                f"/gc/host/{uid}/properties",   # look for actual listing IDs
+                f"/gc/host/{uid}/properties",
             ]
             for api_path in targeted_apis:
                 full_url = f"https://www.vrbo.com{api_path}"
-                await asyncio.sleep(1.5)   # throttle — avoid rate limit
+                await asyncio.sleep(1.5)
                 try:
                     resp = await page.evaluate(f"""
                         async () => {{
@@ -1039,7 +856,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                                     headers,
                                 }});
                                 if (r.status === 429) {{
-                                    // Rate limited — wait 10 s and retry once
                                     await new Promise(res => setTimeout(res, 10000));
                                     r = await fetch('{full_url}', {{
                                         credentials: 'include',
@@ -1053,21 +869,18 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                             }} catch(e) {{ return {{ error: e.toString() }}; }}
                         }}
                     """)
-                    print(f"[vrbo-api] {api_path} → status={resp.get('status')} isJson={resp.get('isJson')} body={resp.get('body','')[:300]!r}")
-                    # If it returned real JSON, add to captured responses so the parser picks it up
+                    print(f"[vrbo-api] {api_path} -> status={resp.get('status')} isJson={resp.get('isJson')} body={resp.get('body','')[:300]!r}")
                     if resp.get("status") == 200 and resp.get("isJson"):
                         try:
                             body = json.loads(resp["body"])
                             captured_api_responses.append({"url": full_url, "body": body})
-                            print(f"[vrbo-api] SUCCESS — added to captured responses")
+                            print(f"[vrbo-api] SUCCESS - added to captured responses")
                         except Exception:
                             pass
                 except Exception as e:
                     print(f"[vrbo-api] {api_path} error: {e}")
 
-        # ── Strategy E: GraphQL ────────────────────────────────────────────────────
-        # Priority 1: replay GraphQL requests the page naturally made (captured above).
-        # Priority 2: try common host-inbox operation shapes.
+        # Strategy E: GraphQL
         if captured_graphql_requests:
             print(f"[vrbo-gql] Replaying {len(captured_graphql_requests)} intercepted GraphQL request(s)...")
             for gql_req in captured_graphql_requests[:5]:
@@ -1093,13 +906,12 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                         try:
                             body = json.loads(result["body"])
                             captured_api_responses.append({"url": gql_url, "body": body})
-                            print(f"[vrbo-gql] SUCCESS — added replay response to captured")
+                            print(f"[vrbo-gql] SUCCESS - added replay response to captured")
                         except Exception:
                             pass
                 except Exception as e:
                     print(f"[vrbo-gql] Replay error: {e}")
         else:
-            # No intercepted GraphQL — try known operation names
             print("[vrbo-res] No intercepted GraphQL. Trying known operation names...")
             gql_url = "https://www.vrbo.com/graphql"
             gql_queries = [
@@ -1128,17 +940,13 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                 except Exception as e:
                     print(f"[vrbo-gql] query[{i}] error: {e}")
 
-        # Save debug screenshot
         try:
             await page.screenshot(path=str(DATA_DIR / "vrbo_reservations_debug.png"), full_page=True)
         except Exception:
             pass
 
-        # ── Strategy F: direct HTTP requests (bypass browser proxy entirely) ───
-        # The SOCKS5 proxy fails for owner.vrbo.com. Make server-side HTTP calls
-        # using the browser's own cookies — no proxy, no CORS, no rate-limit from
-        # the previous browser fetch() calls.
-        if vrbo_user_id and not reservations:  # only if we haven't found data yet
+        # Strategy F: direct HTTP requests (bypass browser proxy entirely)
+        if vrbo_user_id and not reservations:
             try:
                 import httpx as _httpx
                 ctx_cookies = await page.context.cookies()
@@ -1189,23 +997,22 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                             except Exception:
                                 pass
                             print(
-                                f"[vrbo-direct] {endpoint} → "
+                                f"[vrbo-direct] {endpoint} -> "
                                 f"status={resp.status_code} isJson={is_json} "
                                 f"body={body_text[:200]!r}"
                             )
                             if resp.status_code == 200 and is_json and parsed:
                                 captured_api_responses.append({"url": endpoint, "body": parsed})
-                                print(f"[vrbo-direct] SUCCESS — added to captured responses")
+                                print(f"[vrbo-direct] SUCCESS - added to captured responses")
                         except Exception as req_err:
                             print(f"[vrbo-direct] {endpoint} error: {req_err}")
             except ImportError:
-                print("[vrbo-direct] httpx not available — skipping direct HTTP strategy")
+                print("[vrbo-direct] httpx not available - skipping direct HTTP strategy")
             except Exception as direct_err:
                 print(f"[vrbo-direct] Strategy failed: {direct_err}")
 
-        # ── 3. Parse captured network responses ───────────────────────────────
+        # 3. Parse captured network responses
         def _extract_from_blob(blob):
-            """Recursively walk a JSON blob looking for reservation-like objects."""
             found_res = []
             found_list = []
 
@@ -1217,7 +1024,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                         _walk(item, depth + 1)
                 elif isinstance(obj, dict):
                     keys_lower = {k.lower(): k for k in obj}
-                    # Reservation detection: has a guest name + date fields
                     has_guest = any(k in keys_lower for k in (
                         "guestname", "travelername", "traveler", "guest", "customername",
                         "reserveename", "reservee",
@@ -1231,7 +1037,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                         "orderid", "id",
                     ))
                     if (has_guest or has_dates) and (has_res_id or has_dates):
-                        # Extract best-effort fields
                         def _get(*candidates):
                             for c in candidates:
                                 val = obj.get(keys_lower.get(c, "__miss__"))
@@ -1263,14 +1068,10 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                                 "payout": payout,
                                 "reservationId": str(res_id) if res_id else None,
                             })
-                            return  # don't descend into reservation objects
+                            return
 
-                    # Listing detection: has a name + location/address without guest names
                     has_listing_name = any(k in keys_lower for k in (
                         "headline", "propertyname", "listingname", "unitname", "propertytitle",
-                    ))
-                    has_listing_loc = any(k in keys_lower for k in (
-                        "city", "location", "address", "latitude", "longitude",
                     ))
                     if has_listing_name and not has_guest:
                         def _getl(*candidates):
@@ -1291,7 +1092,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                             })
                             return
 
-                    # Recurse into all values
                     for v in obj.values():
                         _walk(v, depth + 1)
 
@@ -1316,12 +1116,10 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
 
         print(f"[vrbo-net] After network capture: {len(reservations)} reservations, {len(listings)} listings")
 
-        # Diagnostic: log structure of captured responses (focus on non-analytics ones)
         import json as _json
         for i, cap in enumerate(captured_api_responses[:15]):
             url_short = cap.get("url", "")[-70:]
             body = cap.get("body", {})
-            # Skip pure analytics noise
             if "uisprime" in url_short or "evaluateExperiment" in url_short:
                 continue
             if isinstance(body, dict):
@@ -1336,7 +1134,7 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
             print(f"[vrbo-diag] cap[{i}] {url_short}")
             print(f"  keys={top_keys} | {snippet}")
 
-        # ── 4. If network capture missed everything, fire explicit API fetches ──
+        # 4. If network capture missed everything, fire explicit API fetches
         if not reservations:
             try:
                 api_data = await page.evaluate("""
@@ -1383,13 +1181,14 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
             except Exception as api_err:
                 print(f"[vrbo-res] Explicit API fetch failed: {api_err}")
 
-        # ── 5. Also navigate to properties page for listings ──────────────────
+        # 5. Also navigate to properties page for listings
         if not listings:
             listing_urls = [
+                f"{locale_base}/p/properties",   # /en-ca/p/properties (confirmed correct)
+                f"{locale_base}/p/reservations",
                 f"{locale_base}/host/properties",
                 "https://owner.vrbo.com/listings",
                 "https://owner.vrbo.com/properties",
-                f"{locale_base}/account/listings",
             ]
             for url in listing_urls:
                 try:
@@ -1409,7 +1208,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                 except Exception:
                     continue
 
-            # Re-parse whatever new network responses came in
             for capture in captured_api_responses:
                 blob = capture["body"]
                 _, list_found = _extract_from_blob(blob)
@@ -1418,7 +1216,7 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                         seen_listing_names.add(l["name"])
                         listings.append(l)
 
-        # ── 6. Page-text fallback for debug / partial extraction ───────────────
+        # 6. Page-text fallback for debug
         if not reservations:
             try:
                 all_text = await page.inner_text("body")
@@ -1438,7 +1236,6 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
         traceback.print_exc()
         debug_page_text = f"ERROR: {e}"
     finally:
-        # Clean up listener to avoid memory leaks
         try:
             page.remove_listener("response", handle_response)
         except Exception:
@@ -1453,17 +1250,10 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
 
 
 async def scrape_airbnb_reservations(page) -> dict:
-    """Scrape reservations + listings from Airbnb host dashboard.
-
-    Uses network interception to capture Airbnb's internal GraphQL/REST API
-    responses — much more reliable than DOM scraping against hashed class names.
-    Falls back to DOM parsing if no API data is captured.
-    """
     reservations = []
     listings = []
     captured = []
 
-    # ── 1. Wire up response interception before any navigation ──────────────
     async def handle_response(response):
         url = response.url
         try:
@@ -1472,7 +1262,6 @@ async def scrape_airbnb_reservations(page) -> dict:
                 return
             if response.status < 200 or response.status >= 400:
                 return
-            # Airbnb API calls we care about
             if not any(k in url for k in [
                 "airbnb.com/api", "api/v3", "reservations", "listing",
                 "hosting", "stays", "trips", "inbox", "graphql",
@@ -1492,20 +1281,18 @@ async def scrape_airbnb_reservations(page) -> dict:
     page.on("response", handle_response)
 
     try:
-        # ── 2. Load host reservations page (triggers API calls) ─────────────
         print("[airbnb-res] Loading hosting/reservations...")
         await page.goto("https://www.airbnb.com/hosting/reservations",
                         wait_until="networkidle", timeout=30000)
         await page.wait_for_timeout(4000)
 
         if "/login" in page.url or "/authenticate" in page.url:
-            print("[airbnb-res] Session expired — redirected to login")
+            print("[airbnb-res] Session expired - redirected to login")
             return {"reservations": [], "listings": [], "debug_page_text": "SESSION EXPIRED"}
 
         print(f"[airbnb-res] Landed at: {page.url}")
         print(f"[airbnb-res] Captured {len(captured)} API responses so far")
 
-        # Also load listings page to capture listing data
         try:
             await page.goto("https://www.airbnb.com/hosting/listings",
                             wait_until="networkidle", timeout=25000)
@@ -1514,9 +1301,7 @@ async def scrape_airbnb_reservations(page) -> dict:
         except Exception:
             pass
 
-        # ── 3. Parse captured API responses ─────────────────────────────────
         def _walk(obj, depth=0):
-            """Recursively extract reservations and listings from Airbnb API blobs."""
             if depth > 12 or obj is None:
                 return
             if isinstance(obj, list):
@@ -1524,7 +1309,6 @@ async def scrape_airbnb_reservations(page) -> dict:
                     _walk(item, depth + 1)
             elif isinstance(obj, dict):
                 keys_l = {k.lower(): k for k in obj}
-                # Reservation detection
                 has_guest = any(k in keys_l for k in (
                     "guest", "guestname", "guest_name", "guest_user",
                     "guestdetails", "reservee", "traveler",
@@ -1571,8 +1355,7 @@ async def scrape_airbnb_reservations(page) -> dict:
                             "status": _normalize_status(status or "confirmed"),
                             "platform": "airbnb",
                         })
-                        return  # don't recurse further into this reservation object
-                # Listing detection
+                        return
                 if "listing_id" in keys_l or ("name" in keys_l and "listing" in str(obj).lower()):
                     name = obj.get(keys_l.get("name", "__miss__")) or obj.get(keys_l.get("title", "__miss__"), "")
                     lid  = obj.get(keys_l.get("listing_id", "__miss__")) or obj.get(keys_l.get("id", "__miss__"), "")
@@ -1588,7 +1371,6 @@ async def scrape_airbnb_reservations(page) -> dict:
         for cap in captured:
             _walk(cap.get("body"))
 
-        # Deduplicate reservations by confirmationCode
         seen_codes = set()
         deduped = []
         for r in reservations:
@@ -1598,16 +1380,14 @@ async def scrape_airbnb_reservations(page) -> dict:
                 deduped.append(r)
         reservations = deduped
 
-        # Deduplicate listings by name
         seen_names = set()
         listings = [l for l in listings if l["name"] not in seen_names and not seen_names.add(l["name"])]
 
         print(f"[airbnb-res] Final: {len(reservations)} reservations, {len(listings)} listings")
         print(f"[airbnb-res] Captured {len(captured)} API responses total")
 
-        # ── 4. DOM fallback if API interception found nothing ────────────────
         if not reservations:
-            print("[airbnb-res] No API data — trying DOM fallback...")
+            print("[airbnb-res] No API data - trying DOM fallback...")
             try:
                 await page.goto("https://www.airbnb.com/hosting/reservations",
                                 wait_until="domcontentloaded", timeout=20000)
@@ -1655,22 +1435,15 @@ async def scrape_airbnb_reservations(page) -> dict:
 
 
 async def scrape_booking_reservations(page) -> dict:
-    """Scrape reservations + listings from Booking.com extranet."""
     reservations = []
     listings = []
-
     try:
-        # Booking.com host dashboard is at extranet
         await page.goto("https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking_reservations.html", wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(4000)
-
         if "sign-in" in page.url or "login" in page.url:
             print("[booking-res] Session expired")
             return {"reservations": [], "listings": []}
-
         print(f"[booking-res] At: {page.url}")
-
-        # Extract reservations from the table
         rows = await page.query_selector_all('table tbody tr, [class*="reservation-row"], [class*="booking-item"]')
         for row in rows[:50]:
             try:
@@ -1681,7 +1454,6 @@ async def scrape_booking_reservations(page) -> dict:
                     dates_str = " ".join(lines[1:3])
                     check_in, check_out = _parse_date_range(dates_str)
                     status = next((l for l in lines if l.lower() in ["confirmed", "no-show", "cancelled"]), "confirmed")
-
                     if guest:
                         reservations.append({
                             "guestName": guest,
@@ -1692,50 +1464,39 @@ async def scrape_booking_reservations(page) -> dict:
                         })
             except Exception:
                 pass
-
     except Exception as e:
         print(f"[booking-res] Error: {e}")
-
     return {"reservations": reservations, "listings": listings}
 
 
 def _parse_date_range(text: str) -> tuple[str, str]:
-    """Try to parse a date range string into ISO dates. Returns ('', '') on failure."""
     import re
     from datetime import datetime
-
     if not text:
         return ("", "")
-
-    # Try "Apr 20 - Apr 25, 2025" or "04/20/2025 - 04/25/2025" etc.
-    # Common separators: -, –, —, to
-    parts = re.split(r'\s*[-–—]\s*|\s+to\s+', text, maxsplit=1)
+    parts = re.split(r'\s*[-\u2013\u2014]\s*|\s+to\s+', text, maxsplit=1)
     if len(parts) != 2:
         return ("", "")
-
     formats = [
         "%b %d, %Y", "%b %d %Y", "%B %d, %Y", "%B %d %Y",
         "%m/%d/%Y", "%Y-%m-%d", "%d %b %Y", "%d %B %Y",
-        "%b %d", "%B %d",  # no year — assume current
+        "%b %d", "%B %d",
     ]
-
     def try_parse(s):
         s = s.strip().rstrip(",")
         for fmt in formats:
             try:
                 d = datetime.strptime(s, fmt)
-                if d.year == 1900:  # no year parsed
+                if d.year == 1900:
                     d = d.replace(year=datetime.now().year)
                 return d.strftime("%Y-%m-%d")
             except ValueError:
                 continue
         return ""
-
     return (try_parse(parts[0]), try_parse(parts[1]))
 
 
 def _normalize_status(s: str) -> str:
-    """Normalize reservation status to one of our standard values."""
     s = s.lower().strip()
     if "confirm" in s or "accept" in s or "upcoming" in s:
         return "confirmed"
@@ -1750,7 +1511,6 @@ def _normalize_status(s: str) -> str:
 
 @app.post("/scrape-reservations")
 async def api_scrape_reservations(req: ScrapeRequest):
-    """Scrape reservations + listings using saved session cookies."""
     try:
         browser, context, page = await _launch_stealth_browser(req.storage_state)
         try:
@@ -1763,8 +1523,6 @@ async def api_scrape_reservations(req: ScrapeRequest):
             else:
                 result = {"reservations": [], "listings": []}
 
-            # Screenshot for debugging
-            debug_screenshot_b64 = None
             try:
                 await page.screenshot(path=str(DATA_DIR / f"last_scrape_{req.platform}.png"))
             except Exception:
@@ -1787,7 +1545,6 @@ async def api_scrape_reservations(req: ScrapeRequest):
 
 @app.get("/debug-files/{filename}")
 async def get_debug_file(filename: str):
-    """Serve debug files (screenshots, HTML) from data dir."""
     import base64
     filepath = DATA_DIR / filename
     if not filepath.exists():

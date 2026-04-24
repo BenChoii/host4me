@@ -20,59 +20,35 @@
 // ==/UserScript==
 
 /**
- * Host4Me Sync v2.0
+ * Host4Me Sync v2.2
  *
  * Architecture: browser-native interception.
- *
- * Instead of trying to call platform APIs ourselves (which requires knowing
- * the right endpoints and doesn't work with httpOnly auth cookies), we
- * intercept the XHR/fetch calls the platform SPA makes natively.  Since
- * those calls originate from the user's logged-in browser, they carry all
- * cookies — including httpOnly ones — automatically.  We capture the
- * responses and forward the interesting ones straight to Convex.
- *
- * Flow:
- *   1. @run-at document-start: install XHR + fetch interceptors before page JS loads
- *   2. Page loads → platform SPA makes authenticated API calls → we capture them
- *   3. After SETTLE_DELAY_MS: filter captured responses for reservation/property data
- *   4. POST payload to Convex webhook → stored + VPS can re-scrape if needed
  */
 
 (function () {
   'use strict';
 
-  // ---------------------------------------------------------------------------
-  // Config
-  // ---------------------------------------------------------------------------
   const CONFIG = {
     WEBHOOK_URL: 'https://brainy-gnu-879.convex.site/webhooks/userscript-sync',
     TOKEN_KEY: 'host4me_sync_token',
-    COOLDOWN_MS: 15 * 60 * 1000,   // 15 min between automatic syncs per hostname
-    SETTLE_MS: 5000,                // wait 5 s after page load for SPA to finish its calls
+    COOLDOWN_MS: 15 * 60 * 1000,
+    SETTLE_MS: 5000,
   };
 
-  // ---------------------------------------------------------------------------
-  // Network interception — installed at document-start
-  // ---------------------------------------------------------------------------
-  const captured = [];   // { url: string, data: any }
+  const captured = [];
 
-  /** URL patterns that might carry reservation / property data */
   const INTERESTING_URL = [
     /reservation/i, /booking/i, /listing/i, /propert/i,
     /calendar/i, /inbox/i, /hosted/i, /member/i, /gc\//i,
-    // VRBO / Expedia Group specific
     /\/api\//i, /graphql/i, /\/pm\//i, /expedia/i, /vrbo/i,
-    /\/v\d+\//i,   // versioned APIs like /v3/, /v2/
-    /\/lp\//i,     // VRBO landing/property manager portal
+    /\/v\d+\//i, /\/lp\//i,
   ];
 
-  /** JSON body keys that suggest reservation content */
   const INTERESTING_KEYS = [
     '"reservations"', '"bookings"', '"listings"', '"properties"',
     '"checkIn"', '"checkOut"', '"checkInDate"', '"checkOutDate"',
     '"guestName"', '"guestFirstName"', '"confirmationCode"',
     '"reservationId"', '"tuid"', '"hostId"',
-    // VRBO Canadian / Expedia Group specific
     '"stayDates"', '"arrivalDate"', '"departureDate"', '"travelerFirstName"',
     '"travelerLastName"', '"egUnit"', '"unitListing"', '"guestInfo"',
     '"reservationStatus"', '"bookingStatus"', '"rentalAgreement"',
@@ -97,7 +73,6 @@
     } catch (_) {}
   }
 
-  // ── XHR interceptor ────────────────────────────────────────────────────────
   const _XHROpen = XMLHttpRequest.prototype.open;
   const _XHRSend = XMLHttpRequest.prototype.send;
 
@@ -119,7 +94,6 @@
     return _XHRSend.apply(this, arguments);
   };
 
-  // ── Fetch interceptor ──────────────────────────────────────────────────────
   const _fetch = window.fetch;
   window.fetch = async function (input, init) {
     const url = typeof input === 'string' ? input
@@ -132,9 +106,6 @@
     return resp;
   };
 
-  // ---------------------------------------------------------------------------
-  // Helpers
-  // ---------------------------------------------------------------------------
   function getPlatform() {
     const h = location.hostname;
     if (h.includes('vrbo.com'))    return 'vrbo';
@@ -146,10 +117,7 @@
   function getSyncToken() {
     let t = GM_getValue(CONFIG.TOKEN_KEY, '');
     if (!t) {
-      t = prompt(
-        'Host4Me: Paste your sync token from:\nhttps://host4me.vercel.app/dashboard/settings',
-        ''
-      );
+      t = prompt('Host4Me: Paste your sync token from:\nhttps://host4me.vercel.app/dashboard/settings', '');
       if (t) GM_setValue(CONFIG.TOKEN_KEY, t.trim());
     }
     return t ? t.trim() : null;
@@ -182,9 +150,6 @@
     return out;
   }
 
-  // ---------------------------------------------------------------------------
-  // Send to Convex
-  // ---------------------------------------------------------------------------
   function gmPost(payload) {
     return new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -199,9 +164,6 @@
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Main sync
-  // ---------------------------------------------------------------------------
   async function performSync(force) {
     const platform = getPlatform();
     if (!platform) return;
@@ -223,7 +185,6 @@
         finalUrl: location.href,
         cookies: document.cookie,
         localStorage: readLocalStorage(),
-        // All intercepted network responses — Convex will parse reservation data from them
         endpoints: captured.map(r => ({ url: r.url, status: 200, data: r.data })),
       },
     };
@@ -245,19 +206,13 @@
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Init (runs after DOM ready so we can read localStorage etc.)
-  // ---------------------------------------------------------------------------
   function init() {
     const platform = getPlatform();
     if (!platform) return;
 
-    // Menu commands
     GM_registerMenuCommand('🔄 Sync Host4Me Now', () => {
       captured.length = 0;
-      // Reset cooldown so manual force-sync always fires
       GM_setValue('h4m_last_' + location.hostname, '0');
-      // Give the page a moment to settle if just navigated
       setTimeout(() => performSync(true), 1000);
     });
 
@@ -266,7 +221,6 @@
       alert('Token cleared. You will be prompted on next sync.');
     });
 
-    // Automatic sync: wait for the SPA to finish its own API calls, then sync
     setTimeout(() => performSync(false), CONFIG.SETTLE_MS);
   }
 

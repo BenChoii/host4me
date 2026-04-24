@@ -1,167 +1,51 @@
-import { mutation, action, internalMutation, query, internalQuery } from "./_generated/server";
+import { mutation, query, action, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
-// Create a live browser session for the user to login to a platform
-// Returns a noVNC URL that can be embedded in an iframe
-export const createLiveSession = action({
+// Public mutation: save Gmail connection
+export const connectGmail = mutation({
   args: {
-    platform: v.string(), // "airbnb" | "vrbo" | "booking"
+    email: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.string(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
-
-    const tenant = await ctx.runQuery(internal.tenants.tenantByUserId, { userId });
-    if (!tenant) throw new Error("Tenant not found");
-
-    const liveBrowserUrl = process.env.LIVE_BROWSER_URL;
-    if (!liveBrowserUrl) {
-      throw new Error("Live browser service not configured. Set LIVE_BROWSER_URL env var.");
-    }
-
-    const response = await fetch(`${liveBrowserUrl}/sessions/create`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tenant_id: String(tenant._id),
-        platform: args.platform,
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Live browser error (${response.status}): ${text}`);
-    }
-
-    const result = await response.json();
-
-    // Log the activity (non-fatal — don't let a logging failure block the session)
-    try {
-      await ctx.runMutation(internal.agents.logActivity, {
-        tenantId: tenant._id,
-        agentType: "alfred",
-        actionType: "live_session_created",
-        summary: `Live browser session created for ${args.platform} login`,
-        metadata: { platform: args.platform, sessionId: result.session_id },
-      });
-    } catch (logErr) {
-      console.warn("logActivity failed (non-fatal):", logErr);
-    }
-
-    // Construct noVNC URL routed through Caddy HTTPS reverse proxy
-    // Caddy on the VPS proxies /vnc/{port}/* → localhost:{port}/*
-    // This avoids mixed-content blocking (HTTP iframe inside HTTPS page)
-    const vpsHost = new URL(liveBrowserUrl).hostname;
-    const sslipDomain = vpsHost.replace(/\./g, "-") + ".sslip.io";
-    const vncUrl = `https://${sslipDomain}/vnc/${result.ws_port}/vnc.html?autoconnect=true&resize=scale&path=vnc/${result.ws_port}/websockify`;
-
-    return {
-      sessionId: result.session_id,
-      vncUrl,
-      platform: args.platform,
-    };
-  },
-});
-
-// Finish a live browser session — captures cookies/storage state after user logs in
-export const finishLiveSession = action({
-  args: {
-    sessionId: v.string(),
-    platform: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const tenant = await ctx.runQuery(internal.tenants.tenantByUserId, { userId });
-    if (!tenant) throw new Error("Tenant not found");
-
-    const liveBrowserUrl = process.env.LIVE_BROWSER_URL;
-    if (!liveBrowserUrl) {
-      throw new Error("Live browser service not configured.");
-    }
-
-    const response = await fetch(`${liveBrowserUrl}/sessions/${args.sessionId}/finish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Finish session error (${response.status}): ${text}`);
-    }
-
-    const result = await response.json();
-
-    // Save the captured storage state (+ final URL for locale detection) to browserSessions table
-    if (result.storage_state) {
-      await ctx.runMutation(internal.onboarding.saveBrowserSession, {
-        tenantId: tenant._id,
-        platform: args.platform,
-        storageState: JSON.stringify(result.storage_state),
-        finalUrl: result.final_url || "",
-      });
-    }
-
-    // Log the activity
-    await ctx.runMutation(internal.agents.logActivity, {
-      tenantId: tenant._id,
-      agentType: "alfred",
-      actionType: "live_session_finished",
-      summary: `${args.platform} session captured — ${result.cookie_count || 0} cookies saved`,
-      metadata: {
-        platform: args.platform,
-        cookieCount: result.cookie_count,
-        finalUrl: result.final_url,
-        status: result.status,
-      },
-    });
-
-    return {
-      status: result.status,
-      platform: result.platform,
-      cookieCount: result.cookie_count,
-    };
-  },
-});
-
-// Internal mutation: save or update browser session storage state
-export const saveBrowserSession = internalMutation({
-  args: {
-    tenantId: v.id("tenants"),
-    platform: v.string(),
-    storageState: v.string(),
-    finalUrl: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("browserSessions")
-      .withIndex("by_tenant_platform", (q) =>
-        q.eq("tenantId", args.tenantId).eq("platform", args.platform)
-      )
+    const tenant = await ctx.db
+      .query("tenants")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        storageState: args.storageState,
-        isValid: true,
-        ...(args.finalUrl ? { finalUrl: args.finalUrl } : {}),
-      });
-    } else {
-      await ctx.db.insert("browserSessions", {
-        tenantId: args.tenantId,
-        platform: args.platform,
-        storageState: args.storageState,
-        isValid: true,
-        finalUrl: args.finalUrl || "",
-      });
-    }
+    if (!tenant) throw new Error("Tenant not found");
+    await ctx.db.patch(tenant._id, {
+      gmailEmail: args.email,
+      gmailAccessToken: args.accessToken,
+      gmailRefreshToken: args.refreshToken,
+    });
   },
 });
 
-// Add a property during onboarding
+// Internal mutation: save Gmail connection (called from HTTP action)
+export const connectGmailInternal = internalMutation({
+  args: {
+    tenantId: v.string(),
+    email: v.string(),
+    accessToken: v.string(),
+    refreshToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const tenant = await ctx.db.get(args.tenantId);
+    if (!tenant) throw new Error("Tenant not found");
+    await ctx.db.patch(tenant._id, {
+      gmailEmail: args.email,
+      gmailAccessToken: args.accessToken,
+      gmailRefreshToken: args.refreshToken,
+    });
+  },
+});
+
+// Public mutation: add a property
 export const addProperty = mutation({
   args: {
     name: v.string(),
@@ -176,14 +60,12 @@ export const addProperty = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
-
     const tenant = await ctx.db
       .query("tenants")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
     if (!tenant) throw new Error("Tenant not found");
-
-    return ctx.db.insert("properties", {
+    await ctx.db.insert("properties", {
       tenantId: tenant._id,
       name: args.name,
       platform: args.platform,
@@ -201,89 +83,31 @@ export const addProperty = mutation({
   },
 });
 
-// Save Gmail OAuth tokens
-export const connectGmail = mutation({
-  args: {
-    email: v.string(),
-    accessToken: v.string(),
-    refreshToken: v.string(),
-  },
-  handler: async (ctx, args) => {
+// Public query: get browser session status for all platforms
+export const getBrowserSessionStatus = query({
+  args: {},
+  handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
+    if (!userId) return [];
     const tenant = await ctx.db
       .query("tenants")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
-    if (!tenant) throw new Error("Tenant not found");
-
-    const existing = await ctx.db
-      .query("gmailConnections")
-      .withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id))
-      .unique();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        email: args.email,
-        accessToken: args.accessToken,
-        refreshToken: args.refreshToken,
-        status: "active",
-      });
-    } else {
-      await ctx.db.insert("gmailConnections", {
-        tenantId: tenant._id,
-        email: args.email,
-        accessToken: args.accessToken,
-        refreshToken: args.refreshToken,
-        status: "active",
-        lastSyncAt: null,
-      });
-    }
+    if (!tenant) return [];
+    const sessions = await ctx.db
+      .query("browserSessions")
+      .withIndex("by_tenant_platform", (q) => q.eq("tenantId", tenant._id))
+      .collect();
+    return sessions.map((s) => ({
+      platform: s.platform,
+      hasSession: !!s.storageState,
+      isValid: s.isValid !== false,
+      finalUrl: s.finalUrl,
+    }));
   },
 });
 
-// Internal: Connect Gmail from OAuth callback
-export const connectGmailInternal = internalMutation({
-  args: {
-    userId: v.id("users"),
-    email: v.string(),
-    accessToken: v.string(),
-    refreshToken: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const tenant = await ctx.db
-      .query("tenants")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .unique();
-    if (!tenant) throw new Error("Tenant not found");
-
-    const existing = await ctx.db
-      .query("gmailConnections")
-      .withIndex("by_tenant", (q) => q.eq("tenantId", tenant._id))
-      .unique();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        email: args.email,
-        accessToken: args.accessToken,
-        refreshToken: args.refreshToken,
-        status: "active",
-      });
-    } else {
-      await ctx.db.insert("gmailConnections", {
-        tenantId: tenant._id,
-        email: args.email,
-        accessToken: args.accessToken,
-        refreshToken: args.refreshToken,
-        status: "active",
-        lastSyncAt: null,
-      });
-    }
-  },
-});
-
-// Query: get the tenant's sync token (= their tenantId) for the userscript
+// Public query: get sync token (= tenantId, used by Tampermonkey script)
 export const getSyncToken = query({
   args: {},
   handler: async (ctx) => {
@@ -293,14 +117,15 @@ export const getSyncToken = query({
       .query("tenants")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .unique();
-    return tenant ? String(tenant._id) : null;
+    return tenant?._id ?? null;
   },
 });
 
-// Internal query: get tenant by ID
+// Internal query: get tenant by ID string
 export const getTenantById = internalQuery({
   args: { tenantId: v.string() },
   handler: async (ctx, args) => {
+    // Convex IDs are strings, so we can use get() directly
     try {
       return await ctx.db.get(args.tenantId);
     } catch {
@@ -309,23 +134,115 @@ export const getTenantById = internalQuery({
   },
 });
 
-// Recursively collect all arrays from an object that look like reservation lists
-function collectCandidateArrays(obj, depth = 0) {
-  if (depth > 6 || !obj || typeof obj !== "object") return [];
-  const arrays = [];
+// Internal mutation: save browser session
+export const saveBrowserSession = internalMutation({
+  args: {
+    tenantId: v.id("tenants"),
+    platform: v.string(),
+    storageState: v.string(),
+    finalUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("browserSessions")
+      .withIndex("by_tenant_platform", (q) =>
+        q.eq("tenantId", args.tenantId).eq("platform", args.platform)
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        storageState: args.storageState,
+        finalUrl: args.finalUrl,
+        isValid: true,
+      });
+    } else {
+      await ctx.db.insert("browserSessions", {
+        tenantId: args.tenantId,
+        platform: args.platform,
+        storageState: args.storageState,
+        finalUrl: args.finalUrl,
+        isValid: true,
+      });
+    }
+  },
+});
 
+// Public action: create a live browser session for onboarding
+export const createLiveSession = action({
+  args: { platform: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    const tenant = await ctx.runQuery(internal.tenants.tenantByUserId, { userId });
+    if (!tenant) throw new Error("Tenant not found");
+    const liveBrowserUrl = process.env.LIVE_BROWSER_URL;
+    if (!liveBrowserUrl) throw new Error("LIVE_BROWSER_URL not configured");
+    const res = await fetch(`${liveBrowserUrl}/start-session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ platform: args.platform }),
+    });
+    if (!res.ok) throw new Error(`Failed to start session: ${res.status}`);
+    const data = await res.json();
+    return { sessionId: data.sessionId, noVncUrl: data.noVncUrl };
+  },
+});
+
+// Public action: finish a live session (capture cookies)
+export const finishLiveSession = action({
+  args: { platform: v.string(), sessionId: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    const tenant = await ctx.runQuery(internal.tenants.tenantByUserId, { userId });
+    if (!tenant) throw new Error("Tenant not found");
+    const liveBrowserUrl = process.env.LIVE_BROWSER_URL;
+    if (!liveBrowserUrl) throw new Error("LIVE_BROWSER_URL not configured");
+    const res = await fetch(`${liveBrowserUrl}/capture-session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: args.sessionId, platform: args.platform }),
+    });
+    if (!res.ok) throw new Error(`Failed to capture session: ${res.status}`);
+    const data = await res.json();
+    await ctx.runMutation(internal.onboarding.saveBrowserSession, {
+      tenantId: tenant._id,
+      platform: args.platform,
+      storageState: JSON.stringify(data.storageState),
+      finalUrl: data.finalUrl,
+    });
+    return { ok: true };
+  },
+});
+
+// Internal mutation: invalidate browser session
+export const invalidateBrowserSession = internalMutation({
+  args: { tenantId: v.id("tenants"), platform: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("browserSessions")
+      .withIndex("by_tenant_platform", (q) =>
+        q.eq("tenantId", args.tenantId).eq("platform", args.platform)
+      )
+      .unique();
+    if (existing) await ctx.db.patch(existing._id, { isValid: false });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Helper functions for parsing reservation data from various API response formats
+// ---------------------------------------------------------------------------
+
+// Helper to collect all arrays in an object (for deep search)
+function collectCandidateArrays(obj, depth = 0) {
+  if (depth > 8 || !obj || typeof obj !== "object") return [];
+  const arrays = [];
   if (Array.isArray(obj)) {
-    // Only consider non-trivial arrays that contain objects
     if (obj.length > 0 && typeof obj[0] === "object") arrays.push(obj);
-    for (const item of obj) arrays.push(...collectCandidateArrays(item, depth + 1));
+    obj.forEach((item) => arrays.push(...collectCandidateArrays(item, depth + 1)));
   } else {
-    for (const key of Object.keys(obj)) {
-      const val = obj[key];
-      if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object") {
-        arrays.push(val);
-      } else if (val && typeof val === "object") {
-        arrays.push(...collectCandidateArrays(val, depth + 1));
-      }
+    for (const val of Object.values(obj)) {
+      arrays.push(...collectCandidateArrays(val, depth + 1));
     }
   }
   return arrays;
@@ -336,7 +253,6 @@ function parseReservationsFromEndpoint(url, data) {
   const results = [];
   if (!data || typeof data !== "object") return results;
 
-  // Explicit high-priority paths first (fast path for known formats)
   const explicit = [
     data.reservations,
     data.data?.reservations,
@@ -349,15 +265,12 @@ function parseReservationsFromEndpoint(url, data) {
     Array.isArray(data) ? data : null,
     data.content,
     data.results,
-    // GraphQL connection pattern: { data: { xyzConnection: { edges: [{node: ...}] } } }
     ...(data.data ? Object.values(data.data).flatMap(v =>
       v?.edges ? [v.edges.map(e => e.node).filter(Boolean)] : []
     ) : []),
   ].filter(Array.isArray);
 
-  // Also do a deep recursive search to handle arbitrary nesting
   const deep = collectCandidateArrays(data);
-
   const allCandidates = [...explicit, ...deep];
   const seen = new Set();
 
@@ -365,7 +278,6 @@ function parseReservationsFromEndpoint(url, data) {
     for (const item of list) {
       const res = extractReservationFields(item);
       if (!res.checkIn && !res.guestName) continue;
-      // Deduplicate within this endpoint
       const key = res.reservationId || `${res.guestName}|${res.checkIn}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -378,7 +290,6 @@ function parseReservationsFromEndpoint(url, data) {
 // Helper function to extract reservation fields from various API response formats
 function extractReservationFields(item) {
   if (!item || typeof item !== "object") return {};
-  // Normalize field names across VRBO, Airbnb, Booking.com API responses
   const get = (...keys) => {
     for (const k of keys) {
       const val = k.split(".").reduce((o, p) => o?.[p], item);
@@ -452,7 +363,6 @@ export const ingestUserscriptData = action({
     rawData: v.string(),
   },
   handler: async (ctx, args) => {
-    // Validate tenantId by looking up the tenant
     const tenant = await ctx.runQuery(internal.onboarding.getTenantById, { 
       tenantId: args.tenantId 
     });
@@ -462,48 +372,25 @@ export const ingestUserscriptData = action({
 
     // Store captured cookies/localStorage as browser session for VPS fallback
     if (data.cookies || data.localStorage) {
-      // Convert document.cookie string into Playwright storageState format
-      const platformDomainMap = {
-        vrbo: ".vrbo.com",
-        airbnb: ".airbnb.com",
-        booking: ".booking.com",
-      };
+      const platformDomainMap = { vrbo: ".vrbo.com", airbnb: ".airbnb.com", booking: ".booking.com" };
       const domain = platformDomainMap[args.platform] || `.${args.platform}.com`;
-
       let playwrightCookies = [];
       if (data.cookies && typeof data.cookies === "string" && data.cookies.trim()) {
         playwrightCookies = data.cookies.split(";").map((pair) => {
           const eqIdx = pair.indexOf("=");
           const name = eqIdx >= 0 ? pair.slice(0, eqIdx).trim() : pair.trim();
           const value = eqIdx >= 0 ? pair.slice(eqIdx + 1).trim() : "";
-          return {
-            name,
-            value,
-            domain,
-            path: "/",
-            expires: -1,
-            httpOnly: false,
-            secure: true,
-            sameSite: "None",
-          };
+          return { name, value, domain, path: "/", expires: -1, httpOnly: false, secure: true, sameSite: "None" };
         }).filter((c) => c.name);
       } else if (Array.isArray(data.cookies)) {
-        // Already an array — pass through
         playwrightCookies = data.cookies;
       }
-
-      // Build origins from localStorage
       const origins = [];
       if (data.localStorage && Object.keys(data.localStorage).length > 0) {
         const origin = `https://${domain.replace(/^\./, "")}`;
-        origins.push({
-          origin,
-          localStorage: Object.entries(data.localStorage).map(([name, value]) => ({ name, value: String(value) })),
-        });
+        origins.push({ origin, localStorage: Object.entries(data.localStorage).map(([name, value]) => ({ name, value: String(value) })) });
       }
-
       const storageState = JSON.stringify({ cookies: playwrightCookies, origins });
-
       await ctx.runMutation(internal.onboarding.saveBrowserSession, {
         tenantId: tenant._id,
         platform: args.platform,
@@ -512,26 +399,43 @@ export const ingestUserscriptData = action({
       });
     }
 
-    // Parse reservations from API endpoint responses
+    // Parse reservations from API endpoint responses (network-intercepted)
     const reservations = [];
     const endpoints = data.endpoints || [];
-    
     for (const ep of endpoints) {
       if (!ep.data) continue;
       const parsed = parseReservationsFromEndpoint(ep.url, ep.data);
       reservations.push(...parsed);
     }
 
-    // Deduplicate by reservationId or (guestName + checkIn)
+    // Also ingest pre-extracted messages/conversations from Apollo SSR cache
+    // (VRBO inbox is SSR so network interception gets 0 — this is the fallback)
+    const preExtracted = data.messages || [];
+    for (const msg of preExtracted) {
+      if (msg.guestName || msg.reservationId) {
+        reservations.push({
+          guestName: msg.guestName || null,
+          checkIn: msg.checkIn ? String(msg.checkIn).substring(0, 10) : null,
+          checkOut: msg.checkOut ? String(msg.checkOut).substring(0, 10) : null,
+          propertyName: msg.propertyName || "",
+          status: msg.status || "inquiry",
+          guests: null,
+          payout: null,
+          reservationId: msg.reservationId || null,
+        });
+      }
+    }
+
+    // Deduplicate
     const seen = new Set();
     const unique = reservations.filter((r) => {
       const key = r.reservationId || `${r.guestName}|${r.checkIn}`;
+      if (!key || key === "null|null") return false;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
-    // Upsert each reservation
     let upserted = 0;
     for (const res of unique) {
       try {
@@ -542,7 +446,7 @@ export const ingestUserscriptData = action({
           checkIn: res.checkIn || "",
           checkOut: res.checkOut || "",
           propertyName: res.propertyName || "",
-          status: res.status || "confirmed",
+          status: res.status || "inquiry",
           guests: res.guests ?? null,
           payout: res.payout ?? null,
           reservationId: res.reservationId ?? null,
@@ -553,6 +457,6 @@ export const ingestUserscriptData = action({
       }
     }
 
-    return { upserted, total: unique.length };
+    return { upserted, total: unique.length, messages: preExtracted.length };
   },
 });
