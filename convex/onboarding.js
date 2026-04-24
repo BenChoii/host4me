@@ -309,28 +309,67 @@ export const getTenantById = internalQuery({
   },
 });
 
+// Recursively collect all arrays from an object that look like reservation lists
+function collectCandidateArrays(obj, depth = 0) {
+  if (depth > 6 || !obj || typeof obj !== "object") return [];
+  const arrays = [];
+
+  if (Array.isArray(obj)) {
+    // Only consider non-trivial arrays that contain objects
+    if (obj.length > 0 && typeof obj[0] === "object") arrays.push(obj);
+    for (const item of obj) arrays.push(...collectCandidateArrays(item, depth + 1));
+  } else {
+    for (const key of Object.keys(obj)) {
+      const val = obj[key];
+      if (Array.isArray(val) && val.length > 0 && typeof val[0] === "object") {
+        arrays.push(val);
+      } else if (val && typeof val === "object") {
+        arrays.push(...collectCandidateArrays(val, depth + 1));
+      }
+    }
+  }
+  return arrays;
+}
+
 // Helper function to parse reservations from various API endpoint response formats
 function parseReservationsFromEndpoint(url, data) {
   const results = [];
   if (!data || typeof data !== "object") return results;
 
-  // Try to find reservation arrays at various paths
-  const candidates = [
+  // Explicit high-priority paths first (fast path for known formats)
+  const explicit = [
     data.reservations,
     data.data?.reservations,
     data.items,
     data.data?.items,
     data.bookings,
     data.data?.bookings,
+    data.hosted,
+    data.data?.hosted,
     Array.isArray(data) ? data : null,
     data.content,
     data.results,
+    // GraphQL connection pattern: { data: { xyzConnection: { edges: [{node: ...}] } } }
+    ...(data.data ? Object.values(data.data).flatMap(v =>
+      v?.edges ? [v.edges.map(e => e.node).filter(Boolean)] : []
+    ) : []),
   ].filter(Array.isArray);
 
-  for (const list of candidates) {
+  // Also do a deep recursive search to handle arbitrary nesting
+  const deep = collectCandidateArrays(data);
+
+  const allCandidates = [...explicit, ...deep];
+  const seen = new Set();
+
+  for (const list of allCandidates) {
     for (const item of list) {
       const res = extractReservationFields(item);
-      if (res.checkIn || res.guestName) results.push(res);
+      if (!res.checkIn && !res.guestName) continue;
+      // Deduplicate within this endpoint
+      const key = res.reservationId || `${res.guestName}|${res.checkIn}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      results.push(res);
     }
   }
   return results;
@@ -338,6 +377,7 @@ function parseReservationsFromEndpoint(url, data) {
 
 // Helper function to extract reservation fields from various API response formats
 function extractReservationFields(item) {
+  if (!item || typeof item !== "object") return {};
   // Normalize field names across VRBO, Airbnb, Booking.com API responses
   const get = (...keys) => {
     for (const k of keys) {
@@ -348,29 +388,59 @@ function extractReservationFields(item) {
   };
 
   const guestName =
-    get("guestName", "guest_name", "guest.name", "guestFirstName") ||
-    [get("guestFirstName", "guest.firstName"), get("guestLastName", "guest.lastName")]
-      .filter(Boolean)
-      .join(" ") || null;
+    get("guestName", "guest_name", "guest.name") ||
+    [
+      get("guestFirstName", "guest.firstName", "travelerFirstName"),
+      get("guestLastName",  "guest.lastName",  "travelerLastName"),
+    ].filter(Boolean).join(" ") ||
+    null;
 
   const checkIn = get(
     "checkIn", "check_in", "checkInDate", "arrival", "startDate",
-    "dates.checkin", "stayDates.checkIn"
+    "checkinDate", "arrivalDate",
+    "dates.checkin", "stayDates.checkIn", "stayDetails.checkIn",
+    "tripDetails.checkIn",
   );
   const checkOut = get(
     "checkOut", "check_out", "checkOutDate", "departure", "endDate",
-    "dates.checkout", "stayDates.checkOut"
+    "checkoutDate", "departureDate",
+    "dates.checkout", "stayDates.checkOut", "stayDetails.checkOut",
+    "tripDetails.checkOut",
+  );
+
+  const propertyName = get(
+    "propertyName", "listingName", "unitName",
+    "property.name", "listing.name", "listing.title",
+    "unit.name", "accommodation.name",
+  ) || "";
+
+  const status = get(
+    "status", "reservationStatus", "bookingStatus", "state",
+  ) || "confirmed";
+
+  const guests = get(
+    "guestCount", "numberOfGuests", "numGuests", "guests", "adults", "adultCount",
+  );
+
+  const payout = get(
+    "payout", "earningAmount", "hostPayout", "ownerAmount",
+    "totalPrice", "price.total", "pricing.total", "hostRevenue",
+  );
+
+  const reservationId = get(
+    "reservationId", "confirmationCode", "bookingId", "orderId",
+    "id", "reservationCode", "externalId",
   );
 
   return {
-    guestName: guestName || null,
-    checkIn: checkIn ? String(checkIn).substring(0, 10) : null,
-    checkOut: checkOut ? String(checkOut).substring(0, 10) : null,
-    propertyName: get("propertyName", "listingName", "property.name", "listing.name", "unitName") || "",
-    status: get("status", "reservationStatus", "bookingStatus") || "confirmed",
-    guests: get("guestCount", "numberOfGuests", "guests", "adults") || null,
-    payout: get("payout", "earningAmount", "hostPayout", "totalPrice", "price.total") || null,
-    reservationId: get("reservationId", "id", "confirmationCode", "bookingId", "orderId") || null,
+    guestName:    guestName || null,
+    checkIn:      checkIn  ? String(checkIn).substring(0, 10)  : null,
+    checkOut:     checkOut ? String(checkOut).substring(0, 10) : null,
+    propertyName,
+    status,
+    guests:       guests ?? null,
+    payout:       payout  ?? null,
+    reservationId: reservationId ?? null,
   };
 }
 
@@ -389,19 +459,55 @@ export const ingestUserscriptData = action({
     if (!tenant) throw new Error("Invalid sync token");
 
     const data = JSON.parse(args.rawData);
-    
+
     // Store captured cookies/localStorage as browser session for VPS fallback
     if (data.cookies || data.localStorage) {
-      const sessionData = {
-        source: "userscript",
-        cookies: data.cookies || "",
-        localStorage: data.localStorage || {},
-        capturedAt: Date.now(),
+      // Convert document.cookie string into Playwright storageState format
+      const platformDomainMap = {
+        vrbo: ".vrbo.com",
+        airbnb: ".airbnb.com",
+        booking: ".booking.com",
       };
+      const domain = platformDomainMap[args.platform] || `.${args.platform}.com`;
+
+      let playwrightCookies = [];
+      if (data.cookies && typeof data.cookies === "string" && data.cookies.trim()) {
+        playwrightCookies = data.cookies.split(";").map((pair) => {
+          const eqIdx = pair.indexOf("=");
+          const name = eqIdx >= 0 ? pair.slice(0, eqIdx).trim() : pair.trim();
+          const value = eqIdx >= 0 ? pair.slice(eqIdx + 1).trim() : "";
+          return {
+            name,
+            value,
+            domain,
+            path: "/",
+            expires: -1,
+            httpOnly: false,
+            secure: true,
+            sameSite: "None",
+          };
+        }).filter((c) => c.name);
+      } else if (Array.isArray(data.cookies)) {
+        // Already an array — pass through
+        playwrightCookies = data.cookies;
+      }
+
+      // Build origins from localStorage
+      const origins = [];
+      if (data.localStorage && Object.keys(data.localStorage).length > 0) {
+        const origin = `https://${domain.replace(/^\./, "")}`;
+        origins.push({
+          origin,
+          localStorage: Object.entries(data.localStorage).map(([name, value]) => ({ name, value: String(value) })),
+        });
+      }
+
+      const storageState = JSON.stringify({ cookies: playwrightCookies, origins });
+
       await ctx.runMutation(internal.onboarding.saveBrowserSession, {
         tenantId: tenant._id,
         platform: args.platform,
-        storageState: JSON.stringify(sessionData),
+        storageState,
         finalUrl: data.finalUrl,
       });
     }

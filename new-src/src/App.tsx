@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useConvexAuth } from "convex/react";
+import { useAuth } from "@clerk/clerk-react";
 import { Component, type ReactNode } from "react";
 import Landing from "./pages/Landing";
 import SignUp from "./pages/SignUp";
@@ -52,9 +52,9 @@ class ErrorBoundary extends Component<
 }
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useConvexAuth();
+  const { isLoaded, isSignedIn } = useAuth();
 
-  if (isLoading) {
+  if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#f8f8f8]">
         <div className="text-[#1a1a1a]">Loading...</div>
@@ -62,7 +62,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isSignedIn) {
     return <Navigate to="/sign-in" replace />;
   }
 
@@ -73,8 +73,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
-      <Route path="/sign-up" element={<SignUp />} />
-      <Route path="/sign-in" element={<SignIn />} />
+      <Route path="/sign-up/*" element={<SignUp />} />
+      <Route path="/sign-in/*" element={<SignIn />} />
       <Route
         path="/dashboard"
         element={

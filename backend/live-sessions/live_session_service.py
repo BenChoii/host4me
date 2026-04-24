@@ -893,9 +893,11 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                 const candidate = links.find(a => {
                     const h = (a.href || '').toLowerCase();
                     const t = (a.textContent || '').toLowerCase().trim();
-                    return h.includes('owner.vrbo') || h.includes('/host') ||
+                    return h.includes('/p/reservations') || h.includes('/p/properties') ||
+                           h.includes('owner.vrbo') || h.includes('/host') ||
                            t.includes('host dashboard') || t.includes('my properties') ||
-                           t.includes('switch to hosting') || t.includes('owner');
+                           t.includes('switch to hosting') || t.includes('owner') ||
+                           t.includes('dashboard') || t.includes('inbox');
                 });
                 return candidate ? candidate.href : null;
             }""")
@@ -918,13 +920,21 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
 
         import re as _re
 
-        # Strategy C: try owner.vrbo.com directly — cookies include .vrbo.com domain
-        # which should be valid for owner.vrbo.com
-        if "owner.vrbo.com" not in page.url:
+        # Strategy C: try host dashboard URLs — /p/ path is the correct modern VRBO
+        # host dashboard (confirmed for Canadian en-ca accounts). owner.vrbo.com is
+        # a US-only legacy path that also fails with SOCKS proxy errors.
+        host_dashboard_already = any(
+            "/p/reservations" in page.url or "/p/properties" in page.url
+            or "owner.vrbo.com" in page.url
+            for _ in [None]  # single iteration
+        )
+        if not host_dashboard_already:
             owner_urls = [
-                "https://owner.vrbo.com/reservations",
+                f"{locale_base}/p/reservations",   # Canadian /en-ca/p/ path (confirmed)
+                f"{locale_base}/p/properties",
+                f"{locale_base}/p/calendar",
+                "https://owner.vrbo.com/reservations",  # US accounts fallback
                 "https://owner.vrbo.com/",
-                f"{locale_base}/account/bookings",
             ]
             for url in owner_urls:
                 try:
@@ -952,12 +962,18 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                     debug_urls_visited.append({"attempted": url, "error": str(nav_err)})
                     continue
 
-        # Strategy C2: navigate to host-specific pages on www — SPA may load reservation
-        # data and make GraphQL calls that we can intercept and replay.
-        for host_page in [
+        # Strategy C2: navigate to host-specific pages to trigger SPA API calls.
+        # Priority: /p/ paths (modern VRBO) then legacy /host/ paths.
+        c2_pages = [
+            f"{locale_base}/p/reservations",
+            f"{locale_base}/p/properties",
             f"https://www.vrbo.com/host/reservations",
             f"https://www.vrbo.com/host/listings",
-        ]:
+        ]
+        for host_page in c2_pages:
+            # Skip if we're already on a /p/ or owner page
+            if "/p/reservations" in page.url or "/p/properties" in page.url or "owner.vrbo.com" in page.url:
+                break
             try:
                 print(f"[vrbo-res] Trying host page: {host_page}")
                 await page.goto(host_page, wait_until="networkidle", timeout=20000)
@@ -965,9 +981,9 @@ async def scrape_vrbo_reservations(page, start_url: str | None = None) -> dict:
                 landed = page.url
                 print(f"[vrbo-res] host page landed: {landed}")
                 debug_urls_visited.append({"attempted": host_page, "landed": landed})
-                # If we landed on owner.vrbo.com or a real host dashboard — great, wait longer
-                if "owner.vrbo.com" in landed or "/host" in landed:
-                    await page.wait_for_timeout(4000)
+                # If we landed on a real host dashboard — wait longer for XHR and stop
+                if "owner.vrbo.com" in landed or "/p/" in landed or "/host" in landed:
+                    await page.wait_for_timeout(5000)
                     break
             except Exception as e:
                 print(f"[vrbo-res] {host_page} error: {e}")
