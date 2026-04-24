@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "buildCommand": "vite build",
+  "buildCommand": "vite build && mv dist/index.html dist/app.html",
   "outputDirectory": "dist",
   "headers": [
     {
@@ -12,8 +12,7 @@
   ],
   "rewrites": [
     { "source": "/", "destination": "/Host4Me.html" },
-    { "source": "/index.html", "destination": "/Host4Me.html" },
     { "source": "/scripts/:file", "destination": "/scripts/:file" },
-    { "source": "/:path*", "destination": "/index.html" }
+    { "source": "/:path*", "destination": "/app.html" }
   ]
 }
