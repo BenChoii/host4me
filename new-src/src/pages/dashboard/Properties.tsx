@@ -1,6 +1,6 @@
 import { motion } from "motion/react";
 import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { api } from "../../../../convex/_generated/api";
 
 export default function Properties() {
   const properties = useQuery(api.queries.getProperties);

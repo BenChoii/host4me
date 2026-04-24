@@ -11,6 +11,8 @@
     }
   ],
   "rewrites": [
+    { "source": "/", "destination": "/Host4Me.html" },
+    { "source": "/index.html", "destination": "/Host4Me.html" },
     { "source": "/scripts/:file", "destination": "/scripts/:file" },
     { "source": "/:path*", "destination": "/index.html" }
   ]

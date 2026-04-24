@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en" data-accent="indigo">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — Host4Me</title>
+<meta name="description" content="Sign in to Host4Me — your guest-message inbox, answering itself.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="styles.css?v=5">
+
+<style>
+  /* Login-specific overrides */
+  body { overflow: hidden; height: 100vh; }
+  body::before { opacity: 0.04; }
+
+  .auth {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    height: 100vh;
+    width: 100vw;
+  }
+  @media (max-width: 900px) {
+    .auth { grid-template-columns: 1fr; }
+    .auth-panel { display: none; }
+  }
+
+  /* LEFT BRAND PANEL */
+  .auth-panel {
+    position: relative;
+    background: linear-gradient(160deg, #1A1A22 0%, #24223C 100%);
+    color: #F5F3EE;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+  }
+  .auth-panel::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(900px 600px at 80% 10%, rgba(74,71,214,0.25), transparent 60%),
+      radial-gradient(700px 500px at 10% 90%, rgba(200,117,0,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .auth-panel::after {
+    content: "";
+    position: absolute; inset: 0;
+    opacity: 0.08;
+    mix-blend-mode: screen;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    pointer-events: none;
+  }
+
+  .ap-logo {
+    position: relative;
+    display: flex; align-items: center; gap: 10px;
+    text-decoration: none;
+    color: #F5F3EE;
+  }
+  .ap-logo svg { width: 26px; height: 26px; color: #F5F3EE; }
+  .ap-logo .word {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  .ap-logo .four {
+    font-family: var(--font-mono);
+    font-style: italic;
+    color: #8F8CFF;
+    font-size: 0.95em;
+    padding: 0 0.5px;
+  }
+
+  .ap-body {
+    position: relative;
+    max-width: 480px;
+    display: flex; flex-direction: column; gap: 36px;
+  }
+  .ap-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #8F8CFF;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .ap-eyebrow::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%;
+    background: #8F8CFF;
+    box-shadow: 0 0 12px rgba(143,140,255,0.8);
+    animation: apPulse 2s ease-in-out infinite;
+  }
+  @keyframes apPulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .ap-headline {
+    font-size: 44px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    color: #F5F3EE;
+  }
+  .ap-headline em {
+    font-style: italic;
+    color: #8F8CFF;
+    font-family: "Inter Tight";
+    font-weight: 400;
+  }
+
+  /* Mock morning brief card */
+  .ap-mock {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 18px 20px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 20px 60px -20px rgba(0,0,0,0.6);
+    max-width: 420px;
+  }
+  .ap-mock-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 14px;
+  }
+  .ap-mock-brand {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 500;
+  }
+  .ap-mock-brand svg { width: 16px; height: 16px; color: #F5F3EE; }
+  .ap-mock-time {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: rgba(245,243,238,0.5);
+  }
+  .ap-mock-greeting {
+    font-size: 15px; margin-bottom: 4px;
+    color: #F5F3EE;
+  }
+  .ap-mock-sub {
+    font-size: 12.5px; color: rgba(245,243,238,0.6); margin-bottom: 14px;
+  }
+  .ap-mock-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    padding: 12px; border-radius: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .ap-mock-stat .v {
+    font-family: var(--font-mono);
+    font-size: 20px; font-weight: 500;
+    color: #F5F3EE;
+  }
+  .ap-mock-stat .v.accent { color: #8F8CFF; }
+  .ap-mock-stat .v.ok { color: #6FCE9A; }
+  .ap-mock-stat .l {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(245,243,238,0.45);
+    margin-top: 4px;
+  }
+
+  .ap-foot {
+    position: relative;
+    display: flex; gap: 24px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(245,243,238,0.4);
+  }
+  .ap-foot a { color: inherit; text-decoration: none; }
+  .ap-foot a:hover { color: rgba(245,243,238,0.7); }
+
+  /* RIGHT FORM PANEL */
+  .auth-form {
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 40px;
+    position: relative;
+  }
+
+  .af-inner {
+    width: 100%;
+    max-width: 380px;
+  }
+
+  .af-topnav {
+    position: absolute; top: 24px; right: 32px;
+    display: flex; align-items: center; gap: 14px;
+    font-size: 13px;
+    color: var(--fg-dim);
+  }
+  .af-topnav a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line-2); }
+  .af-topnav a:hover { border-color: var(--accent); color: var(--accent); }
+
+  .af-title {
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    color: var(--fg);
+  }
+  .af-sub {
+    font-size: 14px;
+    color: var(--fg-dim);
+    margin-bottom: 32px;
+  }
+
+  .af-oauth {
+    display: flex; flex-direction: column; gap: 10px;
+    margin-bottom: 24px;
+  }
+  .oauth-btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px;
+    padding: 11px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    border-radius: 10px;
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--fg);
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color .15s, background .15s;
+  }
+  .oauth-btn:hover { border-color: var(--line-3); background: var(--surface-2); }
+  .oauth-btn svg { width: 18px; height: 18px; }
+
+  .af-divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 20px 0;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fg-mute);
+  }
+  .af-divider::before, .af-divider::after {
+    content: ""; flex: 1; height: 1px; background: var(--line);
+  }
+
+  .af-field {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-bottom: 14px;
+  }
+  .af-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fg);
+    letter-spacing: 0.01em;
+  }
+  .af-input {
+    padding: 11px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    border-radius: 10px;
+    font-family: var(--font-display);
+    font-size: 14px;
+    color: var(--fg);
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .af-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .af-input::placeholder { color: var(--fg-mute); }
+
+  .af-hint {
+    font-size: 11.5px;
+    color: var(--fg-mute);
+    margin-top: 2px;
+  }
+  .af-hint a { color: var(--fg-dim); text-decoration: underline; text-decoration-color: var(--line-2); }
+  .af-hint a:hover { color: var(--accent); text-decoration-color: var(--accent); }
+
+  .af-submit {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--fg);
+    color: var(--bg);
+    border: 1px solid var(--fg);
+    border-radius: 10px;
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity .15s, transform .05s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 8px;
+  }
+  .af-submit:hover { opacity: 0.92; }
+  .af-submit:active { transform: translateY(1px); }
+  .af-submit svg { width: 16px; height: 16px; }
+
+  .af-foot {
+    margin-top: 24px;
+    text-align: center;
+    font-size: 12.5px;
+    color: var(--fg-mute);
+  }
+  .af-foot a { color: var(--fg-dim); text-decoration: underline; text-decoration-color: var(--line-2); }
+
+  .af-demo {
+    margin-top: 32px;
+    padding-top: 20px;
+    border-top: 1px dashed var(--line-2);
+    text-align: center;
+  }
+  .af-demo-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fg-mute);
+    margin-bottom: 8px;
+  }
+  .af-demo a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .af-demo a:hover { gap: 10px; }
+  .af-demo a svg { width: 14px; height: 14px; }
+
+  /* Loading state on submit */
+  .af-submit.loading { pointer-events: none; opacity: 0.7; }
+  .af-submit.loading .af-spinner {
+    width: 14px; height: 14px;
+    border: 1.5px solid rgba(255,255,255,0.3);
+    border-top-color: rgba(255,255,255,0.9);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Magic link sent state */
+  .af-sent {
+    display: none;
+    padding: 20px;
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    border-radius: 10px;
+    font-size: 13.5px;
+    color: var(--fg);
+    line-height: 1.5;
+  }
+  .af-sent .check {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+  .af-sent .check svg { width: 14px; height: 14px; }
+  body.sent .af-form { display: none; }
+  body.sent .af-sent { display: block; }
+</style>
+</head>
+<body>
+
+<div class="auth">
+
+  <!-- LEFT: brand panel -->
+  <aside class="auth-panel">
+    <a href="Host4Me.html" class="ap-logo">
+      <svg viewBox="0 0 28 28" aria-hidden="true">
+        <path d="M4 9 L14 3 L24 9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+        <rect x="6" y="11" width="2.2" height="14" rx="0.6" fill="currentColor"/>
+        <rect x="19.8" y="11" width="2.2" height="14" rx="0.6" fill="currentColor"/>
+        <rect x="8.2" y="16.9" width="11.6" height="2.2" rx="0.6" fill="currentColor"/>
+        <circle cx="12" cy="13.4" r="1.1" fill="#8F8CFF"/>
+      </svg>
+      <span class="word">Host<span class="four">4</span>Me</span>
+    </a>
+
+    <div class="ap-body">
+      <div class="ap-eyebrow">Your inbox, while you slept</div>
+      <div class="ap-headline">
+        14 messages handled.<br>
+        2 waiting for <em>your tap.</em>
+      </div>
+
+      <div class="ap-mock">
+        <div class="ap-mock-head">
+          <div class="ap-mock-brand">
+            <svg viewBox="0 0 28 28" aria-hidden="true">
+              <path d="M4 9 L14 3 L24 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+              <rect x="6" y="11" width="2.2" height="14" rx="0.6" fill="currentColor"/>
+              <rect x="19.8" y="11" width="2.2" height="14" rx="0.6" fill="currentColor"/>
+              <rect x="8.2" y="16.9" width="11.6" height="2.2" rx="0.6" fill="currentColor"/>
+              <circle cx="12" cy="13.4" r="1.1" fill="#8F8CFF"/>
+            </svg>
+            Morning brief
+          </div>
+          <div class="ap-mock-time">07:14 · TUE</div>
+        </div>
+        <div class="ap-mock-greeting">Good morning, Priya.</div>
+        <div class="ap-mock-sub">While you slept, your inbox took care of itself.</div>
+        <div class="ap-mock-stats">
+          <div class="ap-mock-stat"><div class="v ok">14</div><div class="l">Auto-sent</div></div>
+          <div class="ap-mock-stat"><div class="v accent">2</div><div class="l">Waiting</div></div>
+          <div class="ap-mock-stat"><div class="v">47m</div><div class="l">Saved</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ap-foot">
+      <a href="Host4Me.html">← Back to site</a>
+      <a href="#">Security</a>
+      <a href="#">Status</a>
+    </div>
+  </aside>
+
+  <!-- RIGHT: form -->
+  <main class="auth-form">
+    <div class="af-topnav">
+      <span>New here?</span>
+      <a href="#">Create an account</a>
+    </div>
+
+    <div class="af-inner">
+      <div class="af-form">
+        <div class="af-title">Welcome back</div>
+        <div class="af-sub">Sign in to see what your agent handled overnight.</div>
+
+        <div class="af-oauth">
+          <a href="dashboard.html" class="oauth-btn" role="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="#4285F4" d="M22.5 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.75h3.57c2.08-1.92 3.28-4.74 3.28-8.07z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.68l-3.57-2.75c-.99.66-2.25 1.06-3.71 1.06-2.86 0-5.28-1.93-6.14-4.52H2.17v2.84C3.98 20.55 7.69 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.86 14.11A6.97 6.97 0 0 1 5.48 12c0-.73.13-1.44.36-2.11V7.05H2.17A11 11 0 0 0 1 12c0 1.78.43 3.46 1.17 4.95l3.69-2.84z"/>
+              <path fill="#EA4335" d="M12 5.38c1.61 0 3.06.55 4.2 1.64l3.15-3.15C17.45 2.1 14.97 1 12 1 7.69 1 3.98 3.45 2.17 7.05l3.69 2.84C6.72 7.3 9.14 5.38 12 5.38z"/>
+            </svg>
+            Continue with Google
+          </a>
+        </div>
+
+        <div class="af-divider">or continue with email</div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+          <div class="af-field">
+            <label class="af-label" for="email">Email</label>
+            <input class="af-input" type="email" id="email" placeholder="you@yourrentals.com" required autocomplete="email">
+          </div>
+          <div class="af-field">
+            <label class="af-label" for="password">Password</label>
+            <input class="af-input" type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+            <div class="af-hint">Leave blank to get a <a href="#" onclick="return sendMagicLink(event)">magic link</a> instead.</div>
+          </div>
+          <button type="submit" class="af-submit" id="submitBtn">
+            <span class="af-submit-text">Sign in</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+
+        <div class="af-foot">
+          <a href="#">Forgot password?</a> · <a href="#">SSO for teams</a>
+        </div>
+
+        <div class="af-demo">
+          <div class="af-demo-label">Just looking around?</div>
+          <a href="dashboard.html">Skip to the demo dashboard <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+        </div>
+      </div>
+
+      <div class="af-sent">
+        <div style="display:flex; align-items:center; margin-bottom:8px;">
+          <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L20 7"/></svg></span>
+          <strong>Check your email</strong>
+        </div>
+        We sent a magic link to <strong id="sentEmail">you@yourrentals.com</strong>. Click it to finish signing in.
+        <div style="margin-top:14px; font-size:12px; color:var(--fg-mute);">
+          Didn't get it? <a href="#" onclick="document.body.classList.remove('sent'); return false;" style="color:var(--accent);">Try again</a>.
+        </div>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+  function handleLogin(e) {
+    e.preventDefault();
+    const btn = document.getElementById('submitBtn');
+    const pwd = document.getElementById('password').value;
+    if (!pwd) { return sendMagicLink(e); }
+    btn.classList.add('loading');
+    btn.innerHTML = '<span class="af-spinner"></span><span>Signing in…</span>';
+    setTimeout(() => { window.location.href = 'dashboard.html'; }, 700);
+  }
+  function sendMagicLink(e) {
+    e.preventDefault();
+    const email = document.getElementById('email').value || 'you@yourrentals.com';
+    document.getElementById('sentEmail').textContent = email;
+    document.body.classList.add('sent');
+    return false;
+  }
+</script>
+
+</body>
+</html>
